@@ -30,6 +30,9 @@ export const ensureProjectDir = (docId: string, slug: string) =>
 
 export const claudeVersion = () => invoke<string | null>("claude_version");
 
+/** PDF path this process was launched with (file association), if any. */
+export const initialFile = () => invoke<string | null>("initial_file");
+
 export interface JobHandle {
   /** Resolves with the terminal done event; rejects on failure/cancel. */
   result: Promise<DoneEvent>;

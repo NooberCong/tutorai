@@ -27,7 +27,12 @@ export function Reader(props: { scale: number | null; initialPage?: number }) {
   const { pdf, reportPage, registerJumper } = useSession();
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef(new Map<number, HTMLDivElement>());
-  const [visible, setVisible] = useState<Set<number>>(new Set([1, 2]));
+  // Seed visibility around the restored page so first paint shows content
+  // there instead of blank pages waiting on the IntersectionObserver.
+  const [visible, setVisible] = useState<Set<number>>(() => {
+    const start = Math.max(1, props.initialPage ?? 1);
+    return new Set([start, start + 1]);
+  });
   const [baseDims, setBaseDims] = useState<PageDims | null>(null);
   // Fit-width tracks resizes at two speeds: `liveFitScale` follows every frame
   // of a panel slide or drag (pages reflow via cheap CSS scaling of the
@@ -84,8 +89,10 @@ export function Reader(props: { scale: number | null; initialPage?: number }) {
 
   // Restore the saved reading position once the page layout exists (page
   // wrappers are laid out from baseDims immediately, before any rendering).
+  // Layout effect: the scroll lands before first paint, so page 1 never
+  // flashes on screen before the jump.
   const restoredRef = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!baseDims || restoredRef.current) return;
     restoredRef.current = true;
     const target = Math.min(Math.max(props.initialPage ?? 1, 1), pdf.numPages);

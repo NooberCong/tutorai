@@ -794,6 +794,10 @@ textarea::placeholder {
 .reader {
   flex: 1;
   overflow: auto;
+  /* Reserve scrollbar space up front: without this the scrollbar appearing
+     after first paint shrinks the container, re-triggering fit-width and
+     visibly resizing every page moments after open. */
+  scrollbar-gutter: stable;
   background: var(--well);
 }
 .reader-pages {
@@ -813,6 +817,12 @@ textarea::placeholder {
 .pdf-page canvas {
   display: block;
   border-radius: 3px;
+  animation: page-in 160ms ease-out;
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
 }
 /* Holds the rendered canvas at its crisp size; CSS-scaled to track live
    layout changes (panel slide/drag) until the debounced re-render lands. */
@@ -1215,6 +1225,27 @@ textarea::placeholder {
   font-size: 13.5px;
   line-height: 1.65;
   overflow-wrap: break-word;
+}
+/* Streaming caret: rides the end of the last block while text generates. */
+.md.streaming > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: caret-pulse 1s ease-in-out infinite;
+}
+@keyframes caret-pulse {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.25;
+  }
 }
 .md h1,
 .md h2,

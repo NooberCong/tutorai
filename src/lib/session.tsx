@@ -134,23 +134,27 @@ export function SessionProvider(props: {
     };
   }, [reg.docId, pdf, fileName]);
 
-  // Keep the library index fresh: on first meta, and reading position on close.
+  // Keep the library index fresh. The reading position is saved as it
+  // changes (debounced) — the app may quit without ever unmounting this
+  // provider (e.g. closing the window mid-read), so saving only on unmount
+  // would lose it. The unmount save below is a final, immediate flush.
   const latest = useRef({ meta, currentPage });
   latest.current = { meta, currentPage };
   useEffect(() => {
     if (!meta) return;
-    upsertLibraryEntry({
-      docId: reg.docId,
-      path: reg.path,
-      title: meta.title,
-      pages: meta.pages,
-      addedAt: 0,
-      lastOpenedAt: 0,
-      lastPage: latest.current.currentPage,
-    }).catch(() => {});
-    // Re-run only when the doc changes; lastPage is saved on unmount below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, reg.docId]);
+    const timer = window.setTimeout(() => {
+      upsertLibraryEntry({
+        docId: reg.docId,
+        path: reg.path,
+        title: meta.title,
+        pages: meta.pages,
+        addedAt: 0,
+        lastOpenedAt: 0,
+        lastPage: currentPage,
+      }).catch(() => {});
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [meta, reg.docId, reg.path, currentPage]);
   useEffect(
     () => () => {
       const { meta, currentPage } = latest.current;
@@ -314,47 +318,89 @@ const idleJob: JobState = { running: false, text: "", activity: [], error: null 
 export function useClaudeJob() {
   const [state, setState] = useState<JobState>(idleJob);
   const cancelRef = useRef<(() => void) | null>(null);
+  // Streamed text is buffered here and revealed by a rAF ticker a few
+  // characters per frame — network chunks arrive in bursts, and rendering
+  // them raw makes the text jump. The reveal rate scales with the backlog
+  // so display never falls behind generation.
+  const streamRef = useRef({ target: "", shown: 0, raf: 0 });
 
-  const start = useCallback((spec: JobSpec): Promise<DoneEvent> => {
-    setState({ ...idleJob, running: true });
-    const handle = runJob(spec, (event: JobEvent) => {
-      setState((prev) => {
-        switch (event.type) {
-          case "delta":
-            return { ...prev, text: prev.text + event.text };
-          case "tool":
-            return {
-              ...prev,
-              activity: [
-                ...prev.activity,
-                { name: event.name, detail: event.detail, done: false, isError: false },
-              ],
-            };
-          case "toolDone": {
-            const activity = [...prev.activity];
-            const i = activity.findLastIndex((a) => !a.done);
-            if (i >= 0) activity[i] = { ...activity[i], done: true, isError: event.isError };
-            return { ...prev, activity };
-          }
-          default:
-            return prev;
-        }
-      });
-    });
-    cancelRef.current = handle.cancel;
-    return handle.result
-      .then((done) => {
-        setState((prev) => ({ ...prev, running: false }));
-        return done;
-      })
-      .catch((e: Error) => {
-        setState((prev) => ({ ...prev, running: false, error: e.message }));
-        throw e;
-      })
-      .finally(() => {
-        cancelRef.current = null;
-      });
+  const tick = useCallback(() => {
+    const s = streamRef.current;
+    const backlog = s.target.length - s.shown;
+    if (backlog <= 0) {
+      s.raf = 0;
+      return;
+    }
+    s.shown = Math.min(s.target.length, s.shown + Math.max(2, Math.ceil(backlog / 24)));
+    const text = s.target.slice(0, s.shown);
+    setState((prev) => ({ ...prev, text }));
+    s.raf = requestAnimationFrame(tick);
   }, []);
+
+  const flush = useCallback(() => {
+    const s = streamRef.current;
+    if (s.raf) cancelAnimationFrame(s.raf);
+    s.raf = 0;
+    s.shown = s.target.length;
+  }, []);
+
+  useEffect(() => flush, [flush]);
+
+  const start = useCallback(
+    (spec: JobSpec): Promise<DoneEvent> => {
+      streamRef.current = { target: "", shown: 0, raf: 0 };
+      setState({ ...idleJob, running: true });
+      const handle = runJob(spec, (event: JobEvent) => {
+        if (event.type === "delta") {
+          const s = streamRef.current;
+          s.target += event.text;
+          if (!s.raf) s.raf = requestAnimationFrame(tick);
+          return;
+        }
+        setState((prev) => {
+          switch (event.type) {
+            case "tool":
+              return {
+                ...prev,
+                activity: [
+                  ...prev.activity,
+                  { name: event.name, detail: event.detail, done: false, isError: false },
+                ],
+              };
+            case "toolDone": {
+              const activity = [...prev.activity];
+              const i = activity.findLastIndex((a) => !a.done);
+              if (i >= 0) activity[i] = { ...activity[i], done: true, isError: event.isError };
+              return { ...prev, activity };
+            }
+            default:
+              return prev;
+          }
+        });
+      });
+      cancelRef.current = handle.cancel;
+      return handle.result
+        .then((done) => {
+          flush();
+          setState((prev) => ({ ...prev, running: false, text: streamRef.current.target }));
+          return done;
+        })
+        .catch((e: Error) => {
+          flush();
+          setState((prev) => ({
+            ...prev,
+            running: false,
+            text: streamRef.current.target,
+            error: e.message,
+          }));
+          throw e;
+        })
+        .finally(() => {
+          cancelRef.current = null;
+        });
+    },
+    [tick, flush],
+  );
 
   const cancel = useCallback(() => cancelRef.current?.(), []);
   const reset = useCallback(() => setState(idleJob), []);

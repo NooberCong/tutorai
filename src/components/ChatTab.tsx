@@ -111,7 +111,7 @@ export function ChatTab() {
         )}
         {state.running && (
           <div className="chat-msg assistant">
-            {state.text ? <Md text={state.text} /> : <Spinner label="Reading…" />}
+            {state.text ? <Md text={state.text} streaming /> : <Spinner label="Reading…" />}
             <ActivityFeed items={state.activity} compact />
           </div>
         )}

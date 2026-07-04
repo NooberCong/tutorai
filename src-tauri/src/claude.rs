@@ -6,9 +6,10 @@
 //! the CLI's own session persistence via `--resume <session_id>`.
 //!
 //! Two permission postures:
-//! - read-only (default): no permission flags. In `-p` mode the CLI cannot
-//!   prompt, so tools that need approval (Bash/Write/Edit) are denied while
-//!   Read/Glob/Grep — all we need for document jobs — work out of the box.
+//! - read-only (default): Read/Glob/Grep work out of the box in `-p` mode,
+//!   and WebSearch/WebFetch are explicitly allowed (they need approval, which
+//!   headless mode can never prompt for, but they don't touch the machine).
+//!   Everything else that needs approval (Bash/Write/Edit) stays denied.
 //! - agentic (coding projects): `--permission-mode=bypassPermissions`, cwd
 //!   pinned to the project workspace.
 
@@ -73,6 +74,10 @@ pub async fn run(spec: JobSpec, cancel: oneshot::Receiver<()>, emit: impl Fn(Job
             "--permission-mode=bypassPermissions",
             "--allowedTools=Write,Edit,Read,Bash,Glob,Grep,WebSearch,WebFetch",
         ]);
+    } else {
+        // Headless mode can't prompt for approval, so unlisted gated tools are
+        // simply denied. Grant the web: it can't modify anything locally.
+        cmd.args(["--allowedTools=WebSearch,WebFetch"]);
     }
     if let Some(model) = &spec.model {
         cmd.args(["--model", model]);

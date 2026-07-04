@@ -55,7 +55,7 @@ export function SummaryTab() {
       {state.error && <div className="banner warn">{state.error}</div>}
 
       {state.running && state.text ? (
-        <Md text={state.text} />
+        <Md text={state.text} streaming />
       ) : cached ? (
         <Md text={cached} />
       ) : (

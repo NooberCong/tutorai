@@ -90,12 +90,13 @@ export function AiPanel() {
 
 // ── Shared widgets ─────────────────────────────────────────────────────
 
-/** Markdown with [p.N] chips wired to page jumps. */
-export function Md(props: { text: string }) {
+/** Markdown with [p.N] chips wired to page jumps. `streaming` shows a caret
+ *  at the end of the text while it's still being generated. */
+export function Md(props: { text: string; streaming?: boolean }) {
   const { jumpToPage } = useSession();
   return (
     <div
-      className="md"
+      className={`md ${props.streaming ? "streaming" : ""}`}
       onClick={(e) => onCitationClick(e, jumpToPage)}
       dangerouslySetInnerHTML={{ __html: renderMarkdown(props.text) }}
     />
@@ -157,7 +158,9 @@ export function ActivityFeed(props: { items: ActivityItem[]; compact?: boolean }
 function humanizeDetail(item: ActivityItem): string {
   try {
     const input = JSON.parse(item.detail) as Record<string, unknown>;
-    const path = input.file_path ?? input.path ?? input.pattern ?? input.command;
+    const path =
+      input.file_path ?? input.path ?? input.pattern ?? input.command ??
+      input.query ?? input.url;
     if (typeof path === "string") {
       return path.length > 60 ? "…" + path.slice(-59) : path;
     }

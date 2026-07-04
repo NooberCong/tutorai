@@ -15,7 +15,15 @@ import { AiPanel } from "./components/AiPanel";
 import { SelectionPopover } from "./components/SelectionPopover";
 import { SessionProvider, useSession } from "./lib/session";
 import { loadPdf, renderCoverDataUrl, type PdfDoc } from "./lib/pdf";
-import { getLibrary, pdfUrl, readDocText, registerPdf, writeDocText } from "./lib/tauri";
+import { listen } from "@tauri-apps/api/event";
+import {
+  getLibrary,
+  initialFile,
+  pdfUrl,
+  readDocText,
+  registerPdf,
+  writeDocText,
+} from "./lib/tauri";
 import type { RegisteredDoc } from "./lib/types";
 
 type View =
@@ -43,7 +51,11 @@ export default function App() {
         .then((lib) => lib.find((e) => e.docId === reg.docId)?.lastPage ?? 1)
         .catch(() => 1);
       const initialPage = Math.min(Math.max(lastPage, 1), pdf.numPages);
-      setView({ kind: "doc", reg, pdf, fileName, initialPage });
+      setView((prev) => {
+        // A doc may already be open (e.g. double-clicking another PDF).
+        if (prev.kind === "doc") prev.pdf.destroy().catch(() => {});
+        return { kind: "doc", reg, pdf, fileName, initialPage };
+      });
       ensureCover(reg.docId, pdf);
     } catch (e) {
       console.error("failed to open PDF", e);
@@ -52,6 +64,21 @@ export default function App() {
       setOpening(null);
     }
   }, []);
+
+  // PDFs arriving from the OS: the file this process was launched with
+  // (file association), and files handed over by later launches while the
+  // app is already running (single-instance plugin emits "open-file").
+  useEffect(() => {
+    initialFile()
+      .then((path) => {
+        if (path) openPath(path);
+      })
+      .catch(() => {});
+    const unlisten = listen<string>("open-file", (e) => openPath(e.payload));
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [openPath]);
 
   const goHome = useCallback(() => {
     if (view.kind === "doc") view.pdf.destroy().catch(() => {});
@@ -101,8 +128,21 @@ function clampWidth(spec: PanelSpec, w: number): number {
 function DocScreen(props: { onHome: () => void; initialPage: number }) {
   const { extractProgress, panelRequest } = useSession();
   const [scale, setScale] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => localStorage.getItem("tutorai.sidebar-open") !== "0",
+  );
+  const [panelOpen, setPanelOpen] = useState(
+    () => localStorage.getItem("tutorai.panel-open") !== "0",
+  );
+
+  // Remember panel visibility across restarts (covers every way they change,
+  // including panel requests force-opening the tutor).
+  useEffect(() => {
+    localStorage.setItem("tutorai.sidebar-open", sidebarOpen ? "1" : "0");
+  }, [sidebarOpen]);
+  useEffect(() => {
+    localStorage.setItem("tutorai.panel-open", panelOpen ? "1" : "0");
+  }, [panelOpen]);
   const [sidebarW, setSidebarW] = useState(() => loadWidth(SIDEBAR));
   const [panelW, setPanelW] = useState(() => loadWidth(PANEL));
   const [resizing, setResizing] = useState<"sidebar" | "panel" | null>(null);
