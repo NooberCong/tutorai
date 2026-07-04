@@ -1,0 +1,30 @@
+[package]
+name = "tutorai"
+version = "0.1.0"
+description = "A high-performance PDF study companion powered by headless Claude"
+edition = "2021"
+
+# Desktop-only: rlib is all we need. The Tauri template's extra staticlib/
+# cdylib crate types are for mobile and overflow the MinGW linker's 65k
+# export-ordinal limit on windows-gnu toolchains.
+[lib]
+name = "tutorai_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros"] }
+log = "0.4"
+env_logger = "0.11"
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.local
+.DS_Store
+
+# stray `tauri icon` default output; the real source is src-tauri/icons/icon.svg
+app-icon.png

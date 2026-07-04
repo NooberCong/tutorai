@@ -1,0 +1,194 @@
+//! On-disk persistence: the library index plus a per-document cache directory
+//! holding extracted chapter text, AI artifacts, chat history, and project
+//! workspaces. Everything is plain JSON/text files under the app data dir —
+//! debuggable, and exactly the surface headless Claude reads with its tools.
+//!
+//! Layout:
+//!   <app-data>/library.json
+//!   <app-data>/docs/<docId>/chapters/chapter-01.txt   (page-marked text)
+//!   <app-data>/docs/<docId>/meta.json                 (extraction result)
+//!   <app-data>/docs/<docId>/artifacts.json            (summaries, quizzes, chat)
+//!   <app-data>/docs/<docId>/projects/<slug>/          (agentic workspaces)
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryEntry {
+    pub doc_id: String,
+    pub path: String,
+    pub title: String,
+    pub pages: u32,
+    pub added_at: u64,
+    pub last_opened_at: u64,
+    pub last_page: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisteredDoc {
+    pub doc_id: String,
+    pub path: String,
+    pub doc_dir: String,
+}
+
+fn data_root(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+pub fn doc_dir(app: &AppHandle, doc_id: &str) -> Result<PathBuf, String> {
+    if doc_id.is_empty() || !doc_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("invalid doc id".into());
+    }
+    let dir = data_root(app)?.join("docs").join(doc_id);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// Resolve a relative path inside a doc dir, rejecting traversal.
+fn doc_file(app: &AppHandle, doc_id: &str, rel: &str) -> Result<PathBuf, String> {
+    let ok = !rel.is_empty()
+        && !rel.contains("..")
+        && !rel.contains(':')
+        && !rel.starts_with('/')
+        && !rel.starts_with('\\');
+    if !ok {
+        return Err(format!("invalid doc file path: {rel}"));
+    }
+    Ok(doc_dir(app, doc_id)?.join(rel))
+}
+
+/// Content identity for a PDF: sha256 over (size, head 256 KiB, tail 256 KiB).
+/// Cheap even for huge files, stable across renames and moves.
+fn content_id(path: &str) -> Result<String, String> {
+    const CHUNK: usize = 256 * 1024;
+    let mut file = fs::File::open(path).map_err(|e| format!("cannot open PDF: {e}"))?;
+    let len = file.metadata().map_err(|e| e.to_string())?.len();
+    let mut hasher = Sha256::new();
+    hasher.update(len.to_le_bytes());
+    let mut buf = vec![0u8; CHUNK];
+    let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+    hasher.update(&buf[..n]);
+    if len > (2 * CHUNK) as u64 {
+        file.seek(SeekFrom::End(-(CHUNK as i64))).map_err(|e| e.to_string())?;
+        let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+        hasher.update(&buf[..n]);
+    }
+    let digest = hasher.finalize();
+    Ok(digest.iter().take(12).map(|b| format!("{b:02x}")).collect())
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn library_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(data_root(app)?.join("library.json"))
+}
+
+fn read_library(app: &AppHandle) -> Result<Vec<LibraryEntry>, String> {
+    let path = library_path(app)?;
+    match fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).map_err(|e| e.to_string()),
+        Err(_) => Ok(Vec::new()),
+    }
+}
+
+fn write_library(app: &AppHandle, entries: &[LibraryEntry]) -> Result<(), String> {
+    let text = serde_json::to_string_pretty(entries).map_err(|e| e.to_string())?;
+    fs::write(library_path(app)?, text).map_err(|e| e.to_string())
+}
+
+// ── Commands ───────────────────────────────────────────────────────────
+
+/// Identify a PDF, open its cache dir, and whitelist it for the asset
+/// protocol so pdf.js can stream it with range requests.
+#[tauri::command]
+pub fn register_pdf(app: AppHandle, path: String) -> Result<RegisteredDoc, String> {
+    let doc_id = content_id(&path)?;
+    let dir = doc_dir(&app, &doc_id)?;
+    app.asset_protocol_scope()
+        .allow_file(&path)
+        .map_err(|e| e.to_string())?;
+    Ok(RegisteredDoc {
+        doc_id,
+        path,
+        doc_dir: dir.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn get_library(app: AppHandle) -> Result<Vec<LibraryEntry>, String> {
+    let mut entries = read_library(&app)?;
+    entries.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+    // Re-whitelist known files so library thumbnails/open work after restart.
+    for entry in &entries {
+        let _ = app.asset_protocol_scope().allow_file(&entry.path);
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+pub fn upsert_library_entry(app: AppHandle, mut entry: LibraryEntry) -> Result<(), String> {
+    let mut entries = read_library(&app)?;
+    entry.last_opened_at = now_ms();
+    if let Some(existing) = entries.iter_mut().find(|e| e.doc_id == entry.doc_id) {
+        entry.added_at = existing.added_at;
+        *existing = entry;
+    } else {
+        entry.added_at = now_ms();
+        entries.push(entry);
+    }
+    write_library(&app, &entries)
+}
+
+#[tauri::command]
+pub fn remove_library_entry(app: AppHandle, doc_id: String) -> Result<(), String> {
+    let mut entries = read_library(&app)?;
+    entries.retain(|e| e.doc_id != doc_id);
+    write_library(&app, &entries)?;
+    if let Ok(dir) = doc_dir(&app, &doc_id) {
+        let _ = fs::remove_dir_all(dir);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn read_doc_text(app: AppHandle, doc_id: String, rel: String) -> Result<Option<String>, String> {
+    let path = doc_file(&app, &doc_id, &rel)?;
+    match fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn write_doc_text(app: AppHandle, doc_id: String, rel: String, content: String) -> Result<(), String> {
+    let path = doc_file(&app, &doc_id, &rel)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(path, content).map_err(|e| e.to_string())
+}
+
+/// Create (if needed) and return the absolute path of a project workspace.
+#[tauri::command]
+pub fn ensure_project_dir(app: AppHandle, doc_id: String, slug: String) -> Result<String, String> {
+    if slug.is_empty() || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("invalid project slug".into());
+    }
+    let dir = doc_dir(&app, &doc_id)?.join("projects").join(&slug);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
+}
