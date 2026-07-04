@@ -182,6 +182,26 @@ pub fn write_doc_text(app: AppHandle, doc_id: String, rel: String, content: Stri
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
+/// Write a binary file (base64 payload) into the doc cache — page images the
+/// headless CLI can Read for figures the text extraction can't carry.
+#[tauri::command]
+pub fn write_doc_bytes(
+    app: AppHandle,
+    doc_id: String,
+    rel: String,
+    base64_data: String,
+) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64_data.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let path = doc_file(&app, &doc_id, &rel)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(path, bytes).map_err(|e| e.to_string())
+}
+
 /// Create (if needed) and return the absolute path of a project workspace.
 #[tauri::command]
 pub fn ensure_project_dir(app: AppHandle, doc_id: String, slug: String) -> Result<String, String> {

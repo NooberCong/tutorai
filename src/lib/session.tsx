@@ -23,11 +23,20 @@ import { emptyArtifacts } from "./types";
 import {
   buildChapterFiles,
   extractPages,
+  figureFileName,
   outlineChapters,
+  pageHasFigures,
+  renderPageJpegBase64,
   wholeDocChapter,
   type PdfDoc,
 } from "./pdf";
-import { readDocText, runJob, upsertLibraryEntry, writeDocText } from "./tauri";
+import {
+  readDocText,
+  runJob,
+  upsertLibraryEntry,
+  writeDocBytes,
+  writeDocText,
+} from "./tauri";
 
 export type PanelTab = "summary" | "quiz" | "chat" | "project";
 
@@ -133,6 +142,44 @@ export function SessionProvider(props: {
       stale = true;
     };
   }, [reg.docId, pdf, fileName]);
+
+  // ── Figure images: give the AI eyes ──────────────────────────────────
+  // Text extraction drops figures, charts, and diagrams. After indexing,
+  // render every figure-bearing page to a JPEG in the doc cache so headless
+  // Claude can Read them. One pass per document; figures.json marks it done.
+  useEffect(() => {
+    if (!meta) return;
+    let stale = false;
+    (async () => {
+      if (await readDocText(reg.docId, "figures.json")) return;
+      const MAX_FIGURES = 200;
+      const figurePages: number[] = [];
+      let truncated = false;
+      for (let p = 1; p <= pdf.numPages && !stale; p++) {
+        if (!(await pageHasFigures(pdf, p))) continue;
+        if (figurePages.length >= MAX_FIGURES) {
+          truncated = true;
+          break;
+        }
+        const jpeg = await renderPageJpegBase64(pdf, p);
+        if (stale) return;
+        await writeDocBytes(reg.docId, figureFileName(p), jpeg);
+        figurePages.push(p);
+        // Breathe between renders; this competes with the visible reader.
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      if (!stale) {
+        await writeDocText(
+          reg.docId,
+          "figures.json",
+          JSON.stringify({ pages: figurePages, truncated }),
+        );
+      }
+    })().catch((e) => console.error("figure rendering failed", e));
+    return () => {
+      stale = true;
+    };
+  }, [meta, reg.docId, pdf]);
 
   // Keep the library index fresh. The reading position is saved as it
   // changes (debounced) — the app may quit without ever unmounting this

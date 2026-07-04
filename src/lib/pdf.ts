@@ -122,6 +122,55 @@ export function wholeDocChapter(pages: number): Chapter {
   return { title: "Full document", startPage: 1, endPage: pages };
 }
 
+/** Does this page carry visual content — raster images, or enough vector
+ *  drawing to suggest a diagram/chart — that text extraction can't convey? */
+export async function pageHasFigures(doc: PdfDoc, num: number): Promise<boolean> {
+  const page = await doc.getPage(num);
+  try {
+    const ops = await page.getOperatorList();
+    let paths = 0;
+    for (const fn of ops.fnArray) {
+      if (
+        fn === pdfjs.OPS.paintImageXObject ||
+        fn === pdfjs.OPS.paintInlineImageXObject ||
+        fn === pdfjs.OPS.paintImageXObjectRepeat
+      ) {
+        return true;
+      }
+      if (fn === pdfjs.OPS.constructPath) paths++;
+    }
+    // Text pages still draw a few rules/boxes; real diagrams draw many paths.
+    return paths > 40;
+  } catch {
+    return false;
+  } finally {
+    page.cleanup();
+  }
+}
+
+/** Render one page to a JPEG (base64, no data: prefix) for the AI to Read. */
+export async function renderPageJpegBase64(
+  doc: PdfDoc,
+  num: number,
+  width = 1100,
+): Promise<string> {
+  const page = await doc.getPage(num);
+  const vp1 = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: width / vp1.width });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  await page.render({ canvas, viewport }).promise;
+  const url = canvas.toDataURL("image/jpeg", 0.8);
+  page.cleanup();
+  return url.slice(url.indexOf(",") + 1);
+}
+
+/** Cache-relative path of a page's figure image. */
+export function figureFileName(page: number): string {
+  return `pages/page-${String(page).padStart(4, "0")}.jpg`;
+}
+
 /** Render page 1 as a small JPEG data URL — the book's library cover. */
 export async function renderCoverDataUrl(doc: PdfDoc, width = 360): Promise<string> {
   const page = await doc.getPage(1);

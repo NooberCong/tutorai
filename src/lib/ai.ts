@@ -37,7 +37,8 @@ function docContext(meta: DocMeta, scope: Scope): string {
     fileList,
     ``,
     `Inside the files, [[PAGE n]] markers give the physical page number of the text that follows them.`,
-    `Use the Read tool to read these files (Grep/Glob are also available). Do not use any other tools.`,
+    `Figure-bearing pages are also rendered as images under pages/ — pages/page-0012.jpg is page 12 (pages/figures.json lists which pages have one). Text extraction drops figures, charts, diagrams, and complex tables: when the text refers to one, or a question hinges on visual content, Read that page image to actually see it.`,
+    `Use the Read tool for the text files and page images (Grep/Glob are also available). WebSearch/WebFetch may add outside context when helpful, but every claim about the document itself must be grounded in the document.`,
     `Whenever you reference specific material, cite the page inline in exactly this form: [p.12] (single page) or [p.12-15] (range). Cite generously — every key claim should carry a citation.`,
   ].join("\n");
 }
@@ -199,16 +200,37 @@ export function parseQuizQuestions(text: string, maxPage: number): QuizQuestion[
     ) {
       continue;
     }
+    const choices = (q.choices as unknown[]).map(String).slice(0, 4);
+    const answer = Math.min(Math.max(0, Math.floor(q.answer)), choices.length - 1);
+    // Models put the correct choice first far more often than chance —
+    // shuffle every question's choices so the answer key is actually random.
+    const shuffled = shuffleChoices(choices, answer);
     questions.push({
       question: q.question,
-      choices: (q.choices as unknown[]).map(String).slice(0, 4),
-      answer: Math.min(Math.max(0, Math.floor(q.answer)), q.choices.length - 1),
+      choices: shuffled.choices,
+      answer: shuffled.answer,
       explanation: typeof q.explanation === "string" ? q.explanation : "",
       page: clampPage(q.page, maxPage),
     });
   }
   if (!questions.length) throw new Error("quiz JSON contained no valid questions");
   return questions;
+}
+
+/** Fisher–Yates over the choices, tracking where the correct one lands. */
+function shuffleChoices(
+  choices: string[],
+  answer: number,
+): { choices: string[]; answer: number } {
+  const order = choices.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return {
+    choices: order.map((i) => choices[i]),
+    answer: order.indexOf(answer),
+  };
 }
 
 export function parseChapters(text: string, maxPage: number): { title: string; startPage: number }[] {
