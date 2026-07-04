@@ -34,6 +34,7 @@ type View =
       pdf: PdfDoc;
       fileName: string;
       initialPage: number;
+      initialScroll: number;
     };
 
 export default function App() {
@@ -47,14 +48,15 @@ export default function App() {
       const pdf = await loadPdf(pdfUrl(path));
       const fileName = path.split(/[\\/]/).pop() ?? "document.pdf";
       // Resume where the reader left off last time (from the library index).
-      const lastPage = await getLibrary()
-        .then((lib) => lib.find((e) => e.docId === reg.docId)?.lastPage ?? 1)
-        .catch(() => 1);
-      const initialPage = Math.min(Math.max(lastPage, 1), pdf.numPages);
+      const entry = await getLibrary()
+        .then((lib) => lib.find((e) => e.docId === reg.docId))
+        .catch(() => undefined);
+      const initialPage = Math.min(Math.max(entry?.lastPage ?? 1, 1), pdf.numPages);
+      const initialScroll = entry?.lastScroll ?? 0;
       setView((prev) => {
         // A doc may already be open (e.g. double-clicking another PDF).
         if (prev.kind === "doc") prev.pdf.destroy().catch(() => {});
-        return { kind: "doc", reg, pdf, fileName, initialPage };
+        return { kind: "doc", reg, pdf, fileName, initialPage, initialScroll };
       });
       ensureCover(reg.docId, pdf);
     } catch (e) {
@@ -96,7 +98,11 @@ export default function App() {
       pdf={view.pdf}
       fileName={view.fileName}
     >
-      <DocScreen onHome={goHome} initialPage={view.initialPage} />
+      <DocScreen
+        onHome={goHome}
+        initialPage={view.initialPage}
+        initialScroll={view.initialScroll}
+      />
     </SessionProvider>
   );
 }
@@ -125,7 +131,11 @@ function clampWidth(spec: PanelSpec, w: number): number {
   return Math.min(Math.max(w, spec.min), spec.max);
 }
 
-function DocScreen(props: { onHome: () => void; initialPage: number }) {
+function DocScreen(props: {
+  onHome: () => void;
+  initialPage: number;
+  initialScroll: number;
+}) {
   const { extractProgress, panelRequest } = useSession();
   const [scale, setScale] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -226,7 +236,11 @@ function DocScreen(props: { onHome: () => void; initialPage: number }) {
           />
         </div>
         <div className="reader-host" ref={readerHostRef}>
-          <Reader scale={scale} initialPage={props.initialPage} />
+          <Reader
+            scale={scale}
+            initialPage={props.initialPage}
+            initialScroll={props.initialScroll}
+          />
           <SelectionPopover hostRef={readerHostRef} />
           {extractProgress && (
             <div className="extract-pill">

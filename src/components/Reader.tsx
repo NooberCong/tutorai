@@ -23,7 +23,12 @@ interface PageDims {
   height: number;
 }
 
-export function Reader(props: { scale: number | null; initialPage?: number }) {
+export function Reader(props: {
+  scale: number | null;
+  initialPage?: number;
+  /** Scroll offset within initialPage, as a fraction of the page height. */
+  initialScroll?: number;
+}) {
   const { pdf, reportPage, registerJumper } = useSession();
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef(new Map<number, HTMLDivElement>());
@@ -96,14 +101,20 @@ export function Reader(props: { scale: number | null; initialPage?: number }) {
     if (!baseDims || restoredRef.current) return;
     restoredRef.current = true;
     const target = Math.min(Math.max(props.initialPage ?? 1, 1), pdf.numPages);
-    if (target <= 1) return;
+    const frac = props.initialScroll ?? 0;
+    if (target <= 1 && frac <= 0) return;
     const el = pageRefs.current.get(target);
     const container = containerRef.current;
     if (el && container) {
-      container.scrollTop = Math.max(0, el.offsetTop - 24);
-      reportPage(target);
+      // frac is measured against the page's height, so the exact spot comes
+      // back regardless of how the window/zoom changed between sessions.
+      container.scrollTop = Math.max(
+        0,
+        frac ? el.offsetTop + frac * el.offsetHeight : el.offsetTop - 24,
+      );
+      reportPage(target, frac);
     }
-  }, [baseDims, props.initialPage, pdf.numPages, reportPage]);
+  }, [baseDims, props.initialPage, props.initialScroll, pdf.numPages, reportPage]);
 
   // Virtualization: observe every page wrapper.
   useEffect(() => {
@@ -136,7 +147,15 @@ export function Reader(props: { scale: number | null; initialPage?: number }) {
     for (const [num, el] of pageRefs.current) {
       if (el.offsetTop <= center) best = Math.max(best, num);
     }
-    reportPage(best);
+    // Scroll offset within the current page, as a fraction of its height.
+    // Can be slightly negative (the page starts mid-viewport) — that's fine,
+    // restoring reproduces the same scrollTop.
+    const el = pageRefs.current.get(best);
+    const frac =
+      el && el.offsetHeight > 0
+        ? (container.scrollTop - el.offsetTop) / el.offsetHeight
+        : 0;
+    reportPage(best, frac);
   }, [reportPage]);
 
   // Expose page jumps to the rest of the app (citations, chapter list).

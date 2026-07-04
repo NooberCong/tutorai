@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   chatSystemPreamble,
   questionWithReadingContext,
@@ -16,18 +16,31 @@ export function ChatTab() {
   const [input, setInput] = useState("");
   const [withContext, setWithContext] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const handledRequest = useRef(0);
+  // Follow the stream unless the reader has deliberately scrolled up.
+  const pinnedRef = useRef(true);
 
   const { messages, sessionId } = artifacts.chat;
 
-  // Keep the transcript pinned to the bottom while streaming.
+  // Keep the transcript pinned to the bottom as text streams in and
+  // activity entries (tool calls) are appended.
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, state.text]);
+    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, state.text, state.activity]);
+
+  // Grow the input with its content; the CSS max-height caps it.
+  useLayoutEffect(() => {
+    const ta = inputRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [input]);
 
   const send = async (displayText: string, sendText: string) => {
     if (!meta || state.running) return;
+    pinnedRef.current = true;
     updateArtifacts((a) => ({
       ...a,
       chat: {
@@ -79,13 +92,28 @@ export function ChatTab() {
       void send(req.chatDraft, req.chatDraft);
     } else {
       setInput(req.chatDraft);
+      // Focus after React commits the value, cursor at the end.
+      requestAnimationFrame(() => {
+        const ta = inputRef.current;
+        if (!ta) return;
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelRequest]);
 
   return (
     <div className="tab-pane chat-pane">
-      <div className="chat-log" ref={logRef}>
+      <div
+        className="chat-log"
+        ref={logRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          pinnedRef.current =
+            el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+        }}
+      >
         {messages.length === 0 && !state.running && (
           <div className="ai-empty">
             <ChatGlyph />
@@ -121,6 +149,7 @@ export function ChatTab() {
       <div className="chat-composer">
         <div className="composer-box">
           <textarea
+            ref={inputRef}
             value={input}
             rows={2}
             placeholder="Ask about what you're reading…"

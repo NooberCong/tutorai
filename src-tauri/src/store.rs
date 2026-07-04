@@ -27,6 +27,10 @@ pub struct LibraryEntry {
     pub added_at: u64,
     pub last_opened_at: u64,
     pub last_page: u32,
+    /// Scroll offset within `last_page`, as a fraction of the page height
+    /// (scale-invariant). Defaults to 0 for entries saved before this existed.
+    #[serde(default)]
+    pub last_scroll: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

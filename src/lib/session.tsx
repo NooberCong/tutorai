@@ -63,7 +63,9 @@ interface SessionValue {
   currentPage: number;
   /** 1-based page texts from the extraction cache (lazy-loaded, memoized). */
   getPageTexts: (pages: number[]) => Promise<{ page: number; text: string }[]>;
-  reportPage: (page: number) => void;
+  /** Report the visible page, optionally with the scroll offset within it
+   *  (fraction of page height) so the exact position can be restored. */
+  reportPage: (page: number, scroll?: number) => void;
   jumpToPage: (page: number) => void;
   registerJumper: (fn: (page: number) => void) => void;
 
@@ -181,42 +183,43 @@ export function SessionProvider(props: {
     };
   }, [meta, reg.docId, pdf]);
 
-  // Keep the library index fresh. The reading position is saved as it
-  // changes (debounced) — the app may quit without ever unmounting this
-  // provider (e.g. closing the window mid-read), so saving only on unmount
-  // would lose it. The unmount save below is a final, immediate flush.
+  // Keep the library index fresh. The reading position (page + scroll offset
+  // within it) is saved as it changes (debounced) — the app may quit without
+  // ever unmounting this provider (e.g. closing the window mid-read), so
+  // saving only on unmount would lose it. The unmount save is a final flush.
+  // The scroll fraction lives in a ref: it changes on every scroll frame and
+  // must not re-render the app the way currentPage (which is displayed) does.
+  const scrollRef = useRef(0);
   const latest = useRef({ meta, currentPage });
   latest.current = { meta, currentPage };
-  useEffect(() => {
+  const savePosition = useCallback(() => {
+    const { meta, currentPage } = latest.current;
     if (!meta) return;
-    const timer = window.setTimeout(() => {
-      upsertLibraryEntry({
-        docId: reg.docId,
-        path: reg.path,
-        title: meta.title,
-        pages: meta.pages,
-        addedAt: 0,
-        lastOpenedAt: 0,
-        lastPage: currentPage,
-      }).catch(() => {});
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [meta, reg.docId, reg.path, currentPage]);
+    upsertLibraryEntry({
+      docId: reg.docId,
+      path: reg.path,
+      title: meta.title,
+      pages: meta.pages,
+      addedAt: 0,
+      lastOpenedAt: 0,
+      lastPage: currentPage,
+      lastScroll: scrollRef.current,
+    }).catch(() => {});
+  }, [reg.docId, reg.path]);
+  const positionTimer = useRef<number>(undefined);
+  const schedulePositionSave = useCallback(() => {
+    window.clearTimeout(positionTimer.current);
+    positionTimer.current = window.setTimeout(savePosition, 500);
+  }, [savePosition]);
+  useEffect(() => {
+    if (meta) schedulePositionSave();
+  }, [meta, currentPage, schedulePositionSave]);
   useEffect(
     () => () => {
-      const { meta, currentPage } = latest.current;
-      if (!meta) return;
-      upsertLibraryEntry({
-        docId: reg.docId,
-        path: reg.path,
-        title: meta.title,
-        pages: meta.pages,
-        addedAt: 0,
-        lastOpenedAt: 0,
-        lastPage: currentPage,
-      }).catch(() => {});
+      window.clearTimeout(positionTimer.current);
+      savePosition();
     },
-    [reg.docId, reg.path],
+    [savePosition],
   );
 
   // ── Artifacts: load once, persist debounced ──────────────────────────
@@ -311,7 +314,18 @@ export function SessionProvider(props: {
     jumperRef.current = fn;
   }, []);
   const jumpToPage = useCallback((page: number) => jumperRef.current(page), []);
-  const reportPage = useCallback((page: number) => setCurrentPage(page), []);
+  const reportPage = useCallback(
+    (page: number, scroll?: number) => {
+      if (scroll !== undefined) {
+        scrollRef.current = scroll;
+        // Within-page scrolls don't change currentPage, so the effect above
+        // won't fire — schedule the save here.
+        schedulePositionSave();
+      }
+      setCurrentPage(page);
+    },
+    [schedulePositionSave],
+  );
 
   const openPanel = useCallback((tab: PanelTab, chatDraft?: string, autoSend?: boolean) => {
     setPanelRequest({ tab, chatDraft, autoSend, nonce: Date.now() });

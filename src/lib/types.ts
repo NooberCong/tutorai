@@ -8,6 +8,8 @@ export interface LibraryEntry {
   addedAt: number;
   lastOpenedAt: number;
   lastPage: number;
+  /** Scroll offset within lastPage, as a fraction of the page height. */
+  lastScroll: number;
 }
 
 export interface RegisteredDoc {

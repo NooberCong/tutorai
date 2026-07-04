@@ -1758,7 +1758,8 @@ textarea::placeholder {
   border: none;
   padding: 0;
   min-height: 40px;
-  max-height: 140px;
+  max-height: 168px; /* ~8 lines; the JS auto-grow stops here and it scrolls */
+  overflow-y: auto;
   line-height: 1.5;
   font-size: 13.5px;
 }
