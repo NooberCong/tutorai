@@ -27,6 +27,8 @@ export const writeDocText = (docId: string, rel: string, content: string) =>
   invoke<void>("write_doc_text", { docId, rel, content });
 export const writeDocBytes = (docId: string, rel: string, base64Data: string) =>
   invoke<void>("write_doc_bytes", { docId, rel, base64Data });
+export const removeDocPath = (docId: string, rel: string) =>
+  invoke<void>("remove_doc_path", { docId, rel });
 export const ensureProjectDir = (docId: string, slug: string) =>
   invoke<string>("ensure_project_dir", { docId, slug });
 

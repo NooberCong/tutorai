@@ -166,6 +166,43 @@ export async function renderPageJpegBase64(
   return url.slice(url.indexOf(",") + 1);
 }
 
+/** Render a rectangular region of a page — given as fractions of the page
+ *  size — to a JPEG (base64, no data: prefix) for the AI to Read. */
+export async function renderRegionJpegBase64(
+  doc: PdfDoc,
+  num: number,
+  region: { x: number; y: number; w: number; h: number },
+  targetWidth = 1200,
+): Promise<string> {
+  const page = await doc.getPage(num);
+  const vp1 = page.getViewport({ scale: 1 });
+  // Scale so the crop comes out near targetWidth, without going absurd for
+  // tiny selections or huge pages.
+  const scale = Math.min(Math.max(targetWidth / (vp1.width * region.w), 1), 4);
+  const viewport = page.getViewport({ scale });
+  const full = document.createElement("canvas");
+  full.width = Math.round(viewport.width);
+  full.height = Math.round(viewport.height);
+  await page.render({ canvas: full, viewport }).promise;
+  page.cleanup();
+  const crop = document.createElement("canvas");
+  crop.width = Math.max(1, Math.round(region.w * full.width));
+  crop.height = Math.max(1, Math.round(region.h * full.height));
+  crop.getContext("2d")!.drawImage(
+    full,
+    Math.round(region.x * full.width),
+    Math.round(region.y * full.height),
+    crop.width,
+    crop.height,
+    0,
+    0,
+    crop.width,
+    crop.height,
+  );
+  const url = crop.toDataURL("image/jpeg", 0.85);
+  return url.slice(url.indexOf(",") + 1);
+}
+
 /** Cache-relative path of a page's figure image. */
 export function figureFileName(page: number): string {
   return `pages/page-${String(page).padStart(4, "0")}.jpg`;

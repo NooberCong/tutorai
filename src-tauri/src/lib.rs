@@ -76,6 +76,7 @@ pub fn run() {
             store::read_doc_text,
             store::write_doc_text,
             store::write_doc_bytes,
+            store::remove_doc_path,
             store::ensure_project_dir,
         ])
         .run(tauri::generate_context!())

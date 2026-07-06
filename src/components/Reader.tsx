@@ -9,10 +9,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { TextLayer } from "pdfjs-dist";
-import type { PdfDoc } from "../lib/pdf";
+import { renderRegionJpegBase64, type PdfDoc } from "../lib/pdf";
+import { askRegionMessage, explainRegionMessage } from "../lib/ai";
+import { writeDocBytes } from "../lib/tauri";
 import { useSession } from "../lib/session";
+import { ChatGlyph, Spark } from "./Icons";
 
 /** Distance beyond the viewport at which pages mount/unmount. */
 const OVERSCAN = "900px";
@@ -23,13 +27,25 @@ interface PageDims {
   height: number;
 }
 
+/** A dragged region of one page, in fractions of the page size. */
+interface SnipBox {
+  page: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 export function Reader(props: {
   scale: number | null;
   initialPage?: number;
   /** Scroll offset within initialPage, as a fraction of the page height. */
   initialScroll?: number;
+  /** Snip mode: drag a box over a figure to ask the tutor about it. */
+  snipMode?: boolean;
+  exitSnip?: () => void;
 }) {
-  const { pdf, reportPage, registerJumper } = useSession();
+  const { pdf, reg, reportPage, registerJumper, openPanel } = useSession();
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef(new Map<number, HTMLDivElement>());
   // Seed visibility around the restored page so first paint shows content
@@ -169,6 +185,95 @@ export function Reader(props: {
     });
   }, [registerJumper, pdf.numPages]);
 
+  // ── Snip: drag a box over a page, render the region to a JPEG the
+  //    headless CLI can Read, and hand it to the chat tab. ──────────────
+  const [snipDraft, setSnipDraft] = useState<SnipBox | null>(null); // live drag
+  const [snipSel, setSnipSel] = useState<SnipBox | null>(null); // awaiting action
+  const [snipBusy, setSnipBusy] = useState(false);
+
+  // Leaving snip mode (toolbar toggle or Escape) discards any selection.
+  useEffect(() => {
+    if (props.snipMode) return;
+    setSnipDraft(null);
+    setSnipSel(null);
+  }, [props.snipMode]);
+  useEffect(() => {
+    if (!props.snipMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") props.exitSnip?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [props.snipMode, props.exitSnip]);
+
+  const startSnip = (e: ReactPointerEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as Element;
+    if (target.closest?.(".selection-popover")) return; // popover clicks pass through
+    setSnipSel(null);
+    const pageEl = target.closest?.("[data-page]") as HTMLElement | null;
+    if (!pageEl) return;
+    e.preventDefault();
+    const rect = pageEl.getBoundingClientRect();
+    const page = Number(pageEl.dataset.page);
+    const fx = (cx: number) => Math.min(Math.max((cx - rect.left) / rect.width, 0), 1);
+    const fy = (cy: number) => Math.min(Math.max((cy - rect.top) / rect.height, 0), 1);
+    let box: SnipBox = { page, x0: fx(e.clientX), y0: fy(e.clientY), x1: fx(e.clientX), y1: fy(e.clientY) };
+    setSnipDraft(box);
+    const move = (ev: PointerEvent) => {
+      box = { ...box, x1: fx(ev.clientX), y1: fy(ev.clientY) };
+      setSnipDraft(box);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      setSnipDraft(null);
+      // Ignore accidental clicks; keep real boxes and show the popover.
+      if (
+        Math.abs(box.x1 - box.x0) * rect.width >= 12 &&
+        Math.abs(box.y1 - box.y0) * rect.height >= 12
+      ) {
+        setSnipSel({
+          page,
+          x0: Math.min(box.x0, box.x1),
+          y0: Math.min(box.y0, box.y1),
+          x1: Math.max(box.x0, box.x1),
+          y1: Math.max(box.y0, box.y1),
+        });
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up, { once: true });
+  };
+
+  const snipAction = async (kind: "explain" | "ask") => {
+    const box = snipSel;
+    if (!box || snipBusy) return;
+    setSnipBusy(true);
+    try {
+      const jpeg = await renderRegionJpegBase64(pdf, box.page, {
+        x: box.x0,
+        y: box.y0,
+        w: box.x1 - box.x0,
+        h: box.y1 - box.y0,
+      });
+      const rel = `snips/snip-p${box.page}-${Date.now()}.jpg`;
+      await writeDocBytes(reg.docId, rel, jpeg);
+      openPanel(
+        "chat",
+        kind === "explain"
+          ? explainRegionMessage(rel, box.page)
+          : askRegionMessage(rel, box.page),
+        kind === "explain",
+      );
+      setSnipSel(null);
+      props.exitSnip?.();
+    } catch (e) {
+      console.error("snip failed", e);
+    } finally {
+      setSnipBusy(false);
+    }
+  };
+
   const onPageDims = useCallback((num: number, dims: PageDims) => {
     setPageDims((prev) => {
       const cur = prev.get(num);
@@ -186,8 +291,15 @@ export function Reader(props: {
 
   if (!baseDims) return <div className="reader" ref={containerRef} />;
 
+  const snipBox = snipDraft ?? snipSel;
+
   return (
-    <div className="reader" ref={containerRef} onScroll={onScroll}>
+    <div
+      className={`reader ${props.snipMode ? "snip-mode" : ""}`}
+      ref={containerRef}
+      onScroll={onScroll}
+      onPointerDown={props.snipMode ? startSnip : undefined}
+    >
       <div className="reader-pages" style={{ gap: PAGE_GAP }}>
         {pageNumbers.map((num) => {
           const dims = pageDims.get(num) ?? baseDims;
@@ -223,6 +335,36 @@ export function Reader(props: {
                     scale={scale}
                     onDims={onPageDims}
                   />
+                </div>
+              )}
+              {snipBox?.page === num && (
+                <div
+                  className="snip-rect"
+                  style={{
+                    left: `${Math.min(snipBox.x0, snipBox.x1) * 100}%`,
+                    top: `${Math.min(snipBox.y0, snipBox.y1) * 100}%`,
+                    width: `${Math.abs(snipBox.x1 - snipBox.x0) * 100}%`,
+                    height: `${Math.abs(snipBox.y1 - snipBox.y0) * 100}%`,
+                  }}
+                />
+              )}
+              {snipSel?.page === num && !snipDraft && (
+                <div
+                  className="selection-popover snip-pop"
+                  style={{
+                    left: `${((snipSel.x0 + snipSel.x1) / 2) * 100}%`,
+                    top: `calc(${snipSel.y1 * 100}% + 10px)`,
+                  }}
+                >
+                  <button disabled={snipBusy} onClick={() => void snipAction("explain")}>
+                    <Spark />
+                    {snipBusy ? "Snipping…" : "Explain"}
+                  </button>
+                  <span className="sep" />
+                  <button disabled={snipBusy} onClick={() => void snipAction("ask")}>
+                    <ChatGlyph />
+                    Ask about this
+                  </button>
                 </div>
               )}
             </div>

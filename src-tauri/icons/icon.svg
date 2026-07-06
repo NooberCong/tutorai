@@ -1,8 +1,9 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- TutorAI app mark: the tutor's spark — one four-point star on deep ink.
-       Same glyph as the in-app AI-presence icon, so window, taskbar, and UI
-       share a single mark. Rendered to icon-source.png (1024²), then
-       `tauri icon` fans out all platform sizes. -->
+  <!-- TutorAI app mark: the Bookmark-T — a "T" for Tutor whose stem is a ribbon
+       bookmark, the oldest symbol of "your place in the text." Same glyph as the
+       in-app AI-presence icon, so window, taskbar, and UI share a single mark.
+       Rendered to icon-source.png (1024²), then `tauri icon` fans out all
+       platform sizes. -->
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#141D17"/>
@@ -19,7 +20,7 @@
       <stop offset="0" stop-color="#A3D3B6" stop-opacity="0.18"/>
       <stop offset="1" stop-color="#A3D3B6" stop-opacity="0.03"/>
     </linearGradient>
-    <linearGradient id="star" x1="512" y1="170" x2="512" y2="830" gradientUnits="userSpaceOnUse">
+    <linearGradient id="mark" x1="512" y1="200" x2="512" y2="815" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#6FE6A4"/>
       <stop offset="1" stop-color="#3BCB77"/>
     </linearGradient>
@@ -29,13 +30,9 @@
   <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#glow)"/>
   <rect x="37" y="37" width="950" height="950" rx="219" stroke="url(#edge)" stroke-width="10" fill="none"/>
 
-  <!-- the spark, optically centered a touch above true center -->
+  <!-- the Bookmark-T, optically centered a touch above true center; the stroke
+       matches the fill purely to round the corners -->
   <path
-    d="M512 170
-       Q512 500 842 500
-       Q512 500 512 830
-       Q512 500 182 500
-       Q512 500 512 170
-       Z"
-    fill="url(#star)"/>
+    d="M230 200 H794 V320 H619 V815 L512 691 L405 815 V320 H230 Z"
+    fill="url(#mark)" stroke="url(#mark)" stroke-width="47" stroke-linejoin="round"/>
 </svg>

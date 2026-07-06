@@ -134,6 +134,19 @@ export function explainSelectionMessage(text: string, page: number): string {
   return `Explain this passage from page ${page}:\n\n"${text.trim()}"\n\nExplain what it means in plain language, add the context I need to understand it, and note anything subtle or easily misread.`;
 }
 
+/** A region of a page the reader snipped to an image (figure, chart, equation…). */
+export function explainRegionMessage(rel: string, page: number): string {
+  return [
+    `Explain what I've marked on page ${page}. I snipped that region of the page to an image file: ${rel}`,
+    ``,
+    `Read that image file first so you can see exactly what I marked — likely a figure, chart, diagram, equation, or table. Then explain it in plain language, connect it to the surrounding text on that page, and note anything subtle or easily misread.`,
+  ].join("\n");
+}
+
+export function askRegionMessage(rel: string, page: number): string {
+  return `About the region I marked on page ${page} (snipped to ${rel} — Read that image first):\n`;
+}
+
 export function detectChaptersPrompt(meta: DocMeta): string {
   return [
     docContext(meta, { kind: "full" }),

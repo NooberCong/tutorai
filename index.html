@@ -6,6 +6,143 @@
     <title>TutorAI</title>
   </head>
   <body>
+    <!-- Boot splash. Lives inline — markup, styles, and the SVG mark — because
+         it must paint before the app bundle is even parsed; on a cold start
+         that parse is the longest blank stretch. App.tsx dismisses it (see
+         dismissSplash) once the first real view is settled. -->
+    <div id="splash" aria-hidden="true">
+      <style>
+        #splash {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 26px;
+          background: #090d0b;
+          transition: opacity 0.45s ease;
+        }
+        #splash.done {
+          opacity: 0;
+          pointer-events: none;
+        }
+        #splash .s-hero {
+          position: relative;
+          display: grid;
+          place-items: center;
+        }
+        #splash .s-glow {
+          position: absolute;
+          width: 320px;
+          height: 320px;
+          border-radius: 50%;
+          background: radial-gradient(
+            circle,
+            rgba(69, 210, 131, 0.16) 0%,
+            rgba(69, 210, 131, 0.05) 45%,
+            rgba(69, 210, 131, 0) 70%
+          );
+          animation: splash-breathe 2.6s ease-in-out infinite alternate;
+        }
+        #splash .s-mark {
+          position: relative;
+          animation: splash-rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+        }
+        /* pathLength="1" normalizes the outline so the draw-in is a plain
+           1 → 0 dashoffset, independent of real path length */
+        #splash .s-path {
+          stroke-dasharray: 1;
+          stroke-dashoffset: 1;
+          fill-opacity: 0;
+          animation:
+            splash-draw 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards,
+            splash-fill 0.5s ease 0.45s forwards;
+        }
+        #splash .s-word {
+          font-family: system-ui, sans-serif;
+          font-size: 17px;
+          font-weight: 550;
+          letter-spacing: 0.05em;
+          color: #d7e6dc;
+          animation: splash-rise 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) 0.3s both;
+        }
+        /* Appears only when loading genuinely drags — warm starts never see it */
+        #splash .s-bar {
+          width: 120px;
+          height: 2px;
+          border-radius: 1px;
+          overflow: hidden;
+          background: rgba(163, 211, 182, 0.12);
+          opacity: 0;
+          animation: splash-appear 0.5s ease 1.1s forwards;
+        }
+        #splash .s-bar i {
+          display: block;
+          width: 40%;
+          height: 100%;
+          border-radius: 1px;
+          background: linear-gradient(90deg, transparent, #45d283, transparent);
+          animation: splash-scan 1.3s ease-in-out infinite;
+        }
+        @keyframes splash-breathe {
+          from { transform: scale(1); opacity: 0.75; }
+          to { transform: scale(1.12); opacity: 1; }
+        }
+        @keyframes splash-rise {
+          from { transform: translateY(10px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes splash-draw {
+          to { stroke-dashoffset: 0; }
+        }
+        @keyframes splash-fill {
+          to { fill-opacity: 1; }
+        }
+        @keyframes splash-appear {
+          to { opacity: 1; }
+        }
+        @keyframes splash-scan {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(350%); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #splash *, #splash .s-path {
+            animation: none;
+          }
+          #splash .s-path {
+            stroke-dashoffset: 0;
+            fill-opacity: 1;
+          }
+          #splash .s-bar {
+            opacity: 1;
+          }
+        }
+      </style>
+      <div class="s-hero">
+        <div class="s-glow"></div>
+        <svg class="s-mark" width="88" height="88" viewBox="0 0 24 24" fill="none">
+          <defs>
+            <linearGradient id="s-gg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#6FE6A4" />
+              <stop offset="1" stop-color="#3BCB77" />
+            </linearGradient>
+          </defs>
+          <path
+            class="s-path"
+            pathLength="1"
+            d="M5.4 4.7 H18.6 V7.5 H14.5 V19.1 L12 16.2 L9.5 19.1 V7.5 H5.4 Z"
+            fill="url(#s-gg)"
+            stroke="url(#s-gg)"
+            stroke-width="0.8"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </div>
+      <div class="s-word">TutorAI</div>
+      <div class="s-bar"><i></i></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

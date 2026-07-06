@@ -5,6 +5,7 @@ import {
   Minus,
   PanelLeft,
   Plus,
+  Snip,
   Spark,
 } from "./Icons";
 
@@ -16,6 +17,8 @@ export function Toolbar(props: {
   toggleSidebar: () => void;
   panelOpen: boolean;
   togglePanel: () => void;
+  snipMode: boolean;
+  toggleSnip: () => void;
 }) {
   const { meta, pdf, currentPage, jumpToPage } = useSession();
 
@@ -78,6 +81,14 @@ export function Toolbar(props: {
           <FitWidth />
         </button>
         <span className="toolbar-sep" />
+        <button
+          className={`icon-btn ${props.snipMode ? "active" : ""}`}
+          onClick={props.toggleSnip}
+          title="Ask about a figure — drag a box around anything on the page (Esc to cancel)"
+          aria-pressed={props.snipMode}
+        >
+          <Snip />
+        </button>
         <button
           className={`ai-toggle ${props.panelOpen ? "active" : ""}`}
           onClick={props.togglePanel}

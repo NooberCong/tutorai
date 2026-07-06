@@ -8,13 +8,20 @@
 //!   <app-data>/docs/<docId>/chapters/chapter-01.txt   (page-marked text)
 //!   <app-data>/docs/<docId>/meta.json                 (extraction result)
 //!   <app-data>/docs/<docId>/artifacts.json            (summaries, quizzes, chat)
-//!   <app-data>/docs/<docId>/projects/<slug>/          (agentic workspaces)
+//!   <app-data>/docs/<docId>/pages/page-0001.jpg       (figure-page images, ≤200)
+//!   <app-data>/docs/<docId>/snips/                    (chat image attachments;
+//!                                                      wiped on chat reset, stale
+//!                                                      ones pruned at doc open)
+//!   <app-data>/docs/<docId>/projects/<slug>/          (agentic workspaces; deleted
+//!                                                      with their list entry)
+//!
+//! Removing a doc from the library deletes its whole cache dir.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,12 +122,31 @@ fn write_library(app: &AppHandle, entries: &[LibraryEntry]) -> Result<(), String
 
 // ── Commands ───────────────────────────────────────────────────────────
 
+/// Snips are one-shot chat attachments. The chat wipes them when the
+/// conversation resets; this sweep at doc-open catches the rest once they
+/// are old enough that no conversation the reader resumes still needs them.
+fn prune_stale_snips(dir: &Path) {
+    const MAX_AGE: std::time::Duration = std::time::Duration::from_secs(14 * 24 * 60 * 60);
+    let Ok(entries) = fs::read_dir(dir.join("snips")) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(modified) = entry.metadata().and_then(|m| m.modified()) else {
+            continue;
+        };
+        if modified.elapsed().is_ok_and(|age| age > MAX_AGE) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 /// Identify a PDF, open its cache dir, and whitelist it for the asset
 /// protocol so pdf.js can stream it with range requests.
 #[tauri::command]
 pub fn register_pdf(app: AppHandle, path: String) -> Result<RegisteredDoc, String> {
     let doc_id = content_id(&path)?;
     let dir = doc_dir(&app, &doc_id)?;
+    prune_stale_snips(&dir);
     app.asset_protocol_scope()
         .allow_file(&path)
         .map_err(|e| e.to_string())?;
@@ -204,6 +230,23 @@ pub fn write_doc_bytes(
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::write(path, bytes).map_err(|e| e.to_string())
+}
+
+/// Delete a file or directory inside a doc's cache dir — spent snips, a
+/// removed project workspace. Missing paths are not an error.
+#[tauri::command]
+pub fn remove_doc_path(app: AppHandle, doc_id: String, rel: String) -> Result<(), String> {
+    let path = doc_file(&app, &doc_id, &rel)?;
+    let result = if path.is_dir() {
+        fs::remove_dir_all(&path)
+    } else {
+        fs::remove_file(&path)
+    };
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Create (if needed) and return the absolute path of a project workspace.

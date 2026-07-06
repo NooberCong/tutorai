@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "TutorAI",
+        "backgroundColor": "#090d0b",
         "width": 1440,
         "height": 920,
         "minWidth": 980,

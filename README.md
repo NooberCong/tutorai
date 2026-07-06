@@ -1,6 +1,25 @@
+<div align="center">
+
+<img src="src-tauri/icons/icon.svg" width="128" alt="TutorAI — the Bookmark-T mark" />
+
 # TutorAI
 
 **A desktop PDF reader with a tutor inside.**
+
+Open a textbook. Ask it anything. Every answer cites the page.
+
+[![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8D8?logo=tauri&logoColor=white)](https://tauri.app)
+[![React 19](https://img.shields.io/badge/React_19-087EA4?logo=react&logoColor=white)](https://react.dev)
+[![Rust](https://img.shields.io/badge/Rust-1a1a1a?logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![pdf.js](https://img.shields.io/badge/pdf.js-b31017?logo=mozilla&logoColor=white)](https://mozilla.github.io/pdf.js/)
+[![Powered by Claude Code](https://img.shields.io/badge/Powered_by-Claude_Code-D97757?logo=claude&logoColor=white)](https://claude.com/claude-code)
+![Platforms](https://img.shields.io/badge/Windows_·_macOS_·_Linux-3BCB77)
+
+[Features](#features) · [How it works](#how-it-works) · [Getting started](#getting-started) · [Project layout](#project-layout) · [Troubleshooting](#troubleshooting)
+
+</div>
+
+---
 
 TutorAI turns any PDF — a textbook, a paper, a technical report — into something
 you can study *with*, not just read. It summarizes chapters, quizzes you on what
@@ -133,9 +152,11 @@ The UI is a single dark theme ("night study"): a green-cast ink palette around
 a near-black page well, with one spring-green accent reserved for AI presence
 and the places it can take you. Type is set in three voices — Newsreader for
 the reading world, Inter for controls, JetBrains Mono for the instrument layer
-(page numbers, citations, activity). The app icon is the same four-point spark
-that marks AI presence throughout the interface; its design source lives at
-`src-tauri/icons/icon.svg`.
+(page numbers, citations, activity). The app icon is the **Bookmark-T** — a
+"T" for Tutor whose stem is a ribbon bookmark — and the same glyph marks AI
+presence throughout the interface. Its design source lives at
+`src-tauri/icons/icon.svg`; after editing it, run `npm run icon` and touch
+`src-tauri/build.rs` so the next build re-embeds the Windows icon resource.
 
 ---
 

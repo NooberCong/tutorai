@@ -2,7 +2,7 @@ import { useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { projectPrompt } from "../lib/ai";
 import { useClaudeJob, useSession } from "../lib/session";
-import { ensureProjectDir } from "../lib/tauri";
+import { ensureProjectDir, removeDocPath } from "../lib/tauri";
 import { scopeLabel, type ProjectInfo, type Scope } from "../lib/types";
 import { ActivityFeed, Md, ScopePicker, Spinner } from "./AiPanel";
 import { ChevronLeft, Close, FolderOpen } from "./Icons";
@@ -120,9 +120,14 @@ export function ProjectTab() {
               </span>
               <button
                 className="card-remove"
-                title="Remove from list (files stay on disk)"
+                title="Delete project and its files"
                 onClick={(e) => {
                   e.stopPropagation();
+                  // A running agent has its cwd in there — leave the files to
+                  // it and only drop the list entry.
+                  if (project.status !== "running") {
+                    removeDocPath(reg.docId, `projects/${project.slug}`).catch(() => {});
+                  }
                   updateArtifacts((a) => ({
                     ...a,
                     projects: a.projects.filter((p) => p.slug !== project.slug),

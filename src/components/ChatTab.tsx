@@ -4,6 +4,7 @@ import {
   questionWithReadingContext,
 } from "../lib/ai";
 import { useClaudeJob, useSession } from "../lib/session";
+import { removeDocPath } from "../lib/tauri";
 import { ActivityFeed, Md, Spinner } from "./AiPanel";
 import { ChatGlyph, PageMark, Send, Stop } from "./Icons";
 
@@ -120,8 +121,10 @@ export function ChatTab() {
             <p className="lede">Ask about what you're reading</p>
             <p>
               Answers are grounded in the book and cite their pages. With reading
-              context on, the tutor also sees the page you're on — and selecting
-              text in the PDF offers "Explain" right where you are.
+              context on, the tutor also sees the page you're on. Selecting text
+              in the PDF offers "Explain" right where you are — and the
+              viewfinder in the toolbar lets you draw a box around a figure to
+              ask about it.
             </p>
           </div>
         )}
@@ -175,12 +178,14 @@ export function ChatTab() {
               {messages.length > 0 && !state.running && (
                 <button
                   className="chip"
-                  onClick={() =>
+                  onClick={() => {
                     updateArtifacts((a) => ({
                       ...a,
                       chat: { sessionId: null, messages: [] },
-                    }))
-                  }
+                    }));
+                    // Snips only exist as attachments of this conversation.
+                    removeDocPath(reg.docId, "snips").catch(() => {});
+                  }}
                 >
                   New conversation
                 </button>

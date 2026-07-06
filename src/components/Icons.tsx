@@ -45,6 +45,14 @@ export const Plus = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M8 3.5v9M3.5 8h9" /></svg>
 );
 
+/** Viewfinder — snip a region of the page to ask the tutor about. */
+export const Snip = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M2.5 5V4A1.5 1.5 0 0 1 4 2.5h1M11 2.5h1A1.5 1.5 0 0 1 13.5 4v1M13.5 11v1a1.5 1.5 0 0 1-1.5 1.5h-1M5 13.5H4A1.5 1.5 0 0 1 2.5 12v-1" />
+    <path d="M6.25 8h3.5M8 6.25v3.5" />
+  </svg>
+);
+
 export const FitWidth = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M2 3.5v9M14 3.5v9" />
@@ -52,10 +60,11 @@ export const FitWidth = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-/** Four-point spark — the mark of AI presence, echoing the app icon. */
+/** The Bookmark-T — the mark of AI presence, echoing the app icon. The stroke
+ *  matches the fill purely to round the corners. */
 export const Spark = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...base({ ...p, fill: "currentColor", stroke: "none" })}>
-    <path d="M8 1.6c.9 3.2 2.2 4.5 5.4 5.4.4.1.4.6 0 .7-3.2.9-4.5 2.2-5.4 5.4-.1.4-.6.4-.7 0-.9-3.2-2.2-4.5-5.4-5.4-.4-.1-.4-.6 0-.7 3.2-.9 4.5-2.2 5.4-5.4.1-.4.6-.4.7 0Z" />
+  <svg {...base({ ...p, fill: "currentColor", strokeWidth: 0.9 })}>
+    <path d="M3.6 3.1H12.4V5H9.7V12.7L8 10.8L6.3 12.7V5H3.6Z" />
   </svg>
 );
 
@@ -123,7 +132,7 @@ export const ArrowUpRight = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10" /></svg>
 );
 
-/** The app mark: the tutor's spark on an ink tile — the same glyph as the
+/** The app mark: the Bookmark-T on an ink tile — the same glyph as the
  *  app icon. Used in the window chrome, home nav, and empty states. */
 export function LogoMark(props: { size?: number }) {
   const s = props.size ?? 22;
@@ -131,8 +140,11 @@ export function LogoMark(props: { size?: number }) {
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden>
       <rect x="0.5" y="0.5" width="23" height="23" rx="6.5" fill="var(--logo-tile, #0D1410)" stroke="var(--line-strong)" />
       <path
-        d="M12 4.3 Q12 11.9 19.7 11.9 Q12 11.9 12 19.5 Q12 11.9 4.3 11.9 Q12 11.9 12 4.3 Z"
+        d="M5.4 4.7H18.6V7.5H14.5V19.1L12 16.2L9.5 19.1V7.5H5.4Z"
         fill="var(--accent)"
+        stroke="var(--accent)"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
       />
     </svg>
   );

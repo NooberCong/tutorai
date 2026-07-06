@@ -814,6 +814,22 @@ textarea::placeholder {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.5);
   border-radius: 3px;
 }
+/* Snip mode: drag a box over a figure to ask the tutor about it. */
+.reader.snip-mode {
+  cursor: crosshair;
+}
+.reader.snip-mode .textLayer {
+  pointer-events: none;
+  user-select: none;
+}
+.snip-rect {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  border: 1.5px dashed rgba(69, 210, 131, 0.9);
+  background: rgba(69, 210, 131, 0.1);
+  border-radius: 3px;
+}
 .pdf-page canvas {
   display: block;
   border-radius: 3px;
@@ -968,6 +984,14 @@ textarea::placeholder {
 .selection-popover .sep {
   width: 1px;
   background: var(--line);
+}
+.selection-popover button:disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+/* Snip popover lives inside the page, in normal (non-crosshair) cursor. */
+.snip-pop {
+  cursor: default;
 }
 @keyframes pop-in {
   from {

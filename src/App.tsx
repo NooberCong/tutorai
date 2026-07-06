@@ -37,6 +37,20 @@ type View =
       initialScroll: number;
     };
 
+/** Fade out and remove the boot splash from index.html. Holds it on screen
+ *  for a minimum beat so warm starts get a smooth reveal instead of a flash
+ *  (performance.now() ≈ time since navigation). Idempotent — StrictMode
+ *  double-fires effects. */
+function dismissSplash() {
+  const el = document.getElementById("splash");
+  if (!el || el.classList.contains("done")) return;
+  window.setTimeout(() => {
+    el.classList.add("done");
+    el.addEventListener("transitionend", () => el.remove(), { once: true });
+    window.setTimeout(() => el.remove(), 700); // in case transitionend is missed
+  }, Math.max(0, 550 - performance.now()));
+}
+
 export default function App() {
   const [view, setView] = useState<View>({ kind: "home" });
   const [opening, setOpening] = useState<string | null>(null);
@@ -70,12 +84,15 @@ export default function App() {
   // PDFs arriving from the OS: the file this process was launched with
   // (file association), and files handed over by later launches while the
   // app is already running (single-instance plugin emits "open-file").
+  // The boot splash stays up until this settles — through the document load
+  // when we were launched with a file — so cold starts never show a bare shell.
   useEffect(() => {
     initialFile()
-      .then((path) => {
-        if (path) openPath(path);
+      .then(async (path) => {
+        if (path) await openPath(path);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(dismissSplash);
     const unlisten = listen<string>("open-file", (e) => openPath(e.payload));
     return () => {
       unlisten.then((f) => f());
@@ -156,6 +173,8 @@ function DocScreen(props: {
   const [sidebarW, setSidebarW] = useState(() => loadWidth(SIDEBAR));
   const [panelW, setPanelW] = useState(() => loadWidth(PANEL));
   const [resizing, setResizing] = useState<"sidebar" | "panel" | null>(null);
+  const [snipMode, setSnipMode] = useState(false);
+  const exitSnip = useCallback(() => setSnipMode(false), []);
   const readerHostRef = useRef<HTMLDivElement>(null);
 
   // A panel request (e.g. "Explain selection") force-opens the panel.
@@ -216,6 +235,8 @@ function DocScreen(props: {
         toggleSidebar={() => setSidebarOpen((v) => !v)}
         panelOpen={panelOpen}
         togglePanel={() => setPanelOpen((v) => !v)}
+        snipMode={snipMode}
+        toggleSnip={() => setSnipMode((v) => !v)}
       />
       <div className="doc-body">
         <div
@@ -240,6 +261,8 @@ function DocScreen(props: {
             scale={scale}
             initialPage={props.initialPage}
             initialScroll={props.initialScroll}
+            snipMode={snipMode}
+            exitSnip={exitSnip}
           />
           <SelectionPopover hostRef={readerHostRef} />
           {extractProgress && (
