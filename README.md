@@ -17,6 +17,11 @@ Open a textbook. Ask it anything. Every answer cites the page.
 
 [Features](#features) · [How it works](#how-it-works) · [Getting started](#getting-started) · [Project layout](#project-layout) · [Troubleshooting](#troubleshooting)
 
+<br/>
+
+<img src="docs/screenshots/reader.png" alt="TutorAI reading a textbook: chapter outline on the left, the PDF in the middle, and a page-cited AI summary in the tutor panel" width="100%" />
+<sub><i>Reading with the tutor open — every claim in the summary carries a</i> <code>p.N</code> <i>chip that jumps the reader to the evidence.</i></sub>
+
 </div>
 
 ---
@@ -66,6 +71,14 @@ single chapter:
 
 Citations are everywhere by design: every claim the tutor makes about the
 document carries a `p.N` chip that jumps the reader to the evidence.
+
+<p align="center">
+  <img src="docs/screenshots/quiz.png" alt="Quiz tab: a graded multiple-choice question with an explanation and page citation" width="49%" />
+  <img src="docs/screenshots/chat.png" alt="Chat tab: a page-grounded conversation streaming in, with live tool activity below the answer" width="49%" />
+</p>
+<p align="center">
+  <sub><i>Left: quizzes grade as you go and cite the page behind every answer. Right: chat streams in live — including which chapter files the tutor is reading.</i></sub>
+</p>
 
 ---
 
