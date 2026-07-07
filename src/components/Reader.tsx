@@ -114,6 +114,11 @@ export function Reader(props: {
   // Layout effect: the scroll lands before first paint, so page 1 never
   // flashes on screen before the jump.
   const restoredRef = useRef(false);
+  // Last known reading position in document-relative terms: the page under
+  // the viewport's top edge plus the fraction of it scrolled past. Pixel
+  // offsets die in reflows; this survives them. (Distinct from the
+  // center-based "current page" that reportPage tracks.)
+  const anchorRef = useRef<{ page: number; frac: number } | null>(null);
   useLayoutEffect(() => {
     if (!baseDims || restoredRef.current) return;
     restoredRef.current = true;
@@ -129,6 +134,7 @@ export function Reader(props: {
         0,
         frac ? el.offsetTop + frac * el.offsetHeight : el.offsetTop - 24,
       );
+      anchorRef.current = { page: target, frac };
       reportPage(target, frac);
     }
   }, [baseDims, props.initialPage, props.initialScroll, pdf.numPages, reportPage]);
@@ -155,14 +161,24 @@ export function Reader(props: {
     return () => observer.disconnect();
   }, [baseDims, pdf.numPages]);
 
-  // Current page = the page occupying the vertical center of the viewport.
+  // Current page = the page occupying the vertical center of the viewport;
+  // the anchor tracks the page at the viewport's top edge.
   const onScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
     const center = container.scrollTop + container.clientHeight / 2;
     let best = 1;
+    let top = 1;
     for (const [num, el] of pageRefs.current) {
       if (el.offsetTop <= center) best = Math.max(best, num);
+      if (el.offsetTop <= container.scrollTop) top = Math.max(top, num);
+    }
+    const topEl = pageRefs.current.get(top);
+    if (topEl && topEl.offsetHeight > 0) {
+      anchorRef.current = {
+        page: top,
+        frac: (container.scrollTop - topEl.offsetTop) / topEl.offsetHeight,
+      };
     }
     // Scroll offset within the current page, as a fraction of its height.
     // Can be slightly negative (the page starts mid-viewport) — that's fine,
@@ -174,6 +190,23 @@ export function Reader(props: {
         : 0;
     reportPage(best, frac);
   }, [reportPage]);
+
+  // Pin the reading position through layout reflows. All page geometry
+  // derives from layoutScale and pageDims, so re-applying the anchor when
+  // they change keeps the same content under the viewport top through
+  // panel slides/drags, window resizes, zoom changes, and lazily
+  // discovered page sizes. Deliberately a layout effect, not a
+  // ResizeObserver: the write lands in the same commit that moved the
+  // pages, before paint and before any scroll event can sample the
+  // drifted position back into the anchor.
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    const container = containerRef.current;
+    const el = anchor && pageRefs.current.get(anchor.page);
+    if (el && container) {
+      container.scrollTop = el.offsetTop + anchor.frac * el.offsetHeight;
+    }
+  }, [layoutScale, pageDims]);
 
   // Expose page jumps to the rest of the app (citations, chapter list).
   useEffect(() => {

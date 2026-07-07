@@ -19,6 +19,13 @@ description: Build, launch, and observe the TutorAI Tauri app on Windows to veri
 - `SetForegroundWindow` the app handle before snapping; window-state plugin restores maximized, so the app usually fills the screen by the second frame.
 - `EnumWindows` with a PowerShell scriptblock delegate fails to marshal in pwsh — use `Get-Process` `MainWindowHandle` instead.
 
+## Gotchas that cost real time
+
+- Check WHICH build is running before testing: `Get-Process tutorai | Select Path`. A `target\release` exe serves **bundled** assets — frontend edits never reach it; only the `target\debug` exe loads vite. Single-instance means the debug exe won't launch while release runs — stop the release process first.
+- Vite HMR does not reliably apply in the WebView2 dev build. After every frontend edit, send Ctrl+R to the app window (SendKeys `^r`) for a full reload — and note reload lands on the Library, so re-open the doc.
+- `document.title` does NOT reach the native window title (`MainWindowTitle`) in Tauri — don't use it as a debug channel. A fixed-position DOM overlay read via screenshots works.
+- The user's other windows steal focus between steps: call `SetForegroundWindow` immediately before EVERY synthetic click/drag/screenshot, not once per batch, or clicks land in their apps.
+
 ## Flows worth driving
 
 - Boot: window appears with inline splash from `index.html`, then Library view. App fully settles in ~1s on a warm dev start.
