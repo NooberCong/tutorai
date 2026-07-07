@@ -4,6 +4,7 @@
 //! debuggable, and exactly the surface headless Claude reads with its tools.
 //!
 //! Layout:
+//!   <app-data>/settings.json                          (app preferences: model, layout)
 //!   <app-data>/library.json
 //!   <app-data>/docs/<docId>/chapters/chapter-01.txt   (page-marked text)
 //!   <app-data>/docs/<docId>/meta.json                 (extraction result)
@@ -103,6 +104,10 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(data_root(app)?.join("settings.json"))
+}
+
 fn library_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_root(app)?.join("library.json"))
 }
@@ -121,6 +126,24 @@ fn write_library(app: &AppHandle, entries: &[LibraryEntry]) -> Result<(), String
 }
 
 // ── Commands ───────────────────────────────────────────────────────────
+
+/// App-wide preferences as a frontend-owned JSON blob (schema lives in
+/// src/lib/settings.ts). A file rather than webview localStorage so it
+/// survives WebView2 data resets and is shared between dev and installed
+/// builds, whose webview origins differ.
+#[tauri::command]
+pub fn read_settings(app: AppHandle) -> Result<Option<String>, String> {
+    match fs::read_to_string(settings_path(&app)?) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn write_settings(app: AppHandle, content: String) -> Result<(), String> {
+    fs::write(settings_path(&app)?, content).map_err(|e| e.to_string())
+}
 
 /// Snips are one-shot chat attachments. The chat wipes them when the
 /// conversation resets; this sweep at doc-open catches the rest once they

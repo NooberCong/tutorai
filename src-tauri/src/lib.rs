@@ -5,7 +5,9 @@ mod store;
 use claude::{JobEvent, JobSpec};
 use jobs::Jobs;
 use tauri::ipc::Channel;
+use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_window_state::StateFlags;
 
 /// First existing `.pdf` among CLI args — how "Open with TutorAI" (file
 /// association / drag onto the exe) hands us a document.
@@ -59,8 +61,32 @@ pub fn run() {
                 let _ = app.emit("open-file", path);
             }
         }))
-        // Persists size / position / maximized across sessions.
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Persists size / position / maximized across sessions. VISIBLE is
+        // excluded: the window starts hidden (tauri.conf.json) and is shown
+        // in on_page_load below, so a cold WebView2 start never flashes a
+        // blank window before the splash can paint.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                .build(),
+        )
+        .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                let _ = webview.window().show();
+            }
+        })
+        .setup(|app| {
+            // Safety net: if the page somehow never loads (dev server died,
+            // corrupted install), still surface the window instead of leaving
+            // the app running invisibly. show() on a visible window is a no-op.
+            if let Some(window) = app.get_webview_window("main") {
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    let _ = window.show();
+                });
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Jobs::default())
@@ -69,6 +95,8 @@ pub fn run() {
             cancel_job,
             claude_version,
             initial_file,
+            store::read_settings,
+            store::write_settings,
             store::register_pdf,
             store::get_library,
             store::upsert_library_entry,

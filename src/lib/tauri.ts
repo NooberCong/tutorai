@@ -9,6 +9,10 @@ import type {
   RegisteredDoc,
 } from "./types";
 
+export const readSettings = () => invoke<string | null>("read_settings");
+export const writeSettings = (content: string) =>
+  invoke<void>("write_settings", { content });
+
 export const registerPdf = (path: string) =>
   invoke<RegisteredDoc>("register_pdf", { path });
 

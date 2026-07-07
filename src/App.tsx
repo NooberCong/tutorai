@@ -13,6 +13,7 @@ import { Toolbar } from "./components/Toolbar";
 import { Sidebar } from "./components/Sidebar";
 import { AiPanel } from "./components/AiPanel";
 import { SelectionPopover } from "./components/SelectionPopover";
+import { InsightsProvider, useInsights } from "./lib/insights";
 import { SessionProvider, useSession } from "./lib/session";
 import { loadPdf, renderCoverDataUrl, type PdfDoc } from "./lib/pdf";
 import { listen } from "@tauri-apps/api/event";
@@ -25,6 +26,7 @@ import {
   writeDocText,
 } from "./lib/tauri";
 import type { RegisteredDoc } from "./lib/types";
+import { getSetting, saveSetting, SETTINGS_DEFAULTS } from "./lib/settings";
 
 type View =
   | { kind: "home" }
@@ -115,11 +117,13 @@ export default function App() {
       pdf={view.pdf}
       fileName={view.fileName}
     >
-      <DocScreen
-        onHome={goHome}
-        initialPage={view.initialPage}
-        initialScroll={view.initialScroll}
-      />
+      <InsightsProvider>
+        <DocScreen
+          onHome={goHome}
+          initialPage={view.initialPage}
+          initialScroll={view.initialScroll}
+        />
+      </InsightsProvider>
     </SessionProvider>
   );
 }
@@ -136,13 +140,21 @@ function ensureCover(docId: string, pdf: PdfDoc) {
 }
 
 // Panel widths are user-resizable within sane bounds and remembered.
-const SIDEBAR = { key: "tutorai.sidebar-w", def: 256, min: 200, max: 420 };
-const PANEL = { key: "tutorai.panel-w", def: 400, min: 330, max: 640 };
-type PanelSpec = typeof SIDEBAR;
+interface PanelSpec {
+  key: "sidebarWidth" | "panelWidth";
+  def: number;
+  min: number;
+  max: number;
+}
+const SIDEBAR: PanelSpec = {
+  key: "sidebarWidth", def: SETTINGS_DEFAULTS.sidebarWidth, min: 200, max: 420,
+};
+const PANEL: PanelSpec = {
+  key: "panelWidth", def: SETTINGS_DEFAULTS.panelWidth, min: 330, max: 640,
+};
 
 function loadWidth(spec: PanelSpec): number {
-  const n = Number(localStorage.getItem(spec.key));
-  return Number.isFinite(n) ? clampWidth(spec, n) : spec.def;
+  return clampWidth(spec, getSetting(spec.key));
 }
 function clampWidth(spec: PanelSpec, w: number): number {
   return Math.min(Math.max(w, spec.min), spec.max);
@@ -154,21 +166,18 @@ function DocScreen(props: {
   initialScroll: number;
 }) {
   const { extractProgress, panelRequest } = useSession();
+  const { reading } = useInsights();
   const [scale, setScale] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(
-    () => localStorage.getItem("tutorai.sidebar-open") !== "0",
-  );
-  const [panelOpen, setPanelOpen] = useState(
-    () => localStorage.getItem("tutorai.panel-open") !== "0",
-  );
+  const [sidebarOpen, setSidebarOpen] = useState(() => getSetting("sidebarOpen"));
+  const [panelOpen, setPanelOpen] = useState(() => getSetting("panelOpen"));
 
   // Remember panel visibility across restarts (covers every way they change,
   // including panel requests force-opening the tutor).
   useEffect(() => {
-    localStorage.setItem("tutorai.sidebar-open", sidebarOpen ? "1" : "0");
+    saveSetting("sidebarOpen", sidebarOpen);
   }, [sidebarOpen]);
   useEffect(() => {
-    localStorage.setItem("tutorai.panel-open", panelOpen ? "1" : "0");
+    saveSetting("panelOpen", panelOpen);
   }, [panelOpen]);
   const [sidebarW, setSidebarW] = useState(() => loadWidth(SIDEBAR));
   const [panelW, setPanelW] = useState(() => loadWidth(PANEL));
@@ -199,7 +208,7 @@ function DocScreen(props: {
       const up = () => {
         window.removeEventListener("pointermove", move);
         setResizing(null);
-        localStorage.setItem(spec.key, String(last));
+        saveSetting(spec.key, last);
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up, { once: true });
@@ -214,7 +223,7 @@ function DocScreen(props: {
       const set = which === "sidebar" ? setSidebarW : setPanelW;
       set((w) => {
         const next = clampWidth(spec, w + dir * (which === "sidebar" ? 16 : -16));
-        localStorage.setItem(spec.key, String(next));
+        saveSetting(spec.key, next);
         return next;
       });
     };
@@ -222,7 +231,7 @@ function DocScreen(props: {
   const resetResize = (which: "sidebar" | "panel") => () => {
     const spec = which === "sidebar" ? SIDEBAR : PANEL;
     (which === "sidebar" ? setSidebarW : setPanelW)(spec.def);
-    localStorage.setItem(spec.key, String(spec.def));
+    saveSetting(spec.key, spec.def);
   };
 
   return (
@@ -271,6 +280,12 @@ function DocScreen(props: {
               <span className="count">
                 {extractProgress.done}/{extractProgress.total}
               </span>
+            </div>
+          )}
+          {reading && (
+            <div className="companion-pill" aria-live="polite">
+              <span className="companion-dot" />
+              reading p.{reading.startPage}–{reading.endPage}
             </div>
           )}
         </div>

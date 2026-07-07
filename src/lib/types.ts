@@ -72,6 +72,40 @@ export interface ChatMessage {
   page?: number;
 }
 
+/** What a margin note adds that the document doesn't have. */
+export type InsightKind = "example" | "gotcha" | "context" | "update";
+
+export interface InsightSource {
+  title: string;
+  url: string;
+}
+
+/** One proactive margin note, anchored to a page. */
+export interface Insight {
+  id: string;
+  page: number;
+  kind: InsightKind;
+  /** Punchy headline, ≤ ~60 chars. */
+  title: string;
+  /** 2–4 sentence Markdown body. */
+  body: string;
+  /** Verbatim short quote from the page the note attaches to. */
+  anchor?: string;
+  /** Vertical anchor position as a fraction of the page height. */
+  y: number;
+  /** Web citations — required for "update" (currency) notes. */
+  sources: InsightSource[];
+  createdAt: number;
+}
+
+/** Proactive companion output for one document (the on/off switch is an
+ *  app-wide setting). `sections` records analyzed page spans
+ *  (key `p<start>-<end>`) so a span is never paid for twice. */
+export interface InsightsState {
+  notes: Insight[];
+  sections: Record<string, "done" | "empty">;
+}
+
 export interface ProjectInfo {
   slug: string;
   title: string;
@@ -87,6 +121,7 @@ export interface Artifacts {
   quizzes: Quiz[];
   chat: { sessionId: string | null; messages: ChatMessage[] };
   projects: ProjectInfo[];
+  insights: InsightsState;
 }
 
 export const emptyArtifacts = (): Artifacts => ({
@@ -94,6 +129,7 @@ export const emptyArtifacts = (): Artifacts => ({
   quizzes: [],
   chat: { sessionId: null, messages: [] },
   projects: [],
+  insights: { notes: [], sections: {} },
 });
 
 // ── Claude job protocol (mirrors src-tauri/src/claude.rs) ─────────────

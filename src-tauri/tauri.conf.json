@@ -14,6 +14,7 @@
       {
         "title": "TutorAI",
         "backgroundColor": "#090d0b",
+        "visible": false,
         "width": 1440,
         "height": 920,
         "minWidth": 980,

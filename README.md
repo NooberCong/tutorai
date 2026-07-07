@@ -72,6 +72,18 @@ single chapter:
 Citations are everywhere by design: every claim the tutor makes about the
 document carries a `p.N` chip that jumps the reader to the evidence.
 
+### The companion
+
+An opt-in fifth presence (the margin-note toggle in the toolbar): while you
+read, the companion analyzes the pages you're on in the background and leaves
+**margin notes** — quiet green marks beside the page that expand into cards.
+It only writes what the document *doesn't* say: real-world examples, gotchas
+practitioners actually hit, missing context, and web-verified "the world has
+moved on" updates with source links. Most page spans yield nothing — silence
+is by design. Every analyzed span is cached in the document's artifacts, so a
+span never spends your quota twice; a note can be dismissed or handed to the
+chat tab to dig deeper.
+
 <p align="center">
   <img src="docs/screenshots/quiz.png" alt="Quiz tab: a graded multiple-choice question with an explanation and page citation" width="49%" />
   <img src="docs/screenshots/chat.png" alt="Chat tab: a page-grounded conversation streaming in, with live tool activity below the answer" width="49%" />

@@ -2,7 +2,7 @@
  *  selection into the chat tab ("Explain" auto-sends, "Ask" prefills). */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { explainSelectionMessage } from "../lib/ai";
+import { explainNoteSelectionMessage, explainSelectionMessage } from "../lib/ai";
 import { useSession } from "../lib/session";
 import { ChatGlyph, Spark } from "./Icons";
 
@@ -11,6 +11,8 @@ interface SelectionState {
   page: number;
   x: number;
   y: number;
+  /** Selection made inside a companion margin note, not the page text. */
+  note: boolean;
 }
 
 export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElement | null> }) {
@@ -48,6 +50,7 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
       page: Number((pageEl as HTMLElement).dataset.page),
       x: Math.min(Math.max(last.left - hostRect.left + last.width / 2, 90), hostRect.width - 90),
       y: last.bottom - hostRect.top + 10,
+      note: !!node?.closest?.(".insight-card"),
     });
   }, [props.hostRef]);
 
@@ -77,7 +80,11 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
     >
       <button
         onClick={() => {
-          openPanel("chat", explainSelectionMessage(sel.text, sel.page), true);
+          openPanel(
+            "chat",
+            (sel.note ? explainNoteSelectionMessage : explainSelectionMessage)(sel.text, sel.page),
+            true,
+          );
           setSel(null);
         }}
       >
@@ -89,7 +96,9 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
         onClick={() => {
           openPanel(
             "chat",
-            `About this passage on page ${sel.page}:\n"${sel.text}"\n\n`,
+            sel.note
+              ? `About your margin note on page ${sel.page}:\n"${sel.text}"\n\n`
+              : `About this passage on page ${sel.page}:\n"${sel.text}"\n\n`,
             false,
           );
           setSel(null);

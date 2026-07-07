@@ -17,6 +17,7 @@ import { askRegionMessage, explainRegionMessage } from "../lib/ai";
 import { writeDocBytes } from "../lib/tauri";
 import { useSession } from "../lib/session";
 import { ChatGlyph, Spark } from "./Icons";
+import { PageInsights } from "./PageInsights";
 
 /** Distance beyond the viewport at which pages mount/unmount. */
 const OVERSCAN = "900px";
@@ -209,7 +210,8 @@ export function Reader(props: {
   const startSnip = (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
     const target = e.target as Element;
-    if (target.closest?.(".selection-popover")) return; // popover clicks pass through
+    // Popover / margin-note clicks pass through instead of starting a snip.
+    if (target.closest?.(".selection-popover, .insight-layer")) return;
     setSnipSel(null);
     const pageEl = target.closest?.("[data-page]") as HTMLElement | null;
     if (!pageEl) return;
@@ -337,6 +339,7 @@ export function Reader(props: {
                   />
                 </div>
               )}
+              <PageInsights page={num} heightPx={dims.height * layoutScale} />
               {snipBox?.page === num && (
                 <div
                   className="snip-rect"

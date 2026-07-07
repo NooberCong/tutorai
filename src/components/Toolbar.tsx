@@ -1,7 +1,9 @@
+import { useInsights } from "../lib/insights";
 import { useSession } from "../lib/session";
 import {
   ChevronLeft,
   FitWidth,
+  MarginNote,
   Minus,
   PanelLeft,
   Plus,
@@ -21,6 +23,7 @@ export function Toolbar(props: {
   toggleSnip: () => void;
 }) {
   const { meta, pdf, currentPage, jumpToPage } = useSession();
+  const { enabled: companionOn, setEnabled: setCompanion, reading } = useInsights();
 
   const zoom = (dir: 1 | -1) => {
     const current = props.scale ?? 1;
@@ -88,6 +91,19 @@ export function Toolbar(props: {
           aria-pressed={props.snipMode}
         >
           <Snip />
+        </button>
+        <button
+          className={`icon-btn insight-toggle ${companionOn ? "active" : ""} ${reading ? "reading" : ""}`}
+          onClick={() => setCompanion(!companionOn)}
+          disabled={!meta}
+          title={
+            companionOn
+              ? "Companion is on — it reads along and leaves margin notes worth knowing"
+              : "Companion — reads along with you and leaves margin notes worth knowing (uses your Claude quota)"
+          }
+          aria-pressed={companionOn}
+        >
+          <MarginNote />
         </button>
         <button
           className={`ai-toggle ${props.panelOpen ? "active" : ""}`}

@@ -37,6 +37,7 @@ import {
   writeDocBytes,
   writeDocText,
 } from "./tauri";
+import { getSetting, saveSetting } from "./settings";
 
 export type PanelTab = "summary" | "quiz" | "chat" | "project";
 
@@ -81,8 +82,6 @@ export function useSession(): SessionValue {
   return value;
 }
 
-const MODEL_KEY = "tutorai.model";
-
 export function SessionProvider(props: {
   reg: RegisteredDoc;
   pdf: PdfDoc;
@@ -94,7 +93,7 @@ export function SessionProvider(props: {
   const [extractProgress, setExtractProgress] = useState<{ done: number; total: number } | null>(null);
   const [artifacts, setArtifacts] = useState<Artifacts>(emptyArtifacts());
   const [artifactsLoaded, setArtifactsLoaded] = useState(false);
-  const [model, setModelState] = useState(() => localStorage.getItem(MODEL_KEY) ?? "");
+  const [model, setModelState] = useState(() => getSetting("model"));
   const [currentPage, setCurrentPage] = useState(1);
   const [panelRequest, setPanelRequest] = useState<PanelRequest | null>(null);
   const jumperRef = useRef<(page: number) => void>(() => {});
@@ -290,7 +289,7 @@ export function SessionProvider(props: {
 
   // ── Cross-component plumbing ─────────────────────────────────────────
   const setModel = useCallback((m: string) => {
-    localStorage.setItem(MODEL_KEY, m);
+    saveSetting("model", m);
     setModelState(m);
   }, []);
 

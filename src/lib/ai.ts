@@ -1,8 +1,16 @@
 /** Prompt builders for every job type, plus strict-JSON parsing helpers.
  *  The Rust side is pure transport; all domain knowledge lives here. */
 
-import type { Chapter, DocMeta, QuizQuestion, Scope } from "./types";
-import { chapterFileName, wholeDocChapter } from "./pdf";
+import type {
+  Chapter,
+  DocMeta,
+  Insight,
+  InsightKind,
+  InsightSource,
+  QuizQuestion,
+  Scope,
+} from "./types";
+import { chapterFileName, figureFileName, wholeDocChapter } from "./pdf";
 
 /** Chapters to read for a scope, with their file names. */
 function scopeFiles(meta: DocMeta, scope: Scope): { chapter: Chapter; file: string }[] {
@@ -134,6 +142,12 @@ export function explainSelectionMessage(text: string, page: number): string {
   return `Explain this passage from page ${page}:\n\n"${text.trim()}"\n\nExplain what it means in plain language, add the context I need to understand it, and note anything subtle or easily misread.`;
 }
 
+/** Same intent, but the selection came from a companion margin note — don't
+ *  present it as document text the tutor could go looking for. */
+export function explainNoteSelectionMessage(text: string, page: number): string {
+  return `Your margin note on page ${page} includes this:\n\n"${text.trim()}"\n\nUnpack it for me: what does it mean, where does it come from, and how does it relate to what I'm reading on that page?`;
+}
+
 /** A region of a page the reader snipped to an image (figure, chart, equation…). */
 export function explainRegionMessage(rel: string, page: number): string {
   return [
@@ -145,6 +159,65 @@ export function explainRegionMessage(rel: string, page: number): string {
 
 export function askRegionMessage(rel: string, page: number): string {
   return `About the region I marked on page ${page} (snipped to ${rel} — Read that image first):\n`;
+}
+
+/** A page span the companion analyzes as one unit. */
+export interface InsightSpan {
+  startPage: number;
+  endPage: number;
+  /** Chapter the span belongs to, for framing. */
+  title: string;
+}
+
+export function insightsPrompt(
+  meta: DocMeta,
+  span: InsightSpan,
+  pageTexts: { page: number; text: string }[],
+  figurePages: number[],
+  deliveredTitles: string[],
+): string {
+  const text = pageTexts
+    .map(({ page, text }) => `[[PAGE ${page}]]\n${text}`)
+    .join("\n\n");
+  const figures = figurePages.length
+    ? `Figure-bearing pages in this span are rendered as images: ${figurePages
+        .map((p) => figureFileName(p))
+        .join(", ")}. Read one only if a figure is central to the material.`
+    : "";
+  const delivered = deliveredTitles.length
+    ? [
+        ``,
+        `Notes already delivered elsewhere in this book — do not repeat or overlap them:`,
+        ...deliveredTitles.map((t) => `- ${t}`),
+      ]
+    : [];
+  return [
+    `You are the reading companion inside TutorAI, annotating the margins of "${meta.title}" the way a brilliant colleague pencils notes into a book: only things the book itself does not say.`,
+    ``,
+    `The reader is on pages ${span.startPage}–${span.endPage} (${span.title}). Exact text of those pages, with [[PAGE n]] markers:`,
+    `<<<`,
+    text,
+    `>>>`,
+    figures,
+    ``,
+    `Task: write margin notes for this span. The bar: a knowledgeable reader must react "I didn't know that" or "that finally makes sense". Four kinds qualify:`,
+    `- "example" — a real-world case with specifics (who, what system, what scale, what happened) that makes an abstract idea here concrete.`,
+    `- "gotcha" — a trap, subtle failure mode, or misconception practitioners actually hit with this material, that the text doesn't warn about.`,
+    `- "context" — the missing why: history, design rationale, or a connection that makes this material click.`,
+    `- "update" — the world has moved since this was written: deprecations, renames, superseded advice, materially changed numbers.`,
+    ``,
+    `Hard rules:`,
+    `- 0–3 notes; most spans deserve 0 or 1. Never pad. If nothing clears the bar, output {"insights":[]} — that is a good answer.`,
+    `- Never restate, summarize, or explain what these pages already say. If the text mentions it, it is banned.`,
+    `- Output nothing for front matter, tables of contents, exercises, solutions, indexes, or bibliographies.`,
+    `- Every "update" note MUST be verified with WebSearch before you write it, and MUST carry 1–2 source URLs; if you cannot verify it, drop it. For other kinds use the web only when it buys real specificity — at most 3 searches for this whole task.`,
+    `- Writing: "title" ≤ 60 characters, concrete and punchy. "body" is 2–4 short sentences, plain language, specific (names, versions, numbers), zero filler, no "the document/author says". It must be effortless to read.`,
+    ...delivered,
+    ``,
+    `Output ONLY a JSON object — no fences, no prose before or after — matching:`,
+    `{"insights":[{"kind":"example|gotcha|context|update","page":${span.startPage},"anchor":"...","title":"...","body":"...","sources":[{"title":"...","url":"https://..."}]}]}`,
+    `"page" is the physical page the note belongs to. "anchor" is a verbatim 3–10 word quote copied exactly from that page's text, at the spot the note is about. "sources" may be [] for non-update notes.`,
+  ].join("\n");
 }
 
 export function detectChaptersPrompt(meta: DocMeta): string {
@@ -244,6 +317,68 @@ function shuffleChoices(
     choices: order.map((i) => choices[i]),
     answer: order.indexOf(answer),
   };
+}
+
+const INSIGHT_KINDS: InsightKind[] = ["example", "gotcha", "context", "update"];
+
+/** Validate model output into Insights: whitelist kinds, clamp pages to the
+ *  span, require web sources on "update" notes, locate anchors, cap at 3. */
+export function parseInsights(
+  text: string,
+  span: InsightSpan,
+  pageTexts: { page: number; text: string }[],
+): Insight[] {
+  const raw = extractJson<{ insights?: unknown }>(text);
+  if (!Array.isArray(raw.insights)) throw new Error("insights JSON missing insights[]");
+  const notes: Insight[] = [];
+  for (const n of raw.insights as Record<string, unknown>[]) {
+    const kind = n?.kind as InsightKind;
+    if (!INSIGHT_KINDS.includes(kind)) continue;
+    if (typeof n.title !== "string" || !n.title.trim()) continue;
+    if (typeof n.body !== "string" || !n.body.trim()) continue;
+    const sources = (Array.isArray(n.sources) ? (n.sources as Record<string, unknown>[]) : [])
+      .filter((s) => typeof s?.url === "string" && /^https?:\/\//.test(s.url as string))
+      .slice(0, 2)
+      .map((s): InsightSource => ({
+        title: typeof s.title === "string" ? s.title : "",
+        url: s.url as string,
+      }));
+    // An unverifiable currency claim is worse than no note at all.
+    if (kind === "update" && !sources.length) continue;
+    const page = Math.min(
+      Math.max(span.startPage, typeof n.page === "number" ? Math.round(n.page) : span.startPage),
+      span.endPage,
+    );
+    const anchor = typeof n.anchor === "string" ? n.anchor.trim() : undefined;
+    notes.push({
+      id: crypto.randomUUID(),
+      page,
+      kind,
+      title: n.title.trim(),
+      body: n.body.trim(),
+      anchor,
+      y: anchorY(anchor, pageTexts.find((p) => p.page === page)?.text ?? ""),
+      sources,
+      createdAt: Date.now(),
+    });
+    if (notes.length === 3) break;
+  }
+  return notes;
+}
+
+/** Initial guess at a quote's vertical position, as a fraction of the page
+ *  height: char offset in the extracted text, mapped linearly. PageInsights
+ *  refines this against the rendered pdf.js text layer (real glyph geometry)
+ *  whenever the page is on screen; this value is the fallback until then. */
+function anchorY(anchor: string | undefined, pageText: string): number {
+  const squash = (s: string) => s.replace(/\s+/g, " ").toLowerCase();
+  const text = squash(pageText);
+  if (anchor && text.length > 40) {
+    const i = text.indexOf(squash(anchor));
+    // Text occupies roughly the middle ~80% of a page between its margins.
+    if (i >= 0) return 0.1 + (i / text.length) * 0.78;
+  }
+  return 0.5;
 }
 
 export function parseChapters(text: string, maxPage: number): { title: string; startPage: number }[] {

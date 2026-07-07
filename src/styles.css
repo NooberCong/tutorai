@@ -1000,6 +1000,237 @@ textarea::placeholder {
   }
 }
 
+/* ── Reading companion: margin insights ──
+   Quiet accent marks in the dark margin beside the page; each expands into
+   a card on click. Ambient by design — nothing moves the text or pulls the
+   eye until the reader asks. */
+
+.insight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  cursor: default;
+}
+.insight-layer > * {
+  pointer-events: auto;
+}
+.insight-mark {
+  position: absolute;
+  left: -34px;
+  width: 24px;
+  height: 24px;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent);
+  animation: mark-in 600ms cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.insight-mark svg {
+  opacity: 0.85;
+  filter: drop-shadow(0 0 6px rgba(69, 210, 131, 0.45));
+  transition: transform 150ms, filter 150ms, opacity 150ms;
+}
+.insight-mark:hover svg,
+.insight-mark.open svg {
+  opacity: 1;
+  transform: scale(1.3);
+  filter: drop-shadow(0 0 10px rgba(69, 210, 131, 0.7));
+}
+@keyframes mark-in {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+.insight-card {
+  position: absolute;
+  left: -14px;
+  width: 330px;
+  background: var(--ink1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow), var(--lift);
+  padding: 13px 16px 10px;
+  z-index: 30;
+  cursor: auto;
+  animation: pop-in 150ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+.insight-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.insight-kind {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.insight-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  border-radius: var(--r-sm);
+  color: var(--faint);
+  transition: color 120ms, background 120ms;
+}
+.insight-close:hover {
+  color: var(--text);
+  background: var(--ink2);
+}
+.insight-close svg {
+  width: 12px;
+  height: 12px;
+}
+.insight-title {
+  font-family: var(--serif);
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.005em;
+  margin: 7px 0 3px;
+}
+.insight-anchor {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+.insight-body .md {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dim);
+}
+.insight-body .md strong {
+  color: var(--text);
+}
+.insight-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.insight-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--dim);
+  transition: color 130ms, border-color 130ms;
+}
+.insight-source:hover {
+  color: var(--accent);
+  border-color: rgba(69, 210, 131, 0.45);
+}
+.insight-source svg {
+  width: 10px;
+  height: 10px;
+}
+.insight-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.insight-discuss {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 550;
+  padding: 4px 10px;
+  margin-left: -10px;
+  border-radius: var(--r-sm);
+  color: var(--accent);
+  transition: background 120ms;
+}
+.insight-discuss:hover {
+  background: var(--accent-soft);
+}
+.insight-discuss svg {
+  width: 12px;
+  height: 12px;
+}
+.insight-remove {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: -8px;
+  border-radius: var(--r-sm);
+  color: var(--faint);
+  transition: color 120ms, background 120ms;
+}
+.insight-remove:hover {
+  color: var(--bad);
+  background: var(--bad-soft);
+}
+.insight-remove svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Toolbar toggle breathes while the companion reads. */
+.insight-toggle.reading svg {
+  color: var(--accent);
+  animation: companion-pulse 1.8s ease-in-out infinite;
+}
+
+/* Ambient status: the companion is reading along. */
+.companion-pill {
+  position: absolute;
+  bottom: 16px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  background: rgba(15, 21, 18, 0.82);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  animation: pill-in 400ms ease-out;
+  pointer-events: none;
+}
+.companion-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(69, 210, 131, 0.5);
+  animation: companion-pulse 1.8s ease-in-out infinite;
+}
+@keyframes companion-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes pill-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
 /* ── AI panel ── */
 
 .ai-panel {

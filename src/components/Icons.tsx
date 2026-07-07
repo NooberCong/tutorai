@@ -53,6 +53,14 @@ export const Snip = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+/** A page of text with the companion's mark in its margin — the insights toggle. */
+export const MarginNote = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M6.5 4h7M6.5 8h7M6.5 12h4.5" />
+    <circle cx="3" cy="8" r="1.4" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const FitWidth = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M2 3.5v9M14 3.5v9" />
@@ -130,6 +138,20 @@ export const Trash = (p: SVGProps<SVGSVGElement>) => (
 
 export const ArrowUpRight = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10" /></svg>
+);
+
+/** The bare Bookmark-T at margin-mark size — AI presence on the page itself.
+ *  Colored by the parent (currentColor). */
+export const BookmarkMark = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <path
+      d="M5.4 4.7H18.6V7.5H14.5V19.1L12 16.2L9.5 19.1V7.5H5.4Z"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="1.1"
+      strokeLinejoin="round"
+    />
+  </svg>
 );
 
 /** The app mark: the Bookmark-T on an ink tile — the same glyph as the
