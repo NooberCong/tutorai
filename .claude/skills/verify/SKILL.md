@@ -19,6 +19,16 @@ description: Build, launch, and observe the TutorAI Tauri app on Windows to veri
 - `SetForegroundWindow` the app handle before snapping; window-state plugin restores maximized, so the app usually fills the screen by the second frame.
 - `EnumWindows` with a PowerShell scriptblock delegate fails to marshal in pwsh — use `Get-Process` `MainWindowHandle` instead.
 
+## Driving the app without stealing focus (preferred)
+
+When the user is actively using the machine, do NOT use SetForegroundWindow /
+SendKeys / screen-coordinate clicks — they land in the user's apps. Instead:
+
+- Relaunch the debug exe with a CDP port: `$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222"` then `Start-Process ...tutorai.exe`. `http://localhost:9222/json` lists targets; connect a WebSocket to the `page` target's `webSocketDebuggerUrl` from a small Node script (global `WebSocket` exists in Node ≥22).
+- `Runtime.evaluate` reads/drives DOM state; `Input.dispatchMouseEvent`/`dispatchKeyEvent` deliver **trusted** input (text selection, pointer capture, drag-draw all work); `Page.captureScreenshot` captures only the app, no focus needed.
+- Foreground-free window captures also work via `PrintWindow(hwnd, dc, 2)` P/Invoke (unlike `GetWindowRect`-based `CopyFromScreen`, this is DPI-safe in practice).
+- Beware: the user may be interacting with the app at the same time — check `.reader` className / armed tool state via `Runtime.evaluate` before dispatching gestures, or your drag may execute a different tool.
+
 ## Gotchas that cost real time
 
 - Check WHICH build is running before testing: `Get-Process tutorai | Select Path`. A `target\release` exe serves **bundled** assets — frontend edits never reach it; only the `target\debug` exe loads vite. Single-instance means the debug exe won't launch while release runs — stop the release process first.

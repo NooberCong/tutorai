@@ -1,3 +1,4 @@
+import { useAnnotations } from "../lib/annotations";
 import { useInsights } from "../lib/insights";
 import { useSession } from "../lib/session";
 import {
@@ -6,6 +7,7 @@ import {
   MarginNote,
   Minus,
   PanelLeft,
+  PenLine,
   Plus,
   Snip,
   Spark,
@@ -24,6 +26,7 @@ export function Toolbar(props: {
 }) {
   const { meta, pdf, currentPage, jumpToPage } = useSession();
   const { enabled: companionOn, setEnabled: setCompanion, reading } = useInsights();
+  const { railOpen, toggleRail } = useAnnotations();
 
   const zoom = (dir: 1 | -1) => {
     const current = props.scale ?? 1;
@@ -84,6 +87,14 @@ export function Toolbar(props: {
           <FitWidth />
         </button>
         <span className="toolbar-sep" />
+        <button
+          className={`icon-btn ${railOpen ? "active" : ""}`}
+          onClick={toggleRail}
+          title="Markup — highlight, ink, and notes (M)"
+          aria-pressed={railOpen}
+        >
+          <PenLine />
+        </button>
         <button
           className={`icon-btn ${props.snipMode ? "active" : ""}`}
           onClick={props.toggleSnip}

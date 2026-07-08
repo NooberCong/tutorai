@@ -67,8 +67,10 @@ interface SessionValue {
   /** Report the visible page, optionally with the scroll offset within it
    *  (fraction of page height) so the exact position can be restored. */
   reportPage: (page: number, scroll?: number) => void;
-  jumpToPage: (page: number) => void;
-  registerJumper: (fn: (page: number) => void) => void;
+  /** Jump to a page, optionally to a vertical offset within it (fraction of
+   *  the page height) — used to land on a specific annotation. */
+  jumpToPage: (page: number, yFrac?: number) => void;
+  registerJumper: (fn: (page: number, yFrac?: number) => void) => void;
 
   panelRequest: PanelRequest | null;
   openPanel: (tab: PanelTab, chatDraft?: string, autoSend?: boolean) => void;
@@ -96,7 +98,7 @@ export function SessionProvider(props: {
   const [model, setModelState] = useState(() => getSetting("model"));
   const [currentPage, setCurrentPage] = useState(1);
   const [panelRequest, setPanelRequest] = useState<PanelRequest | null>(null);
-  const jumperRef = useRef<(page: number) => void>(() => {});
+  const jumperRef = useRef<(page: number, yFrac?: number) => void>(() => {});
   const persistTimer = useRef<number>(undefined);
 
   // ── Extraction: cached meta or full pipeline ─────────────────────────
@@ -309,10 +311,13 @@ export function SessionProvider(props: {
     [reg.docId],
   );
 
-  const registerJumper = useCallback((fn: (page: number) => void) => {
+  const registerJumper = useCallback((fn: (page: number, yFrac?: number) => void) => {
     jumperRef.current = fn;
   }, []);
-  const jumpToPage = useCallback((page: number) => jumperRef.current(page), []);
+  const jumpToPage = useCallback(
+    (page: number, yFrac?: number) => jumperRef.current(page, yFrac),
+    [],
+  );
   const reportPage = useCallback(
     (page: number, scroll?: number) => {
       if (scroll !== undefined) {

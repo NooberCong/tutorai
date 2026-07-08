@@ -140,6 +140,90 @@ export const ArrowUpRight = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M4.5 11.5 11.5 4.5M6 4.5h5.5V10" /></svg>
 );
 
+// ── Annotation suite ──────────────────────────────────────────────────
+
+/** A pen drawing a line — the markup-mode toggle and the pen tool. */
+export const PenLine = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="m9.7 3.3 3 3L6.4 12.6l-3.6.9.9-3.6 6-6.6Z" />
+    <path d="M3 14.5h10" />
+  </svg>
+);
+
+/** Chisel-nib highlighter. */
+export const HighlighterGlyph = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="m8.2 3.6 4.2 4.2-4.7 4.7H4v-3.7l4.2-5.2Z" />
+    <path d="m10.3 1.9 3.8 3.8" />
+  </svg>
+);
+
+export const UnderlineGlyph = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M4.5 2.5v5a3.5 3.5 0 0 0 7 0v-5" />
+    <path d="M3.5 13.5h9" />
+  </svg>
+);
+
+export const StrikeGlyph = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M11.3 4.6C10.7 3.3 9.4 2.7 8 2.7c-1.9 0-3.3 1-3.3 2.5 0 .9.5 1.6 1.5 2" />
+    <path d="M5 11.4c.5 1.3 1.7 1.9 3 1.9 1.9 0 3.4-1 3.4-2.6 0-.6-.2-1.1-.6-1.5" />
+    <path d="M2.5 8h11" />
+  </svg>
+);
+
+/** Text tool — a T with an insertion caret. */
+export const TextTool = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M3 4.5V3h8v1.5M7 3v9M5.5 12h3" />
+    <path d="M13 6.5v6" />
+  </svg>
+);
+
+export const CursorArrow = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M4.5 2.8 12.6 9l-3.7.7 2 3.4-1.9 1.1-2-3.4-2.5 2.7V2.8Z" />
+  </svg>
+);
+
+export const EraserGlyph = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="m9.2 3 3.8 3.8-6 6H4.2L2.4 11a1.5 1.5 0 0 1 0-2.1L9.2 3Z" />
+    <path d="M13.5 12.8H8" />
+  </svg>
+);
+
+export const Undo = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M5.7 3.5 3 6.2l2.7 2.7" />
+    <path d="M3 6.2h6.3a3.7 3.7 0 0 1 0 7.4H6" />
+  </svg>
+);
+
+export const Redo = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M10.3 3.5 13 6.2l-2.7 2.7" />
+    <path d="M13 6.2H6.7a3.7 3.7 0 0 0 0 7.4H10" />
+  </svg>
+);
+
+/** Folded-corner sticky note, filled with the note's own color — the user's
+ *  mark on the page (the companion's Bookmark-T stays in the margin). */
+export function StickyNoteGlyph(props: { fill: string; size?: number }) {
+  const s = props.size ?? 18;
+  return (
+    <svg width={s} height={s} viewBox="0 0 18 18" fill="none" aria-hidden>
+      <path
+        d="M2.5 4A1.5 1.5 0 0 1 4 2.5h10A1.5 1.5 0 0 1 15.5 4v6.8l-4.7 4.7H4A1.5 1.5 0 0 1 2.5 14V4Z"
+        fill={props.fill}
+        stroke="rgba(0,0,0,0.25)"
+      />
+      <path d="M15.5 10.8l-4.7 4.7v-3.2a1.5 1.5 0 0 1 1.5-1.5h3.2Z" fill="rgba(0,0,0,0.26)" />
+    </svg>
+  );
+}
+
 /** The bare Bookmark-T at margin-mark size — AI presence on the page itself.
  *  Colored by the parent (currentColor). */
 export const BookmarkMark = () => (

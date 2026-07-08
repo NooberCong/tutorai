@@ -132,6 +132,78 @@ export const emptyArtifacts = (): Artifacts => ({
   insights: { notes: [], sections: {} },
 });
 
+// ── Annotations (persisted as annotations.json, sidecar per document) ──
+// The PDF itself is never modified: annotations render as overlays and the
+// plain-JSON sidecar doubles as AI-readable context in the doc cache dir.
+
+/** Rect in fractions of the page size (0..1), y-down from the page top-left —
+ *  the same coordinate convention as SnipBox and Insight.y. */
+export interface FracRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const ANNOT_SCHEMA_VERSION = 1;
+
+interface AnnotBase {
+  id: string;
+  /** 1-based. */
+  page: number;
+  /** Hex from the highlight or ink palette. */
+  color: string;
+  createdAt: number;
+  modifiedAt: number;
+}
+
+/** Highlight / underline / strikethrough over selected text. */
+export interface TextMarkupAnnot extends AnnotBase {
+  type: "highlight" | "underline" | "strikethrough";
+  /** One rect per merged selection line. */
+  rects: FracRect[];
+  /** The selected text (capped) — sidebar excerpt and AI context. */
+  quote: string;
+  /** Optional attached comment (the highlight + note combo). */
+  note?: string;
+}
+
+/** Point-anchored sticky note. */
+export interface NoteAnnot extends AnnotBase {
+  type: "note";
+  at: { x: number; y: number };
+  note: string;
+  /** When created from a text selection, the anchoring quote. */
+  quote?: string;
+}
+
+/** Free text typed onto the page. */
+export interface FreeTextAnnot extends AnnotBase {
+  type: "freetext";
+  /** w is user-set; h is re-measured from the rendered box on commit. */
+  rect: FracRect;
+  text: string;
+  /** In page units (≈ PDF points) — rendered at fontSize × scale px. */
+  fontSize: number;
+}
+
+/** One freehand stroke (stroke-level erase and undo stay trivial). */
+export interface InkAnnot extends AnnotBase {
+  type: "ink";
+  mode: "pen" | "highlighter";
+  /** [xFrac, yFrac, pressure 0..1], rounded to 4 decimals. */
+  points: [number, number, number][];
+  /** Base stroke width in page units. */
+  width: number;
+}
+
+export type Annotation = TextMarkupAnnot | NoteAnnot | FreeTextAnnot | InkAnnot;
+
+export interface AnnotationsFile {
+  version: number;
+  annotations: Annotation[];
+}
+
 // ── Claude job protocol (mirrors src-tauri/src/claude.rs) ─────────────
 
 export interface JobSpec {

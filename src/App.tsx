@@ -12,7 +12,10 @@ import { Reader } from "./components/Reader";
 import { Toolbar } from "./components/Toolbar";
 import { Sidebar } from "./components/Sidebar";
 import { AiPanel } from "./components/AiPanel";
+import { MarkupRail } from "./components/MarkupRail";
 import { SelectionPopover } from "./components/SelectionPopover";
+import { Undo } from "./components/Icons";
+import { AnnotationsProvider, useAnnotations } from "./lib/annotations";
 import { InsightsProvider, useInsights } from "./lib/insights";
 import { SessionProvider, useSession } from "./lib/session";
 import { loadPdf, renderCoverDataUrl, type PdfDoc } from "./lib/pdf";
@@ -118,11 +121,13 @@ export default function App() {
       fileName={view.fileName}
     >
       <InsightsProvider>
-        <DocScreen
-          onHome={goHome}
-          initialPage={view.initialPage}
-          initialScroll={view.initialScroll}
-        />
+        <AnnotationsProvider>
+          <DocScreen
+            onHome={goHome}
+            initialPage={view.initialPage}
+            initialScroll={view.initialScroll}
+          />
+        </AnnotationsProvider>
       </InsightsProvider>
     </SessionProvider>
   );
@@ -165,8 +170,9 @@ function DocScreen(props: {
   initialPage: number;
   initialScroll: number;
 }) {
-  const { extractProgress, panelRequest } = useSession();
+  const { extractProgress, panelRequest, jumpToPage } = useSession();
   const { reading } = useInsights();
+  const { railOpen, tool, toggleRail, undoToast } = useAnnotations();
   const [scale, setScale] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => getSetting("sidebarOpen"));
   const [panelOpen, setPanelOpen] = useState(() => getSetting("panelOpen"));
@@ -185,6 +191,17 @@ function DocScreen(props: {
   const [snipMode, setSnipMode] = useState(false);
   const exitSnip = useCallback(() => setSnipMode(false), []);
   const readerHostRef = useRef<HTMLDivElement>(null);
+
+  // Snip and markup are both "act on the page" modes — mutually exclusive.
+  // Each effect only acts when its own mode just became active, so they
+  // can't fight: the newcomer wins.
+  useEffect(() => {
+    if (snipMode && railOpen) toggleRail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snipMode]);
+  useEffect(() => {
+    if (railOpen || tool) setSnipMode(false);
+  }, [railOpen, tool]);
 
   // A panel request (e.g. "Explain selection") force-opens the panel.
   useEffect(() => {
@@ -274,6 +291,19 @@ function DocScreen(props: {
             exitSnip={exitSnip}
           />
           <SelectionPopover hostRef={readerHostRef} />
+          <MarkupRail />
+          {undoToast && (
+            <button
+              key={undoToast.nonce}
+              className="extract-pill undo-pill"
+              onClick={() => jumpToPage(undoToast.page)}
+              title={`Jump to page ${undoToast.page}`}
+            >
+              <Undo />
+              <span>{undoToast.label}</span>
+              <span className="count">p.{undoToast.page}</span>
+            </button>
+          )}
           {extractProgress && (
             <div className="extract-pill">
               <span>Indexing for AI</span>

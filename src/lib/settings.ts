@@ -12,6 +12,14 @@
 
 import { readSettings, writeSettings } from "./tauri";
 
+/** One pen-tray preset: a remembered pen the reader can switch to in one tap. */
+export interface InkPreset {
+  color: string;
+  /** Stroke width in page units. */
+  width: number;
+  mode: "pen" | "highlighter";
+}
+
 export interface Settings {
   /** Claude model alias ("haiku" | "sonnet" | "opus"); "" = CLI default. */
   model: string;
@@ -21,6 +29,13 @@ export interface Settings {
   panelWidth: number;
   /** Reading companion (proactive margin notes) — opt-in, spends quota. */
   companion: boolean;
+  /** Annotation colors, remembered per tool. */
+  highlightColor: string;
+  noteColor: string;
+  textColor: string;
+  /** Pen tray: three presets, each remembering its own color/width/mode. */
+  inkPresets: InkPreset[];
+  inkPresetIdx: number;
 }
 
 export const SETTINGS_DEFAULTS: Settings = {
@@ -30,6 +45,15 @@ export const SETTINGS_DEFAULTS: Settings = {
   sidebarWidth: 256,
   panelWidth: 400,
   companion: false,
+  highlightColor: "#FFDE59",
+  noteColor: "#FFDE59",
+  textColor: "#232B27",
+  inkPresets: [
+    { color: "#232B27", width: 2.5, mode: "pen" },
+    { color: "#E24A3B", width: 2.5, mode: "pen" },
+    { color: "#FFDE59", width: 9, mode: "highlighter" },
+  ],
+  inkPresetIdx: 0,
 };
 
 let settings: Settings = { ...SETTINGS_DEFAULTS };

@@ -14,9 +14,12 @@ import {
 import { TextLayer } from "pdfjs-dist";
 import { renderRegionJpegBase64, type PdfDoc } from "../lib/pdf";
 import { askRegionMessage, explainRegionMessage } from "../lib/ai";
+import { clientToFrac, hitTest, selectionToMarkups } from "../lib/annotGeometry";
+import { useAnnotations } from "../lib/annotations";
 import { writeDocBytes } from "../lib/tauri";
 import { useSession } from "../lib/session";
 import { ChatGlyph, Spark } from "./Icons";
+import { PageAnnotations } from "./PageAnnotations";
 import { PageInsights } from "./PageInsights";
 
 /** Distance beyond the viewport at which pages mount/unmount. */
@@ -47,6 +50,7 @@ export function Reader(props: {
   exitSnip?: () => void;
 }) {
   const { pdf, reg, reportPage, registerJumper, openPanel } = useSession();
+  const { tool, byPage, addMarkups, hlColor, select } = useAnnotations();
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef(new Map<number, HTMLDivElement>());
   // Seed visibility around the restored page so first paint shows content
@@ -208,16 +212,81 @@ export function Reader(props: {
     }
   }, [layoutScale, pageDims]);
 
-  // Expose page jumps to the rest of the app (citations, chapter list).
+  // Expose page jumps to the rest of the app (citations, chapter list,
+  // annotation cards — the optional yFrac lands on a spot within the page).
   useEffect(() => {
-    registerJumper((page: number) => {
+    registerJumper((page: number, yFrac?: number) => {
       const el = pageRefs.current.get(Math.min(Math.max(1, page), pdf.numPages));
       const container = containerRef.current;
       if (el && container) {
-        container.scrollTo({ top: el.offsetTop - 24, behavior: "smooth" });
+        const top =
+          yFrac !== undefined ? el.offsetTop + yFrac * el.offsetHeight : el.offsetTop - 24;
+        container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
       }
     });
   }, [registerJumper, pdf.numPages]);
+
+  // ── Annotations: markup creation + click-to-select ───────────────────
+  // Drag-highlighter: while the tool is armed, releasing a text selection
+  // turns it into a highlight (per page spanned) and clears the selection —
+  // which also keeps the AI popover away.
+  useEffect(() => {
+    if (tool !== "highlight") return;
+    const onUp = () => {
+      // Defer a tick so the selection has settled (mirrors SelectionPopover).
+      setTimeout(() => {
+        const sel = window.getSelection();
+        const host = containerRef.current;
+        if (!sel || sel.isCollapsed || !host) return;
+        const markups = selectionToMarkups(sel, host);
+        if (markups.length) {
+          addMarkups(markups, "highlight", hlColor);
+          sel.removeAllRanges();
+        }
+      }, 0);
+    };
+    window.addEventListener("pointerup", onUp);
+    return () => window.removeEventListener("pointerup", onUp);
+  }, [tool, addMarkups, hlColor]);
+
+  // In browse/select mode a plain click (not a drag, not on interactive UI)
+  // hit-tests the page's annotations — highlights and ink keep
+  // pointer-events:none so text selection over them still works.
+  const clickStart = useRef<{ x: number; y: number } | null>(null);
+  const onReaderPointerDown = (e: ReactPointerEvent) => {
+    clickStart.current = { x: e.clientX, y: e.clientY };
+    if (props.snipMode) startSnip(e);
+  };
+  const onReaderClick = (e: React.MouseEvent) => {
+    if (props.snipMode || (tool && tool !== "select")) return;
+    const start = clickStart.current;
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4) return;
+    const target = e.target as Element;
+    if (
+      target.closest?.(
+        ".annot-obj, .annot-popup, .annot-rail, .selection-popover, .insight-layer",
+      )
+    ) {
+      return;
+    }
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    const pageEl = target.closest?.("[data-page]") as HTMLElement | null;
+    if (!pageEl) {
+      select(null);
+      return;
+    }
+    const page = Number(pageEl.dataset.page);
+    const annots = byPage.get(page);
+    const dims = pageDims.get(page) ?? baseDims;
+    if (!annots?.length || !dims) {
+      select(null);
+      return;
+    }
+    const pt = clientToFrac(pageEl, e.clientX, e.clientY);
+    const hit = hitTest(annots, pt, dims.width, dims.height, 6 / scale);
+    select(hit ? hit.id : null);
+  };
 
   // ── Snip: drag a box over a page, render the region to a JPEG the
   //    headless CLI can Read, and hand it to the chat tab. ──────────────
@@ -243,8 +312,9 @@ export function Reader(props: {
   const startSnip = (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
     const target = e.target as Element;
-    // Popover / margin-note clicks pass through instead of starting a snip.
-    if (target.closest?.(".selection-popover, .insight-layer")) return;
+    // Popover / margin-note / annotation-UI clicks pass through instead of
+    // starting a snip.
+    if (target.closest?.(".selection-popover, .insight-layer, .annot-popup, .annot-rail")) return;
     setSnipSel(null);
     const pageEl = target.closest?.("[data-page]") as HTMLElement | null;
     if (!pageEl) return;
@@ -330,10 +400,11 @@ export function Reader(props: {
 
   return (
     <div
-      className={`reader ${props.snipMode ? "snip-mode" : ""}`}
+      className={`reader ${props.snipMode ? "snip-mode" : ""} ${tool ? `tool-${tool}` : ""}`}
       ref={containerRef}
       onScroll={onScroll}
-      onPointerDown={props.snipMode ? startSnip : undefined}
+      onPointerDown={onReaderPointerDown}
+      onClick={onReaderClick}
     >
       <div className="reader-pages" style={{ gap: PAGE_GAP }}>
         {pageNumbers.map((num) => {
@@ -370,6 +441,7 @@ export function Reader(props: {
                     scale={scale}
                     onDims={onPageDims}
                   />
+                  <PageAnnotations page={num} dims={dims} scale={scale} />
                 </div>
               )}
               <PageInsights page={num} heightPx={dims.height * layoutScale} />

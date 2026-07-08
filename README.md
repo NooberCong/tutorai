@@ -60,6 +60,34 @@ tutor something.
 - Resizable, smoothly sliding panels; an editable page indicator; fit-width and
   manual zoom.
 
+### Marking up
+
+A full annotation suite, built for studying — and deliberately invisible until
+you reach for it:
+
+- **Select text → mark it.** The selection popover leads with five highlighter
+  swatches (color-coding is a real study system), underline, strikethrough,
+  and *add note* — one gesture from intent to mark. The AI's Explain/Ask
+  actions live in the same pill.
+- **The markup rail** (the pen button in the toolbar, or `M`) summons a slim
+  floating pill of canvas tools: select, drag-highlighter, pen, text box,
+  sticky note, and a stroke eraser, plus a pen tray with three remembered
+  presets (including a marker that multiplies over the page like a real
+  one). Tools are sticky — mark as many passages as you like, `Esc` steps out.
+- **Sticky notes and free text.** Notes collapse to a small colored fold on
+  the page (the AI companion's marks stay out in the margin — you'll never
+  confuse whose note is whose) and expand into an editing card; free text is
+  typed straight onto the page in ink colors, movable and resizable.
+- **Marks tab.** The sidebar's second tab lists every annotation — quote
+  excerpts, note previews, page numbers — filterable by color and kind;
+  click any card and the reader jumps there with a locate pulse.
+- **Undo/redo everything** (`Ctrl+Z` / `Ctrl+Y`), per document, gesture by
+  gesture.
+- **Your PDF is never modified.** Annotations live in a plain-JSON sidecar in
+  the document's cache dir — which also means the tutor can read your
+  highlights and notes. Marks track the page through every zoom, reflow, and
+  restart.
+
 ### The tutor
 
 Four tabs live in the study panel, all scoped to either the whole document or a
