@@ -1018,18 +1018,23 @@ textarea::placeholder {
 .link-layer {
   position: absolute;
   inset: 0;
+  /* The layer spans the whole page above the text layer; only the link rects
+     may catch the pointer, or text selection dies on every page with a link. */
+  pointer-events: none;
 }
 .pdf-link {
   position: absolute;
   cursor: pointer;
+  pointer-events: auto;
 }
-/* Links yield while snipping or while a markup tool is armed. */
-.reader.snip-mode .link-layer,
-.reader.tool-highlight .link-layer,
-.reader.tool-pen .link-layer,
-.reader.tool-eraser .link-layer,
-.reader.tool-note .link-layer,
-.reader.tool-freetext .link-layer {
+/* Links yield while snipping or while a markup tool is armed. (Must target
+   .pdf-link: its explicit `auto` overrides `none` set on the parent layer.) */
+.reader.snip-mode .pdf-link,
+.reader.tool-highlight .pdf-link,
+.reader.tool-pen .pdf-link,
+.reader.tool-eraser .pdf-link,
+.reader.tool-note .pdf-link,
+.reader.tool-freetext .pdf-link {
   pointer-events: none;
 }
 /* pdf.js appends a measuring canvas to <body>; keep it out of sight. */
