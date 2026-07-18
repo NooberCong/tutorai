@@ -234,7 +234,8 @@ textarea::placeholder {
 /* ── Home ── */
 
 .home {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background:
@@ -490,10 +491,100 @@ textarea::placeholder {
   }
 }
 
+/* ── App shell & tab strip ── */
+
+.app-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* One tab per open document. Sits above the library and the reader alike;
+   the active tab shares the toolbar's surface so the two read as one. */
+.tab-strip {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px; /* must match TAB_GAP in TabStrip.tsx */
+  padding: 6px 8px 0;
+  background: var(--well);
+  overflow: hidden;
+}
+.tab {
+  position: relative;
+  flex: 0 1 190px;
+  min-width: 72px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px 0 12px;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  font-size: 12.5px;
+  color: var(--dim);
+  user-select: none;
+  touch-action: none;
+  transition: background 130ms, color 130ms;
+}
+.tab:hover {
+  background: var(--ink2);
+  color: var(--text);
+}
+.tab.active {
+  background: var(--ink1);
+  color: var(--text);
+}
+.tab.dragging {
+  z-index: 3;
+  transition: none;
+  background: var(--ink3);
+  box-shadow: var(--shadow-soft);
+}
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab-close {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  transition: background 130ms, color 130ms;
+}
+.tab-close:hover {
+  background: var(--ink3);
+  color: var(--text);
+}
+.tab-new {
+  flex: none;
+  align-self: flex-end;
+  width: 26px;
+  height: 26px;
+  margin: 0 0 3px 3px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  transition: background 130ms, color 130ms;
+}
+.tab-new:hover {
+  background: var(--ink2);
+  color: var(--text);
+}
+
 /* ── Document frame & toolbar ── */
 
 .doc-screen {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }

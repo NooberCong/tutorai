@@ -50,6 +50,11 @@ tutor something.
   smoothly.
 - **A real library.** Every book gets a rendered cover, a reading-progress bar,
   and a remembered position. Close the app mid-chapter; reopen on the same page.
+- **Tabs.** Open several documents at once and drag their tabs to reorder;
+  each document lives in exactly one tab, so opening it again just focuses it.
+  Every tab keeps its own reading position, the strip stays visible on the
+  library screen so open books remain one click away, and the whole set —
+  including which tab was active — comes back on relaunch.
 - **Chapter outline.** The sidebar shows the document's bookmark outline. If a
   PDF has none, one click asks the AI to reconstruct chapters from the text.
 - **Precise text selection** with a one-click **Explain** / **Ask** popover on

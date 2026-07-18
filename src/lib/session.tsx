@@ -88,6 +88,12 @@ export function SessionProvider(props: {
   reg: RegisteredDoc;
   pdf: PdfDoc;
   fileName: string;
+  /** Reading position to resume from — the tab layer owns it across switches. */
+  initialPage: number;
+  initialScroll: number;
+  /** Reports the final reading position when this session tears down (its tab
+   *  was switched away from or closed), so reactivating resumes in place. */
+  onDeactivate?: (page: number, scroll: number) => void;
   children: ReactNode;
 }) {
   const { reg, pdf, fileName } = props;
@@ -96,7 +102,7 @@ export function SessionProvider(props: {
   const [artifacts, setArtifacts] = useState<Artifacts>(emptyArtifacts());
   const [artifactsLoaded, setArtifactsLoaded] = useState(false);
   const [model, setModelState] = useState(() => getSetting("model"));
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(props.initialPage);
   const [panelRequest, setPanelRequest] = useState<PanelRequest | null>(null);
   const jumperRef = useRef<(page: number, yFrac?: number) => void>(() => {});
   const persistTimer = useRef<number>(undefined);
@@ -190,7 +196,7 @@ export function SessionProvider(props: {
   // saving only on unmount would lose it. The unmount save is a final flush.
   // The scroll fraction lives in a ref: it changes on every scroll frame and
   // must not re-render the app the way currentPage (which is displayed) does.
-  const scrollRef = useRef(0);
+  const scrollRef = useRef(props.initialScroll);
   const latest = useRef({ meta, currentPage });
   latest.current = { meta, currentPage };
   const savePosition = useCallback(() => {
@@ -215,10 +221,15 @@ export function SessionProvider(props: {
   useEffect(() => {
     if (meta) schedulePositionSave();
   }, [meta, currentPage, schedulePositionSave]);
+  const onDeactivateRef = useRef(props.onDeactivate);
+  onDeactivateRef.current = props.onDeactivate;
   useEffect(
     () => () => {
       window.clearTimeout(positionTimer.current);
       savePosition();
+      // Unlike the library write above, this must not wait on `meta`: the tab
+      // layer needs the resting position even mid-extraction.
+      onDeactivateRef.current?.(latest.current.currentPage, scrollRef.current);
     },
     [savePosition],
   );

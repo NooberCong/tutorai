@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Home } from "./components/Home";
 import { Reader } from "./components/Reader";
+import { TabStrip } from "./components/TabStrip";
 import { Toolbar } from "./components/Toolbar";
 import { Sidebar } from "./components/Sidebar";
 import { AiPanel } from "./components/AiPanel";
@@ -31,16 +32,17 @@ import {
 import type { RegisteredDoc } from "./lib/types";
 import { getSetting, saveSetting, SETTINGS_DEFAULTS } from "./lib/settings";
 
-type View =
-  | { kind: "home" }
-  | {
-      kind: "doc";
-      reg: RegisteredDoc;
-      pdf: PdfDoc;
-      fileName: string;
-      initialPage: number;
-      initialScroll: number;
-    };
+/** One open document. `page`/`scroll` are where the reader resumes when the
+ *  tab (re)activates — seeded from the library index on open, refreshed by the
+ *  session's final flush whenever the tab is switched away from. */
+interface DocTab {
+  reg: RegisteredDoc;
+  pdf: PdfDoc;
+  fileName: string;
+  title: string;
+  page: number;
+  scroll: number;
+}
 
 /** Fade out and remove the boot splash from index.html. Holds it on screen
  *  for a minimum beat so warm starts get a smooth reveal instead of a flash
@@ -57,79 +59,189 @@ function dismissSplash() {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>({ kind: "home" });
+  // Open documents, one tab each; a null activeId shows the library. Every
+  // document lives in at most one tab: opening it again focuses the existing
+  // tab (docId is a content hash, so the same file under two paths dedups too).
+  const [tabs, setTabs] = useState<DocTab[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  // docIds with a tab, updated synchronously — `tabs` itself lags a just-run
+  // open by one render, which would let a queued duplicate slip through.
+  const openIds = useRef(new Set<string>());
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
 
-  const openPath = useCallback(async (path: string) => {
+  const doOpen = useCallback(async (
+    path: string,
+    opts?: { activate?: boolean; quiet?: boolean },
+  ): Promise<string | null> => {
+    const activate = opts?.activate ?? true;
     setOpening(path);
     try {
       const reg = await registerPdf(path);
+      if (openIds.current.has(reg.docId)) {
+        if (activate) setActiveId(reg.docId);
+        return reg.docId;
+      }
       const pdf = await loadPdf(pdfUrl(path));
       const fileName = path.split(/[\\/]/).pop() ?? "document.pdf";
       // Resume where the reader left off last time (from the library index).
       const entry = await getLibrary()
         .then((lib) => lib.find((e) => e.docId === reg.docId))
         .catch(() => undefined);
-      const initialPage = Math.min(Math.max(entry?.lastPage ?? 1, 1), pdf.numPages);
-      const initialScroll = entry?.lastScroll ?? 0;
-      setView((prev) => {
-        // A doc may already be open (e.g. double-clicking another PDF).
-        if (prev.kind === "doc") prev.pdf.destroy().catch(() => {});
-        return { kind: "doc", reg, pdf, fileName, initialPage, initialScroll };
-      });
+      const tab: DocTab = {
+        reg,
+        pdf,
+        fileName,
+        title: entry?.title ?? fileName.replace(/\.pdf$/i, ""),
+        page: Math.min(Math.max(entry?.lastPage ?? 1, 1), pdf.numPages),
+        scroll: entry?.lastScroll ?? 0,
+      };
+      openIds.current.add(reg.docId);
+      setTabs((prev) => [...prev, tab]);
+      if (activate) setActiveId(reg.docId);
       ensureCover(reg.docId, pdf);
+      return reg.docId;
     } catch (e) {
       console.error("failed to open PDF", e);
-      alert(`Could not open this PDF.\n${e}`);
+      if (!opts?.quiet) alert(`Could not open this PDF.\n${e}`);
+      return null;
     } finally {
       setOpening(null);
     }
   }, []);
 
-  // PDFs arriving from the OS: the file this process was launched with
-  // (file association), and files handed over by later launches while the
-  // app is already running (single-instance plugin emits "open-file").
-  // The boot splash stays up until this settles — through the document load
-  // when we were launched with a file — so cold starts never show a bare shell.
+  // Opens are serialized: a burst of requests (double click, several OS
+  // "open with" files at once) runs one at a time, so each sees the tabs the
+  // previous one created and focuses them instead of racing to duplicates.
+  const openQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const openPath = useCallback(
+    (path: string, opts?: { activate?: boolean; quiet?: boolean }) => {
+      const run = openQueue.current.then(() => doOpen(path, opts));
+      openQueue.current = run;
+      return run;
+    },
+    [doOpen],
+  );
+
+  // Boot: reopen last session's tabs, then any PDF the OS launched us with
+  // (file association). The saved set is captured at first render, before the
+  // save effect below can overwrite it. Restores are enqueued synchronously so
+  // they precede the OS file in the open queue and tab order stays stable;
+  // a vanished file just drops its tab (quiet). The OS file activates itself
+  // when it opens; otherwise the saved active tab is focused once everything
+  // lands — unless something else (e.g. the user) claimed focus meanwhile.
+  // The splash stays up until both settle so cold starts never flash a bare
+  // shell. Later launches while the app runs hand their file over via the
+  // single-instance plugin's "open-file" event.
+  const [savedTabs] = useState(() => getSetting("openTabs"));
   useEffect(() => {
-    initialFile()
+    const restore = Promise.all(
+      savedTabs.paths.map((path) =>
+        openPath(path, { activate: false, quiet: true }).then((docId) => ({ path, docId })),
+      ),
+    ).then((results) => {
+      const saved = results.find((r) => r.path === savedTabs.activePath)?.docId;
+      if (saved) setActiveId((prev) => prev ?? saved);
+    });
+    const osFile = initialFile()
       .then(async (path) => {
         if (path) await openPath(path);
       })
-      .catch(() => {})
-      .finally(dismissSplash);
+      .catch(() => {});
+    Promise.allSettled([restore, osFile]).then(dismissSplash);
     const unlisten = listen<string>("open-file", (e) => openPath(e.payload));
     return () => {
       unlisten.then((f) => f());
     };
-  }, [openPath]);
+  }, [openPath, savedTabs]);
 
-  const goHome = useCallback(() => {
-    if (view.kind === "doc") view.pdf.destroy().catch(() => {});
-    setView({ kind: "home" });
-  }, [view]);
+  // Remember the open tabs (membership, order, active) across restarts.
+  useEffect(() => {
+    saveSetting("openTabs", {
+      paths: tabs.map((t) => t.reg.path),
+      activePath: tabs.find((t) => t.reg.docId === activeId)?.reg.path ?? null,
+    });
+  }, [tabs, activeId]);
 
-  if (view.kind === "home") {
-    return <Home onOpen={openPath} opening={opening} />;
-  }
+  // "Back to library" keeps every tab alive — the strip stays visible on the
+  // library screen, so open documents remain one click away.
+  const goHome = useCallback(() => setActiveId(null), []);
+
+  const closeTab = useCallback((docId: string) => {
+    const idx = tabsRef.current.findIndex((t) => t.reg.docId === docId);
+    if (idx < 0) return;
+    tabsRef.current[idx].pdf.destroy().catch(() => {});
+    openIds.current.delete(docId);
+    const remaining = tabsRef.current.filter((t) => t.reg.docId !== docId);
+    setTabs(remaining);
+    // Closing the active tab lands on its right neighbor (else the new last).
+    setActiveId((prev) =>
+      prev === docId
+        ? (remaining[Math.min(idx, remaining.length - 1)]?.reg.docId ?? null)
+        : prev,
+    );
+  }, []);
+
+  const moveTab = useCallback((from: number, to: number) => {
+    setTabs((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      if (!moved) return prev;
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const rememberPosition = useCallback(
+    (docId: string, page: number, scroll: number) => {
+      setTabs((prev) =>
+        prev.map((t) => (t.reg.docId === docId ? { ...t, page, scroll } : t)),
+      );
+    },
+    [],
+  );
+
+  const active = tabs.find((t) => t.reg.docId === activeId) ?? null;
 
   return (
-    <SessionProvider
-      key={view.reg.docId}
-      reg={view.reg}
-      pdf={view.pdf}
-      fileName={view.fileName}
-    >
-      <InsightsProvider>
-        <AnnotationsProvider>
-          <DocScreen
-            onHome={goHome}
-            initialPage={view.initialPage}
-            initialScroll={view.initialScroll}
-          />
-        </AnnotationsProvider>
-      </InsightsProvider>
-    </SessionProvider>
+    <div className="app-shell">
+      {tabs.length > 0 && (
+        <TabStrip
+          tabs={tabs.map((t) => ({ docId: t.reg.docId, title: t.title }))}
+          activeId={active?.reg.docId ?? null}
+          onSelect={setActiveId}
+          onClose={closeTab}
+          onMove={moveTab}
+          onNewTab={goHome}
+        />
+      )}
+      {active ? (
+        <SessionProvider
+          key={active.reg.docId}
+          reg={active.reg}
+          pdf={active.pdf}
+          fileName={active.fileName}
+          initialPage={active.page}
+          initialScroll={active.scroll}
+          onDeactivate={(page, scroll) =>
+            rememberPosition(active.reg.docId, page, scroll)
+          }
+        >
+          <InsightsProvider>
+            <AnnotationsProvider>
+              <DocScreen
+                onHome={goHome}
+                initialPage={active.page}
+                initialScroll={active.scroll}
+              />
+            </AnnotationsProvider>
+          </InsightsProvider>
+        </SessionProvider>
+      ) : (
+        <Home onOpen={openPath} opening={opening} />
+      )}
+    </div>
   );
 }
 

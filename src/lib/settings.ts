@@ -36,6 +36,9 @@ export interface Settings {
   /** Pen tray: three presets, each remembering its own color/width/mode. */
   inkPresets: InkPreset[];
   inkPresetIdx: number;
+  /** Documents open in tabs last session, reopened on boot. `activePath`
+   *  null means the library screen was showing. */
+  openTabs: { paths: string[]; activePath: string | null };
 }
 
 export const SETTINGS_DEFAULTS: Settings = {
@@ -54,6 +57,7 @@ export const SETTINGS_DEFAULTS: Settings = {
     { color: "#FFDE59", width: 9, mode: "highlighter" },
   ],
   inkPresetIdx: 0,
+  openTabs: { paths: [], activePath: null },
 };
 
 let settings: Settings = { ...SETTINGS_DEFAULTS };
