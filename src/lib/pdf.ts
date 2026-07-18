@@ -19,7 +19,7 @@ interface OutlineNode {
   items?: OutlineNode[];
 }
 
-async function destToPage(doc: PdfDoc, dest: unknown): Promise<number | null> {
+export async function destToPage(doc: PdfDoc, dest: unknown): Promise<number | null> {
   try {
     const resolved = typeof dest === "string" ? await doc.getDestination(dest) : dest;
     if (!Array.isArray(resolved) || resolved[0] == null) return null;
@@ -120,6 +120,47 @@ export function chapterFileName(index: number): string {
 /** Fallback single chapter covering the whole document. */
 export function wholeDocChapter(pages: number): Chapter {
   return { title: "Full document", startPage: 1, endPage: pages };
+}
+
+/** A link annotation's hit area in page-fraction coordinates, plus where it
+ *  goes: an external URL or an internal destination (resolve via destToPage). */
+export interface PageLink {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  url?: string;
+  dest?: unknown;
+}
+
+/** Link annotations for one page. Rects come back as fractions of the page
+ *  size so they hold at any render scale. */
+export async function pageLinks(doc: PdfDoc, num: number): Promise<PageLink[]> {
+  const page = await doc.getPage(num);
+  const annots = (await page.getAnnotations()) as {
+    subtype: string;
+    rect: number[];
+    url?: string;
+    dest?: unknown;
+  }[];
+  const vp = page.getViewport({ scale: 1 });
+  const links: PageLink[] = [];
+  for (const a of annots) {
+    if (a.subtype !== "Link") continue;
+    if (a.url ? !/^(https?:|mailto:)/i.test(a.url) : a.dest == null) continue;
+    const [x1, y1, x2, y2] = pdfjs.Util.normalizeRect(
+      vp.convertToViewportRectangle(a.rect) as [number, number, number, number],
+    );
+    links.push({
+      x: x1 / vp.width,
+      y: y1 / vp.height,
+      w: (x2 - x1) / vp.width,
+      h: (y2 - y1) / vp.height,
+      url: a.url,
+      dest: a.dest,
+    });
+  }
+  return links;
 }
 
 /** Does this page carry visual content — raster images, or enough vector

@@ -871,6 +871,11 @@ textarea::placeholder {
   transform-origin: 0 0;
   caret-color: transparent;
   z-index: 0;
+  /* The only paint in this layer is ::selection backgrounds (glyphs are
+     transparent). Text spans overlap, and translucent selection rects stack
+     into darker patches — so the selection color below is opaque (no
+     stacking) and the whole layer multiplies once with the page. */
+  mix-blend-mode: multiply;
 }
 .textLayer :is(span, br) {
   color: transparent;
@@ -896,8 +901,10 @@ textarea::placeholder {
   user-select: none;
   cursor: default;
 }
+/* Opaque = rgba(69, 210, 131, 0.32) composited on white; the layer's
+   multiply blend keeps the page's glyphs visible through it. */
 .textLayer ::selection {
-  background: rgba(69, 210, 131, 0.32);
+  background: rgb(196, 241, 215);
 }
 .textLayer br::selection {
   background: transparent;
@@ -914,6 +921,25 @@ textarea::placeholder {
 }
 .textLayer.selecting .endOfContent {
   top: 0;
+}
+/* PDF link annotations: invisible hit targets above the text layer. External
+   URLs open the system browser; internal dests jump the reader. */
+.link-layer {
+  position: absolute;
+  inset: 0;
+}
+.pdf-link {
+  position: absolute;
+  cursor: pointer;
+}
+/* Links yield while snipping or while a markup tool is armed. */
+.reader.snip-mode .link-layer,
+.reader.tool-highlight .link-layer,
+.reader.tool-pen .link-layer,
+.reader.tool-eraser .link-layer,
+.reader.tool-note .link-layer,
+.reader.tool-freetext .link-layer {
+  pointer-events: none;
 }
 /* pdf.js appends a measuring canvas to <body>; keep it out of sight. */
 .hiddenCanvasElement {

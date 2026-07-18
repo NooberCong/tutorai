@@ -12,7 +12,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { TextLayer } from "pdfjs-dist";
-import { renderRegionJpegBase64, type PdfDoc } from "../lib/pdf";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  destToPage,
+  pageLinks,
+  renderRegionJpegBase64,
+  type PageLink,
+  type PdfDoc,
+} from "../lib/pdf";
 import { askRegionMessage, explainRegionMessage } from "../lib/ai";
 import { clientToFrac, hitTest, selectionToMarkups } from "../lib/annotGeometry";
 import { useAnnotations } from "../lib/annotations";
@@ -490,8 +497,33 @@ const PageContent = memo(function PageContent(props: {
   onDims: (num: number, dims: PageDims) => void;
 }) {
   const { pdf, num, scale, onDims } = props;
+  const { jumpToPage } = useSession();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
+  const [links, setLinks] = useState<PageLink[]>([]);
+
+  // Link annotations don't depend on render scale (rects are page fractions),
+  // so fetch them once per page mount.
+  useEffect(() => {
+    let stale = false;
+    pageLinks(pdf, num)
+      .then((found) => {
+        if (!stale) setLinks(found);
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [pdf, num]);
+
+  const followLink = async (link: PageLink) => {
+    if (link.url) {
+      await openUrl(link.url);
+    } else {
+      const page = await destToPage(pdf, link.dest);
+      if (page != null) jumpToPage(page);
+    }
+  };
 
   useLayoutEffect(() => {
     let cancelled = false;
@@ -567,6 +599,31 @@ const PageContent = memo(function PageContent(props: {
     <>
       <canvas ref={canvasRef} />
       <div className="textLayer" ref={textRef} />
+      {links.length > 0 && (
+        <div className="link-layer">
+          {links.map((link, i) => (
+            <a
+              key={i}
+              className="pdf-link"
+              href={link.url ?? "#"}
+              title={link.url}
+              style={{
+                left: `${link.x * 100}%`,
+                top: `${link.y * 100}%`,
+                width: `${link.w * 100}%`,
+                height: `${link.h * 100}%`,
+              }}
+              onClick={(e) => {
+                // Never let the webview navigate; external URLs go to the
+                // system browser, internal dests scroll the reader.
+                e.preventDefault();
+                e.stopPropagation();
+                void followLink(link);
+              }}
+            />
+          ))}
+        </div>
+      )}
     </>
   );
 });
