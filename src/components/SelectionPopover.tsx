@@ -3,7 +3,7 @@
  *  ("Explain" auto-sends, "Ask" prefills). Selections inside companion
  *  margin notes keep the AI half only — you can't highlight the AI's text. */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { explainNoteSelectionMessage, explainSelectionMessage } from "../lib/ai";
 import { selectionToMarkups, type PageMarkup } from "../lib/annotGeometry";
 import {
@@ -65,7 +65,7 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
     setSel({
       text,
       page: Number((pageEl as HTMLElement).dataset.page),
-      x: Math.min(Math.max(last.left - hostRect.left + last.width / 2, 90), hostRect.width - 90),
+      x: last.left - hostRect.left + last.width / 2,
       y: last.bottom - hostRect.top + 10,
       note,
       markups: note ? [] : selectionToMarkups(selection, host),
@@ -87,6 +87,18 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
       host.removeEventListener("mousedown", onDown);
     };
   }, [capture, props.hostRef]);
+
+  // The pill centers on the selection (translate -50%) and its width varies —
+  // markup tools hide for note selections — so clamp it inside the host using
+  // the measured width after render, not a guessed one at capture time.
+  useLayoutEffect(() => {
+    const el = popoverRef.current;
+    const host = props.hostRef.current;
+    if (!el || !host || !sel) return;
+    const half = el.offsetWidth / 2 + 8;
+    const width = host.getBoundingClientRect().width;
+    el.style.left = `${Math.min(Math.max(sel.x, half), width - half)}px`;
+  }, [sel, props.hostRef]);
 
   const dismiss = useCallback(() => {
     setSel(null);

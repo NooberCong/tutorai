@@ -1072,6 +1072,10 @@ textarea::placeholder {
 .selection-popover {
   position: absolute;
   translate: -50% 0;
+  /* Absolute positioning resolves shrink-to-fit width against the space
+     right of `left` — near the right edge that would wrap the labels and
+     bulge the pill. Lay out at natural width regardless. */
+  width: max-content;
   display: flex;
   align-items: stretch;
   background: var(--ink2);
