@@ -1780,6 +1780,14 @@ textarea::placeholder {
   }
 }
 
+/* Activated tab whose PDF is still parsing (lazy session restore). */
+.tab-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ── Quiz ── */
 
 .quiz-form {
