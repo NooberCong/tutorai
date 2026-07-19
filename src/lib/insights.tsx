@@ -17,11 +17,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { insightsPrompt, parseInsights, type InsightSpan } from "./ai";
+import {
+  insightsPrompt,
+  NOTES_FILE,
+  notesFileContent,
+  parseInsights,
+  type InsightSpan,
+} from "./ai";
 import { wholeDocChapter } from "./pdf";
 import { useSession } from "./session";
 import { getSetting, saveSetting } from "./settings";
-import { readDocText, runJob } from "./tauri";
+import { readDocText, runJob, writeDocText } from "./tauri";
 import type { DocMeta, Insight } from "./types";
 
 const SPAN_PAGES = 8;
@@ -159,6 +165,16 @@ export function InsightsProvider(props: { children: ReactNode }) {
 
   // Kill the in-flight job when the document closes.
   useEffect(() => () => cancelRef.current?.(), []);
+
+  // Mirror the notes into the doc dir so the chat agent can Read them
+  // (chatSystemPreamble points it at this file). artifacts.json stays the
+  // source of truth; this is a projection, refreshed on every add/dismiss
+  // and on mount (which backfills docs annotated before the file existed).
+  useEffect(() => {
+    writeDocText(reg.docId, NOTES_FILE, notesFileContent(insights.notes)).catch((e) =>
+      console.error("notes mirror failed", e),
+    );
+  }, [reg.docId, insights.notes]);
 
   const setEnabled = useCallback((on: boolean) => {
     if (!on) cancelRef.current?.();

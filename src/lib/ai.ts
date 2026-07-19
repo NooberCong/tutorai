@@ -104,9 +104,32 @@ export function quizPrompt(meta: DocMeta, scope: Scope, opts: QuizOptions): stri
   ].join("\n");
 }
 
+/** File in the doc's working directory that mirrors the companion's margin
+ *  notes, so the chat agent can Read them. InsightsProvider keeps it current;
+ *  chatSystemPreamble points the agent at it. */
+export const NOTES_FILE = "notes.json";
+
+/** Agent-facing projection of the margin notes: content and provenance only,
+ *  no UI fields (id, y, createdAt). */
+export function notesFileContent(notes: Insight[]): string {
+  const entries = [...notes]
+    .sort((a, b) => a.page - b.page)
+    .map((n) => ({
+      page: n.page,
+      kind: n.kind,
+      title: n.title,
+      body: n.body,
+      anchor: n.anchor ?? "",
+      sources: n.sources,
+    }));
+  return JSON.stringify({ notes: entries }, null, 2);
+}
+
 export function chatSystemPreamble(meta: DocMeta): string {
   return [
     docContext(meta, { kind: "full" }),
+    ``,
+    `You also work as this book's reading companion: in background passes you write margin notes into it — real-world examples, gotchas, missing context, post-publication updates. The reader sees those notes in the margins but did not write them; any margin note they mention is one of yours. The current notes (each with its page, kind, anchor quote, and source URLs) are mirrored in ${NOTES_FILE} — Read it whenever the conversation involves a margin note. If the file is missing, you have not written any notes yet.`,
     ``,
     `You are in an ongoing chat with the reader of this document. Ground every answer in the document text — Read or Grep the chapter files before answering anything substantive, and cite pages as [p.N]. If the document does not cover something, say so plainly before answering from general knowledge.`,
     `Answer in Markdown, concise by default.`,
