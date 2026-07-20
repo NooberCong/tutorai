@@ -14,10 +14,12 @@ import { Toolbar } from "./components/Toolbar";
 import { Sidebar } from "./components/Sidebar";
 import { AiPanel } from "./components/AiPanel";
 import { MarkupRail } from "./components/MarkupRail";
+import { SearchBar } from "./components/SearchBar";
 import { SelectionPopover } from "./components/SelectionPopover";
 import { Undo } from "./components/Icons";
 import { AnnotationsProvider, useAnnotations } from "./lib/annotations";
 import { InsightsProvider, useInsights } from "./lib/insights";
+import { SearchProvider } from "./lib/search";
 import { SessionProvider, useSession } from "./lib/session";
 import { loadPdf, renderCoverDataUrl, type PdfDoc } from "./lib/pdf";
 import { listen } from "@tauri-apps/api/event";
@@ -292,11 +294,13 @@ export default function App() {
           >
             <InsightsProvider>
               <AnnotationsProvider>
-                <DocScreen
-                  onHome={goHome}
-                  initialPage={active.page}
-                  initialScroll={active.scroll}
-                />
+                <SearchProvider>
+                  <DocScreen
+                    onHome={goHome}
+                    initialPage={active.page}
+                    initialScroll={active.scroll}
+                  />
+                </SearchProvider>
               </AnnotationsProvider>
             </InsightsProvider>
           </SessionProvider>
@@ -469,6 +473,7 @@ function DocScreen(props: {
             snipMode={snipMode}
             exitSnip={exitSnip}
           />
+          <SearchBar />
           <SelectionPopover hostRef={readerHostRef} />
           <MarkupRail />
           {undoToast && (

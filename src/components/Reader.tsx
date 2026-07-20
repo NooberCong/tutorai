@@ -28,6 +28,7 @@ import { useSession } from "../lib/session";
 import { ChatGlyph, Spark } from "./Icons";
 import { PageAnnotations } from "./PageAnnotations";
 import { PageInsights } from "./PageInsights";
+import { SearchHighlights } from "./SearchHighlights";
 
 /** Distance beyond the viewport at which pages mount/unmount. */
 const OVERSCAN = "900px";
@@ -172,11 +173,49 @@ export function Reader(props: {
     return () => observer.disconnect();
   }, [baseDims, pdf.numPages]);
 
+  // In-flight smooth jump (citation, chapter, search match). A far jump
+  // scrolls past pages whose real sizes are still being discovered; each
+  // discovery reflows the layout, which moves the destination AND would let
+  // the anchor re-pin below overwrite scrollTop — instantly cancelling the
+  // smooth scroll midway. While a jump is live, reflows re-aim the animation
+  // at the recomputed target instead; it ends on arrival, on user scroll
+  // input, or after a stale-jump deadline.
+  const jumpRef = useRef<{ page: number; yFrac?: number; at: number } | null>(null);
+
+  const jumpTargetTop = useCallback((jump: { page: number; yFrac?: number }): number | null => {
+    const container = containerRef.current;
+    const el = pageRefs.current.get(jump.page);
+    if (!container || !el) return null;
+    const top =
+      jump.yFrac !== undefined ? el.offsetTop + jump.yFrac * el.offsetHeight : el.offsetTop - 24;
+    return Math.max(0, Math.min(top, container.scrollHeight - container.clientHeight));
+  }, []);
+
+  // The user grabbing the scroll (wheel, touch, scrollbar drag, keys) ends
+  // the jump's claim — without this a later reflow would yank the view back.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const cancel = () => {
+      jumpRef.current = null;
+    };
+    const events = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    for (const ev of events) container.addEventListener(ev, cancel, { passive: true });
+    return () => {
+      for (const ev of events) container.removeEventListener(ev, cancel);
+    };
+  }, []);
+
   // Current page = the page occupying the vertical center of the viewport;
   // the anchor tracks the page at the viewport's top edge.
   const onScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
+    const jump = jumpRef.current;
+    if (jump) {
+      const target = jumpTargetTop(jump);
+      if (target != null && Math.abs(container.scrollTop - target) < 2) jumpRef.current = null;
+    }
     const center = container.scrollTop + container.clientHeight / 2;
     let best = 1;
     let top = 1;
@@ -200,7 +239,7 @@ export function Reader(props: {
         ? (container.scrollTop - el.offsetTop) / el.offsetHeight
         : 0;
     reportPage(best, frac);
-  }, [reportPage]);
+  }, [reportPage, jumpTargetTop]);
 
   // Pin the reading position through layout reflows. All page geometry
   // derives from layoutScale and pageDims, so re-applying the anchor when
@@ -211,27 +250,40 @@ export function Reader(props: {
   // pages, before paint and before any scroll event can sample the
   // drifted position back into the anchor.
   useLayoutEffect(() => {
-    const anchor = anchorRef.current;
     const container = containerRef.current;
+    if (!container) return;
+    const jump = jumpRef.current;
+    if (jump && performance.now() - jump.at < 3000) {
+      // Mid-jump reflow: the destination moved — re-aim the animation at it.
+      const top = jumpTargetTop(jump);
+      if (top != null) container.scrollTo({ top, behavior: "smooth" });
+      return;
+    }
+    jumpRef.current = null;
+    const anchor = anchorRef.current;
     const el = anchor && pageRefs.current.get(anchor.page);
-    if (el && container) {
+    if (el) {
       container.scrollTop = el.offsetTop + anchor.frac * el.offsetHeight;
     }
-  }, [layoutScale, pageDims]);
+  }, [layoutScale, pageDims, jumpTargetTop]);
 
   // Expose page jumps to the rest of the app (citations, chapter list,
   // annotation cards — the optional yFrac lands on a spot within the page).
   useEffect(() => {
     registerJumper((page: number, yFrac?: number) => {
-      const el = pageRefs.current.get(Math.min(Math.max(1, page), pdf.numPages));
+      const jump = {
+        page: Math.min(Math.max(1, page), pdf.numPages),
+        yFrac,
+        at: performance.now(),
+      };
+      const top = jumpTargetTop(jump);
       const container = containerRef.current;
-      if (el && container) {
-        const top =
-          yFrac !== undefined ? el.offsetTop + yFrac * el.offsetHeight : el.offsetTop - 24;
-        container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      if (top != null && container) {
+        jumpRef.current = jump;
+        container.scrollTo({ top, behavior: "smooth" });
       }
     });
-  }, [registerJumper, pdf.numPages]);
+  }, [registerJumper, pdf.numPages, jumpTargetTop]);
 
   // ── Annotations: markup creation + click-to-select ───────────────────
   // Drag-highlighter: while the tool is armed, releasing a text selection
@@ -449,6 +501,7 @@ export function Reader(props: {
                     onDims={onPageDims}
                   />
                   <PageAnnotations page={num} dims={dims} scale={scale} />
+                  <SearchHighlights page={num} />
                 </div>
               )}
               <PageInsights page={num} heightPx={dims.height * layoutScale} />

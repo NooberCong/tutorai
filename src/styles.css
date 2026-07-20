@@ -1126,6 +1126,158 @@ textarea::placeholder {
   }
 }
 
+/* ── Find in document (Ctrl+F) ──
+   Docked panel at the reader's right edge: the wrapper's width animates
+   while the panel inside keeps its natural width (the side-panel slide
+   pattern), so pages reflow beside the search UI instead of underneath it
+   and a match can never be hidden by it. Page hits live in .search-layer
+   inside .page-inner, multiply-blended like text-markup highlights so they
+   read as marks on the paper. */
+
+.search-dock {
+  flex: none;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  width: 320px;
+  transition: width 300ms cubic-bezier(0.33, 0.1, 0.14, 1);
+}
+.search-dock:not(.open) {
+  width: 0;
+}
+.search-panel {
+  flex: none;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--ink2);
+  border-left: 1px solid var(--line);
+}
+.search-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 8px 7px;
+}
+.search-bar-glyph {
+  flex: none;
+  color: var(--faint);
+  margin: 0 2px 0 4px;
+}
+.search-panel input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 5px 6px;
+}
+.search-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  padding: 0 6px;
+}
+.search-count.none {
+  color: var(--bad);
+}
+.search-hint {
+  padding: 7px 14px 9px;
+  font-size: 11.5px;
+  color: var(--faint);
+  border-top: 1px solid var(--line);
+}
+
+.search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--line);
+}
+.search-results-space {
+  position: relative;
+}
+.search-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  transition: background 100ms;
+}
+.search-row:hover {
+  background: var(--ink3);
+}
+.search-row.focused {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.search-row-snippet {
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-row-snippet mark {
+  background: rgba(69, 210, 131, 0.18);
+  color: var(--text);
+  font-weight: 620;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.search-row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.search-row-page {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--accent);
+  flex: none;
+}
+.search-row-chapter {
+  font-size: 10.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.search-hit {
+  position: absolute;
+  background: #cfcfcf;
+  mix-blend-mode: multiply;
+  border-radius: 1px;
+}
+.search-hit.focused {
+  background: #ffab2e;
+  animation: search-pulse 500ms ease-out;
+}
+@keyframes search-pulse {
+  from {
+    box-shadow: 0 0 0 5px rgba(255, 171, 46, 0.55);
+  }
+  to {
+    box-shadow: 0 0 0 0 rgba(255, 171, 46, 0);
+  }
+}
+
 /* ── Reading companion: margin insights ──
    Quiet accent marks in the dark margin beside the page; each expands into
    a card on click. Ambient by design — nothing moves the text or pulls the

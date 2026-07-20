@@ -74,8 +74,9 @@ export function selectionToMarkups(
 
 /** Group rects into visual lines (≥50% vertical overlap), then merge
  *  horizontally-adjacent fragments within a line. Fragments separated by a
- *  real gap (e.g. a column gutter) stay separate rects. */
-function mergeLineRects(rects: FracRect[]): FracRect[] {
+ *  real gap (e.g. a column gutter) stay separate rects. Also used for
+ *  search-match highlights, which fragment the same way per text item. */
+export function mergeLineRects(rects: FracRect[]): FracRect[] {
   const GAP = 0.012; // max horizontal gap (page widths) still "the same run"
   const sorted = [...rects].sort((a, b) => a.y - b.y || a.x - b.x);
   const lines: FracRect[][] = [];

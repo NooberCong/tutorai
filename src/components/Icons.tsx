@@ -30,6 +30,17 @@ export const ChevronDown = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="m3.5 6 4.5 4.5L12.5 6" /></svg>
 );
 
+export const ChevronUp = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="m3.5 10 4.5-4.5L12.5 10" /></svg>
+);
+
+export const SearchGlyph = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <circle cx="7.2" cy="7.2" r="4.4" />
+    <path d="m10.5 10.5 3 3" />
+  </svg>
+);
+
 export const PanelLeft = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <rect x="2" y="3" width="12" height="10" rx="2" />

@@ -1,5 +1,6 @@
 import { useAnnotations } from "../lib/annotations";
 import { useInsights } from "../lib/insights";
+import { useSearch } from "../lib/search";
 import { useSession } from "../lib/session";
 import {
   ChevronLeft,
@@ -9,6 +10,7 @@ import {
   PanelLeft,
   PenLine,
   Plus,
+  SearchGlyph,
   Snip,
   Spark,
 } from "./Icons";
@@ -27,6 +29,7 @@ export function Toolbar(props: {
   const { meta, pdf, currentPage, jumpToPage } = useSession();
   const { enabled: companionOn, setEnabled: setCompanion, reading } = useInsights();
   const { railOpen, toggleRail } = useAnnotations();
+  const { open: searchOpen, openSearch, closeSearch } = useSearch();
 
   const zoom = (dir: 1 | -1) => {
     const current = props.scale ?? 1;
@@ -72,6 +75,15 @@ export function Toolbar(props: {
       </form>
 
       <div className="toolbar-group end">
+        <button
+          className={`icon-btn ${searchOpen ? "active" : ""}`}
+          onClick={searchOpen ? closeSearch : openSearch}
+          title="Find in document (Ctrl+F)"
+          aria-pressed={searchOpen}
+        >
+          <SearchGlyph />
+        </button>
+        <span className="toolbar-sep" />
         <button className="icon-btn" onClick={() => zoom(-1)} title="Zoom out">
           <Minus />
         </button>
