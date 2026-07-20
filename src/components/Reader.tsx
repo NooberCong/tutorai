@@ -279,6 +279,12 @@ export function Reader(props: {
       const top = jumpTargetTop(jump);
       const container = containerRef.current;
       if (top != null && container) {
+        if (Math.abs(top - container.scrollTop) < 2) {
+          // Already there (e.g. a query refinement kept the same focused
+          // occurrence) — don't arm a jump that will never see arrival.
+          jumpRef.current = null;
+          return;
+        }
         jumpRef.current = jump;
         container.scrollTo({ top, behavior: "smooth" });
       }

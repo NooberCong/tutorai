@@ -84,6 +84,24 @@ export function SearchProvider(props: { children: ReactNode }) {
   // Bumped per search run; in-flight geometry from a stale query is dropped.
   const generation = useRef(0);
 
+  // Where the seeding selection sat, in page fractions. The first search
+  // after a selection-seeded Ctrl+F focuses the occurrence under it — the
+  // page can hold several matches, and "first hit on the page" would focus
+  // a different one than the text the user selected.
+  const seedRef = useRef<{ page: number; x: number; y: number } | null>(null);
+
+  // Raw query of the last executed search run. Re-running the same query
+  // (the panel re-opening bumps the effect) would rebuild rects and re-jump
+  // for an identical result — skip it and keep focus where it was.
+  const ranQueryRef = useRef<string | null>(null);
+
+  // Document position the next search run picks its focus from: the spot of
+  // the currently focused match, moved only by explicit navigation and by
+  // opening the panel. Never the live scroll position — each run's jump
+  // animates the scroll, and choosing focus from mid-animation samples sent
+  // the view lurching in a fresh direction on every keystroke.
+  const focusAnchorRef = useRef<{ page: number; start: number }>({ page: 1, start: 0 });
+
   // Refs for values read inside stable callbacks.
   const pageRef = useRef(currentPage);
   pageRef.current = currentPage;
@@ -93,6 +111,8 @@ export function SearchProvider(props: { children: ReactNode }) {
   focusedRef.current = focusedIdx;
   const openRef = useRef(open);
   openRef.current = open;
+  const queryRef = useRef(query);
+  queryRef.current = query;
 
   // Corpus: built once, on the first search after extraction has produced
   // pages.json (`meta` set ⇒ pages.json exists). Folding a big book costs
@@ -143,13 +163,19 @@ export function SearchProvider(props: { children: ReactNode }) {
   );
 
   const focusMatch = useCallback(
-    (idx: number) => {
+    (idx: number, scroll = true) => {
       const m = resultRef.current?.matches[idx];
       if (!m) return;
       setFocusedIdx(idx);
+      focusedRef.current = idx; // sync now — the rect job below races the re-render
+      focusAnchorRef.current = { page: m.page, start: m.start };
+      if (!scroll) return;
       const gen = generation.current;
       void ensureRectsFor(m.page)?.then((groups) => {
-        if (generation.current !== gen) return;
+        // Jump only if this is still the focused match: rect jobs for
+        // different pages resolve out of order, and a slow one must not
+        // yank the view back to a match the user has already moved past.
+        if (generation.current !== gen || focusedRef.current !== idx) return;
         const rect = groups[m.ord]?.[0];
         // Land the match about a third of a page below the viewport top.
         jumpToPage(m.page, rect ? Math.max(0, rect.y - 0.3) : undefined);
@@ -159,10 +185,47 @@ export function SearchProvider(props: { children: ReactNode }) {
   );
 
   // Debounced search execution. Focus starts at the first match at or after
-  // the page being read, so Ctrl+F lands on the closest hit, not page 1.
+  // the focus anchor: the reading position when the panel opens, then the
+  // focused match itself while the query is being refined.
   useEffect(() => {
     if (!searcher || !open) return;
     const timer = window.setTimeout(() => {
+      const seed = seedRef.current;
+      seedRef.current = null;
+      // Selection-seeded: focus the occurrence whose rect is nearest to
+      // where the selection sat (for the selected one, distance ≈ 0).
+      // Without scrolling — the seed is text the user just selected, so it
+      // is already on screen, and a jump aimed while the panel is still
+      // sliding open visibly overshoots and comes back.
+      const focusSeeded = (res: SearchResult, s: NonNullable<typeof seed>) => {
+        if (!res.matches.some((m) => m.page === s.page)) return false;
+        const gen = generation.current;
+        void ensureRectsFor(s.page)?.then((groups) => {
+          if (generation.current !== gen) return;
+          let best = -1;
+          let bestD = Infinity;
+          res.matches.forEach((m, i) => {
+            if (m.page !== s.page) return;
+            const r = groups[m.ord]?.[0];
+            if (!r) return;
+            const d = (r.x - s.x) ** 2 + (r.y - s.y) ** 2;
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          });
+          if (best < 0) best = res.matches.findIndex((m) => m.page === s.page);
+          focusMatch(best, false);
+        });
+        return true;
+      };
+      // Same query as the last run (panel reopened): result, rects and
+      // focus are all still valid — at most a seed retargets focus.
+      if (ranQueryRef.current === query && resultRef.current) {
+        if (seed) focusSeeded(resultRef.current, seed);
+        return;
+      }
+      ranQueryRef.current = query;
       generation.current++;
       rects.current = new Map();
       rectJobs.current = new Map();
@@ -174,12 +237,19 @@ export function SearchProvider(props: { children: ReactNode }) {
         setFocusedIdx(-1);
         return;
       }
-      let idx = res.matches.findIndex((m) => m.page >= pageRef.current);
+      if (seed && focusSeeded(res, seed)) return;
+      // First match at or after the anchor. Extending the query keeps the
+      // focused occurrence in place (its start doesn't change), so refining
+      // a search never moves the view until the occurrence stops matching.
+      const a = focusAnchorRef.current;
+      let idx = res.matches.findIndex(
+        (m) => m.page > a.page || (m.page === a.page && m.start >= a.start),
+      );
       if (idx < 0) idx = 0;
       focusMatch(idx);
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [query, searcher, open, focusMatch]);
+  }, [query, searcher, open, focusMatch, ensureRectsFor]);
 
   const step = useCallback(
     (dir: 1 | -1) => {
@@ -191,13 +261,56 @@ export function SearchProvider(props: { children: ReactNode }) {
   );
 
   const openSearch = useCallback(() => {
-    // A live text selection seeds the query, like browser find.
-    const sel = window.getSelection()?.toString().replace(/\s+/g, " ").trim();
-    if (sel && sel.length <= 120) setQuery(sel);
+    // A live text selection seeds the query, like browser find — and anchors
+    // the initial focus to that exact occurrence via seedRef.
+    seedRef.current = null;
+    focusAnchorRef.current = { page: pageRef.current, start: 0 };
+    const selection = window.getSelection();
+    const sel = selection?.toString().replace(/\s+/g, " ").trim();
+    if (selection && sel && sel.length <= 120) {
+      setQuery(sel);
+      if (sel !== queryRef.current) {
+        // Seeding replaces the query outright — drop the old one's overlays
+        // now, or they flash on the previous word and hop to the new one
+        // when the debounced run lands.
+        generation.current++;
+        rects.current = new Map();
+        rectJobs.current = new Map();
+        resultRef.current = null;
+        setResult(null);
+        setFocusedIdx(-1);
+        setRectsVersion((v) => v + 1);
+      }
+      const start = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+      const node = start?.startContainer;
+      const el = node instanceof Element ? node : (node?.parentElement ?? null);
+      const pageEl = el?.closest<HTMLElement>("[data-page]");
+      // Fractions are measured against .page-inner — the box match rects
+      // are relative to (the [data-page] wrapper can be larger).
+      const inner = el?.closest<HTMLElement>(".page-inner");
+      if (start && pageEl && inner) {
+        const r = start.getBoundingClientRect();
+        const p = inner.getBoundingClientRect();
+        if (r.width > 0 && p.width > 0 && p.height > 0) {
+          seedRef.current = {
+            page: Number(pageEl.dataset.page),
+            x: (r.left - p.left) / p.width,
+            y: (r.top - p.top) / p.height,
+          };
+        }
+      }
+    }
     setOpen(true);
     setFocusNonce((n) => n + 1);
   }, []);
   const closeSearch = useCallback(() => setOpen(false), []);
+
+  // Typing a query by hand retargets focus to the reading position — a
+  // selection anchor from an earlier Ctrl+F must not hijack it.
+  const setQueryFromInput = useCallback((q: string) => {
+    seedRef.current = null;
+    setQuery(q);
+  }, []);
 
   // Shortcuts. Capture phase so an open search consumes Escape before the
   // annotation layer's window listener sees it.
@@ -262,7 +375,7 @@ export function SearchProvider(props: { children: ReactNode }) {
       openSearch,
       closeSearch,
       query,
-      setQuery,
+      setQuery: setQueryFromInput,
       result,
       indexing: !searcher,
       noText: searcher ? !searcher.hasText : false,
@@ -277,8 +390,9 @@ export function SearchProvider(props: { children: ReactNode }) {
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rectsVersion
     // invalidates peekRects reads (the rect map lives in a ref).
-    [open, focusNonce, openSearch, closeSearch, query, result, searcher, focusedIdx,
-     focusMatch, step, snippetFor, pageHasMatches, peekRects, ensureRects, rectsVersion],
+    [open, focusNonce, openSearch, closeSearch, query, setQueryFromInput, result, searcher,
+     focusedIdx, focusMatch, step, snippetFor, pageHasMatches, peekRects, ensureRects,
+     rectsVersion],
   );
 
   return <SearchContext.Provider value={value}>{props.children}</SearchContext.Provider>;
