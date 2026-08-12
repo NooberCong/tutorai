@@ -1,4 +1,5 @@
 mod claude;
+mod dict;
 mod jobs;
 mod store;
 
@@ -90,6 +91,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Jobs::default())
+        .manage(dict::DictState::default())
         .invoke_handler(tauri::generate_handler![
             run_job,
             cancel_job,
@@ -106,6 +108,10 @@ pub fn run() {
             store::write_doc_bytes,
             store::remove_doc_path,
             store::ensure_project_dir,
+            dict::import_dictionary,
+            dict::list_dictionaries,
+            dict::remove_dictionary,
+            dict::lookup_word,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

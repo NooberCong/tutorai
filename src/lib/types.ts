@@ -204,6 +204,30 @@ export interface AnnotationsFile {
   annotations: Annotation[];
 }
 
+// ── Dictionaries (mirrors src-tauri/src/dict.rs) ──────────────────────
+
+export interface DictMeta {
+  id: string;
+  name: string;
+  wordCount: number;
+  /** From the .ifo — carries a built-in's attribution line. */
+  description: string;
+  builtin: boolean;
+}
+
+export interface DictDefinition {
+  format: "text" | "html";
+  body: string;
+}
+
+export interface DictHit {
+  dictId: string;
+  dictName: string;
+  /** Matched headword — may differ from the query after a fallback. */
+  word: string;
+  definitions: DictDefinition[];
+}
+
 // ── Claude job protocol (mirrors src-tauri/src/claude.rs) ─────────────
 
 export interface JobSpec {

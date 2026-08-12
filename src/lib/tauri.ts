@@ -2,6 +2,8 @@
 
 import { invoke, Channel, convertFileSrc } from "@tauri-apps/api/core";
 import type {
+  DictHit,
+  DictMeta,
   DoneEvent,
   JobEvent,
   JobSpec,
@@ -35,6 +37,15 @@ export const removeDocPath = (docId: string, rel: string) =>
   invoke<void>("remove_doc_path", { docId, rel });
 export const ensureProjectDir = (docId: string, slug: string) =>
   invoke<string>("ensure_project_dir", { docId, slug });
+
+export const importDictionary = (srcPath: string) =>
+  invoke<DictMeta>("import_dictionary", { srcPath });
+export const listDictionaries = () =>
+  invoke<DictMeta[]>("list_dictionaries");
+export const removeDictionary = (id: string) =>
+  invoke<void>("remove_dictionary", { id });
+export const lookupWord = (word: string, dictIds: string[]) =>
+  invoke<DictHit[]>("lookup_word", { word, dictIds });
 
 export const claudeVersion = () => invoke<string | null>("claude_version");
 

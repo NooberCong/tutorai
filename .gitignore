@@ -7,3 +7,6 @@ src-tauri/gen/
 
 # stray `tauri icon` default output; the real source is src-tauri/icons/icon.svg
 app-icon.png
+
+# build-dictionary.py's cached Open English WordNet download
+scripts/english-wordnet-*.zip

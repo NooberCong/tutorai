@@ -87,6 +87,14 @@ export const Spark = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+/** Open book — dictionary lookup. */
+export const DictionaryGlyph = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M8 4.1C6.9 3.1 5.1 2.7 2.5 2.9v9.5c2.6-.2 4.4.2 5.5 1.2 1.1-1 2.9-1.4 5.5-1.2V2.9c-2.6-.2-4.4.2-5.5 1.2Z" />
+    <path d="M8 4.1v9.5" />
+  </svg>
+);
+
 export const Send = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M8 12.5v-9M4.25 7.25 8 3.5l3.75 3.75" /></svg>
 );

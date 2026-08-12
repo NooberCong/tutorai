@@ -1,0 +1,7 @@
+StarDict's dict ifo file
+version=3.0.0
+bookname=Open English WordNet
+wordcount=127311
+idxfilesize=2581224
+sametypesequence=h
+description=Open English WordNet 2025 - CC BY 4.0 - https://en-word.net<br>Derived from Princeton WordNet; see the bundled LICENSE file.

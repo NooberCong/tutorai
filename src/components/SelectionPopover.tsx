@@ -1,7 +1,8 @@
 /** Floating pill over a text selection: markup first (highlight swatches,
- *  underline, strike, note — one gesture from intent to mark), AI second
- *  ("Explain" auto-sends, "Ask" prefills). Selections inside companion
- *  margin notes keep the AI half only — you can't highlight the AI's text. */
+ *  underline, strike, note — one gesture from intent to mark), then the
+ *  dictionary (Translate opens an anchored card), AI last ("Explain"
+ *  auto-sends, "Ask" prefills). Selections inside companion margin notes
+ *  keep the dictionary + AI half only — you can't highlight the AI's text. */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { explainNoteSelectionMessage, explainSelectionMessage } from "../lib/ai";
@@ -13,7 +14,15 @@ import {
   type MarkupType,
 } from "../lib/annotations";
 import { useSession } from "../lib/session";
-import { ChatGlyph, Spark, StickyNoteGlyph, StrikeGlyph, UnderlineGlyph } from "./Icons";
+import {
+  ChatGlyph,
+  DictionaryGlyph,
+  Spark,
+  StickyNoteGlyph,
+  StrikeGlyph,
+  UnderlineGlyph,
+} from "./Icons";
+import { TranslatePopup, type DictQuery } from "./TranslatePopup";
 
 interface SelectionState {
   text: string;
@@ -31,6 +40,9 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
   const { openPanel } = useSession();
   const annot = useAnnotations();
   const [sel, setSel] = useState<SelectionState | null>(null);
+  /** The dictionary card outlives the pill: clicking Translate clears `sel`
+   *  (and the live selection), and the card owns its own dismissal. */
+  const [dictQuery, setDictQuery] = useState<DictQuery | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const toolRef = useRef(annot.tool);
   toolRef.current = annot.tool;
@@ -44,7 +56,9 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
       return;
     }
     const text = selection.toString().trim();
-    if (text.length < 3 || text.length > 4000) {
+    // Any real word qualifies — a double-clicked "go" is a dictionary query —
+    // but bare punctuation from a stray drag still doesn't raise the pill.
+    if (!/[\p{L}\p{N}]/u.test(text) || text.length > 4000) {
       setSel(null);
       return;
     }
@@ -133,7 +147,21 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
     window.getSelection()?.removeAllRanges();
   }, [annot, sel]);
 
-  // While the pill is open, the keyboard mirrors it: 1–5 colors, U, S, N.
+  /** Dictionary entries top out around three words ("give up", "New York");
+   *  anything longer is prose for Explain, not a lookup. */
+  const canTranslate =
+    !!sel && sel.text.length <= 64 && sel.text.trim().split(/\s+/).length <= 3;
+
+  const openTranslate = useCallback(() => {
+    if (!sel) return;
+    setDictQuery({ text: sel.text, x: sel.x, y: sel.y });
+    setSel(null);
+    window.getSelection()?.removeAllRanges();
+  }, [sel]);
+
+  const closeTranslate = useCallback(() => setDictQuery(null), []);
+
+  // While the pill is open, the keyboard mirrors it: 1–5 colors, U, S, N, T.
   const canMark = !!sel && !sel.note && sel.markups.length > 0;
   useEffect(() => {
     if (!sel) return;
@@ -145,8 +173,13 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
         dismiss();
         return;
       }
-      if (!canMark) return;
       const key = e.key.toLowerCase();
+      if (key === "t" && canTranslate) {
+        e.preventDefault();
+        openTranslate();
+        return;
+      }
+      if (!canMark) return;
       if (key >= "1" && key <= "5") {
         e.preventDefault();
         applyMarkup("highlight", HIGHLIGHT_COLORS[Number(key) - 1].hex);
@@ -163,11 +196,11 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sel, canMark, applyMarkup, addNoteFromSel, dismiss, annot.hlColor]);
+  }, [sel, canMark, canTranslate, applyMarkup, addNoteFromSel, openTranslate, dismiss, annot.hlColor]);
 
-  if (!sel) return null;
+  if (!sel && !dictQuery) return null;
 
-  return (
+  const pill = sel && (
     <div
       ref={popoverRef}
       className="selection-popover"
@@ -217,6 +250,15 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
           <span className="sep" />
         </>
       )}
+      {canTranslate && (
+        <>
+          <button title="Translate (T)" onClick={openTranslate}>
+            <DictionaryGlyph />
+            Translate
+          </button>
+          <span className="sep" />
+        </>
+      )}
       <button
         onClick={() => {
           openPanel(
@@ -247,5 +289,14 @@ export function SelectionPopover(props: { hostRef: React.RefObject<HTMLDivElemen
         Ask about this
       </button>
     </div>
+  );
+
+  return (
+    <>
+      {dictQuery && (
+        <TranslatePopup query={dictQuery} hostRef={props.hostRef} onClose={closeTranslate} />
+      )}
+      {pill}
+    </>
   );
 }

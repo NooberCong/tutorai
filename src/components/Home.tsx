@@ -6,12 +6,18 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { LibraryEntry } from "../lib/types";
 import { claudeVersion, getLibrary, readDocText, removeLibraryEntry } from "../lib/tauri";
 import { Close, LogoMark, Plus } from "./Icons";
+import { DictionaryManager } from "./DictionaryManager";
+
+/** Most-recent books shown before the grid collapses behind "Show all" —
+ *  about two rows at the default window width. */
+const LIBRARY_PREVIEW = 12;
 
 export function Home(props: { onOpen: (path: string) => void; opening: string | null }) {
   const [library, setLibrary] = useState<LibraryEntry[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [claude, setClaude] = useState<string | null | undefined>(undefined);
   const [dragging, setDragging] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     getLibrary()
@@ -107,7 +113,7 @@ export function Home(props: { onOpen: (path: string) => void; opening: string | 
                 </span>
               </div>
               <div className="library-grid">
-                {library.map((entry) => (
+                {(showAll ? library : library.slice(0, LIBRARY_PREVIEW)).map((entry) => (
                   <div
                     key={entry.docId}
                     className="book"
@@ -154,8 +160,15 @@ export function Home(props: { onOpen: (path: string) => void; opening: string | 
                   </div>
                 ))}
               </div>
+              {!showAll && library.length > LIBRARY_PREVIEW && (
+                <button className="library-more" onClick={() => setShowAll(true)}>
+                  Show all {library.length} books
+                </button>
+              )}
             </section>
           )}
+
+          {library.length > 0 && <DictionaryManager />}
 
           {claude && <footer className="home-foot">{claude} · local · no api keys</footer>}
         </div>

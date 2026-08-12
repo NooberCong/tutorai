@@ -39,6 +39,9 @@ export interface Settings {
   /** Documents open in tabs last session, reopened on boot. `activePath`
    *  null means the library screen was showing. */
   openTabs: { paths: string[]; activePath: string | null };
+  /** Dictionary ids switched off for lookups. Storing the disabled set means
+   *  new imports and the built-in are on by default, with no migration. */
+  dictDisabled: string[];
 }
 
 export const SETTINGS_DEFAULTS: Settings = {
@@ -58,6 +61,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   ],
   inkPresetIdx: 0,
   openTabs: { paths: [], activePath: null },
+  dictDisabled: [],
 };
 
 let settings: Settings = { ...SETTINGS_DEFAULTS };

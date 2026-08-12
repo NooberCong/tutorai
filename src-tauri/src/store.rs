@@ -6,6 +6,8 @@
 //! Layout:
 //!   <app-data>/settings.json                          (app preferences: model, layout)
 //!   <app-data>/library.json
+//!   <app-data>/dictionaries/<id>/dict.ifo|idx|dict.dz (imported StarDict filesets;
+//!                                                      see dict.rs)
 //!   <app-data>/docs/<docId>/chapters/chapter-01.txt   (page-marked text)
 //!   <app-data>/docs/<docId>/meta.json                 (extraction result)
 //!   <app-data>/docs/<docId>/artifacts.json            (summaries, quizzes, chat)
@@ -49,7 +51,7 @@ pub struct RegisteredDoc {
     pub doc_dir: String,
 }
 
-fn data_root(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn data_root(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
@@ -77,9 +79,10 @@ fn doc_file(app: &AppHandle, doc_id: &str, rel: &str) -> Result<PathBuf, String>
     Ok(doc_dir(app, doc_id)?.join(rel))
 }
 
-/// Content identity for a PDF: sha256 over (size, head 256 KiB, tail 256 KiB).
-/// Cheap even for huge files, stable across renames and moves.
-fn content_id(path: &str) -> Result<String, String> {
+/// Content identity for an imported file: sha256 over (size, head 256 KiB,
+/// tail 256 KiB). Cheap even for huge files, stable across renames and moves.
+/// Used for PDFs here and for dictionary filesets in dict.rs.
+pub(crate) fn content_id(path: &str) -> Result<String, String> {
     const CHUNK: usize = 256 * 1024;
     let mut file = fs::File::open(path).map_err(|e| format!("cannot open PDF: {e}"))?;
     let len = file.metadata().map_err(|e| e.to_string())?.len();
