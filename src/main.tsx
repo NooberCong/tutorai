@@ -5,6 +5,7 @@ import { loadSettings } from "./lib/settings";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
+import "katex/dist/katex.min.css";
 import "./styles.css";
 
 // Settings load before the first paint so initial state reads them

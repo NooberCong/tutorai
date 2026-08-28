@@ -2155,6 +2155,29 @@ textarea::placeholder {
 .md th {
   background: var(--ink2);
 }
+/* KaTeX math. Its own sizing is 1.21em, which overpowers 13.5px body copy. */
+.md .katex {
+  font-size: 1.06em;
+  color: var(--text);
+}
+/* A displayed formula can be wider than the panel; scroll it rather than
+   letting it push the whole conversation sideways. */
+.md .katex-display {
+  margin: 10px 0;
+  padding: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.md .katex-display > .katex {
+  font-size: 1.12em;
+}
+/* Malformed TeX renders in place; KaTeX hardcodes #cc0000 inline, which is
+   near-invisible on this background. */
+.md .katex-error {
+  color: var(--bad) !important;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
 
 /* Activity feed — the instrument voice. */
 .activity {

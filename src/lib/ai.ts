@@ -28,6 +28,10 @@ function scopeFiles(meta: DocMeta, scope: Scope): { chapter: Chapter; file: stri
   }));
 }
 
+/** Math notation the renderer understands. It tells `$…$` math from a price by
+ *  shape, so the one thing worth asking for is an escaped dollar inside math. */
+const MATH_DELIMITERS = `Write mathematical notation as LaTeX: $$…$$ or \\[…\\] for a displayed formula, $…$ or \\(…\\) for inline math. Inside math, write a literal dollar sign as \\$.`;
+
 /** Shared framing: who you are, where the text lives, how to cite. */
 function docContext(meta: DocMeta, scope: Scope): string {
   const files = scopeFiles(meta, scope);
@@ -69,6 +73,7 @@ export function summaryPrompt(meta: DocMeta, scope: Scope): string {
     `5. "If you remember one thing" — a single takeaway.`,
     ``,
     `Keep it tight: prefer resolution over volume. Use ## headings, short paragraphs, and [p.N] citations on every concept.`,
+    MATH_DELIMITERS,
     `Output only the summary itself — no preamble like "Here is the summary".`,
   ].join("\n");
 }
@@ -133,6 +138,7 @@ export function chatSystemPreamble(meta: DocMeta): string {
     ``,
     `You are in an ongoing chat with the reader of this document. Ground every answer in the document text — Read or Grep the chapter files before answering anything substantive, and cite pages as [p.N]. If the document does not cover something, say so plainly before answering from general knowledge.`,
     `Answer in Markdown, concise by default.`,
+    MATH_DELIMITERS,
   ].join("\n");
 }
 
