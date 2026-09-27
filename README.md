@@ -153,6 +153,18 @@ An optional hatchery that rewards actual reading:
   keep hatching, or turn reading pets off entirely. Off means off: no
   tracking, no tab. Your collection is kept for when you turn it back on.
 
+<p align="center">
+  <img src="docs/screenshots/pet-reader.png" alt="The reader's corner: a pixel-art cat named Pip beside its egg, saying a one-line joke about the learning-rate page being read" width="100%" />
+  <sub><i>Pip reads along and, with the companion on, has opinions about step sizes.</i></sub>
+</p>
+<p align="center">
+  <img src="docs/screenshots/hatchery.png" alt="The hatchery: an epic Arcane egg warming in the incubator, the companion pet with its growth bar, the nest of found eggs, a weekly reading chart and field notes" width="49%" />
+  <img src="docs/screenshots/collection.png" alt="The collection: pixel-art creatures of the Leaf and Ember elements, with undiscovered ones shown as silhouettes" width="49%" />
+</p>
+<p align="center">
+  <sub><i>Left: the hatchery, with the egg you're warming, your companion, the nest and your reading week. Right: the collection fills in as you hatch; undiscovered species show as silhouettes.</i></sub>
+</p>
+
 ---
 
 ## How it works
