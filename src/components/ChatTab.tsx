@@ -7,6 +7,7 @@ import { useClaudeJob, useSession } from "../lib/session";
 import { removeDocPath } from "../lib/tauri";
 import { ActivityFeed, Md, Spinner } from "./AiPanel";
 import { ChatGlyph, PageMark, Send, Stop } from "./Icons";
+import { recordHabit } from "../lib/hatchery/tracker";
 
 export function ChatTab() {
   const {
@@ -42,6 +43,7 @@ export function ChatTab() {
   const send = async (displayText: string, sendText: string) => {
     if (!meta || state.running) return;
     pinnedRef.current = true;
+    recordHabit("ask");
     updateArtifacts((a) => ({
       ...a,
       chat: {

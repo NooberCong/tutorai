@@ -167,6 +167,18 @@ textarea::placeholder {
 .btn.wide {
   width: 100%;
 }
+/* A quiet text action: secondary choices that shouldn't compete with buttons. */
+.link-btn {
+  color: var(--faint);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 130ms, text-decoration-color 130ms;
+}
+.link-btn:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
+}
 
 .chip {
   display: inline-flex;

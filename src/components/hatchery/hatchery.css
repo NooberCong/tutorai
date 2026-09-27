@@ -1,0 +1,998 @@
+/* ── Hatchery ─────────────────────────────────────────────────────────────
+   Pixel creatures on the "night study" ink. Tier colors are the one new
+   hue family here; the spring-green accent stays reserved for AI and for
+   primary actions. Sprites always scale by whole pixels, nearest-neighbor. */
+
+:root {
+  --t-common: #a9bcb0;
+  --t-rare: #62b3ff;
+  --t-epic: #bb8dff;
+  --t-legendary: #f2c14e;
+}
+
+.pixel {
+  image-rendering: pixelated;
+  display: block;
+  flex: none;
+}
+.pixel-slot {
+  display: block;
+  flex: none;
+}
+
+/* A 32px egg sprite cropped to the egg itself (it spans x 7–24, y 6–29),
+   for inline icons — scaling pixel art down would drop pixels. */
+.egg-crop {
+  display: inline-block;
+  flex: none;
+  width: 20px;
+  height: 24px;
+  overflow: hidden;
+}
+.egg-crop > img {
+  margin: -6px 0 0 -6px;
+}
+
+.tier-common { --tier: var(--t-common); }
+.tier-rare { --tier: var(--t-rare); }
+.tier-epic { --tier: var(--t-epic); }
+.tier-legendary { --tier: var(--t-legendary); }
+
+.tier-text {
+  color: var(--tier);
+}
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--tier);
+  background: color-mix(in srgb, var(--tier) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tier) 30%, transparent);
+  vertical-align: middle;
+}
+.shiny-star {
+  color: var(--t-legendary);
+  font-style: normal;
+  margin-left: 6px;
+  text-shadow: 0 0 8px rgba(242, 193, 78, 0.6);
+}
+
+/* Idle bob: a one-sprite-pixel hop, stepped like a real pixel animation. */
+.bob {
+  --bob: -2px;
+  animation: pix-bob 1.8s steps(1, end) infinite;
+}
+@keyframes pix-bob {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 var(--bob); }
+}
+/* Asleep: sinks one sprite pixel on a slow breath. */
+.breathe {
+  animation: pix-breathe 3.6s steps(1, end) infinite;
+}
+@keyframes pix-breathe {
+  0%, 100% { translate: 0 0; }
+  45% { translate: 0 2px; }
+}
+@keyframes egg-wobble {
+  0%, 100% { rotate: 0deg; }
+  20% { rotate: -7deg; }
+  40% { rotate: 6deg; }
+  60% { rotate: -3deg; }
+  80% { rotate: 0deg; }
+}
+
+/* ── Hatchery screen ── */
+
+.home-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--ink1);
+  border: 1px solid var(--line);
+}
+.home-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--dim);
+  transition: background 130ms, color 130ms;
+}
+.home-tabs button:hover {
+  color: var(--text);
+}
+.home-tabs button.on {
+  background: var(--ink3);
+  color: var(--text);
+  box-shadow: var(--lift);
+}
+.home-tabs .tab-egg {
+  position: relative;
+  display: inline-flex;
+}
+.home-tabs .tab-egg.ready::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--t-legendary);
+  box-shadow: 0 0 6px var(--t-legendary);
+}
+
+.hatchery {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.hatchery section {
+  background: var(--ink1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  box-shadow: var(--lift);
+}
+.hatchery .section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.hatchery h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+.hatchery .count,
+.card-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.card-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+.hatchery .fine {
+  font-size: 12px;
+  color: var(--faint);
+}
+.hatchery .fine i {
+  color: var(--dim);
+}
+.empty-note {
+  color: var(--dim);
+  font-size: 13px;
+  max-width: 44ch;
+}
+
+.hatchery-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+@media (max-width: 760px) {
+  .hatchery-hero,
+  .hatchery-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A lit stage for the big sprites: soft floor glow in the tier color. */
+.pedestal {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 150px;
+  height: 34px;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--tier, var(--t-common)) 26%, transparent), transparent);
+  pointer-events: none;
+}
+
+.incubator,
+.companion-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 250px;
+}
+.incubator {
+  background:
+    radial-gradient(260px 200px at 26% 58%, color-mix(in srgb, var(--tier) 9%, transparent), transparent 70%),
+    var(--ink1) !important;
+}
+.incubator > .incubator-egg,
+.incubator > .incubator-meta {
+  align-self: stretch;
+}
+.incubator {
+  display: grid !important;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto 1fr;
+  column-gap: 18px;
+  align-items: center;
+}
+.incubator .card-label,
+.incubator .empty-note {
+  grid-column: 1 / -1;
+}
+.incubator-egg {
+  position: relative;
+  padding: 4px 10px 12px;
+}
+.incubator-egg.ready img {
+  animation: egg-wobble 1.1s steps(6, end) infinite;
+  transform-origin: 50% 90%;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--tier) 55%, transparent));
+}
+.incubator-egg:disabled {
+  cursor: default;
+}
+.incubator-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+.incubator-meta h3,
+.companion-meta h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hatch-btn {
+  align-self: flex-start;
+  padding: 9px 22px;
+  font-size: 14px;
+}
+
+.companion-detail {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex: 1;
+}
+.companion-stage {
+  position: relative;
+  padding: 0 10px 10px;
+}
+.companion-stage .bob {
+  --bob: -5px;
+}
+.companion-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+.companion-meta h3 {
+  cursor: text;
+}
+.companion-meta .sub {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.rename,
+.hatch-name {
+  font: inherit;
+  font-family: var(--serif);
+  font-size: 20px;
+  color: var(--text);
+  background: var(--ink2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
+  outline: none;
+  width: 100%;
+}
+/* Preferences sit quietly under everything, not as another card. */
+.hatchery section.hatchery-prefs {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.hatchery-prefs small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.hatchery-prefs .link-btn {
+  font-size: 12.5px;
+  text-align: right;
+}
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--dim);
+  cursor: pointer;
+}
+.toggle-row input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.meter-track {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ink3);
+  overflow: hidden;
+}
+.meter-track > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tier, var(--t-legendary)) 70%, #000), var(--tier, var(--t-legendary)));
+  transition: width 600ms;
+}
+.meter span {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.nest-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.nest-egg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 8px 7px;
+  border-radius: var(--r-md);
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  transition: border-color 130ms, translate 130ms;
+}
+.nest-egg:hover {
+  border-color: color-mix(in srgb, var(--tier) 50%, transparent);
+  translate: 0 -2px;
+}
+.nest-egg span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--tier);
+}
+
+.hatchery-split {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 18px;
+}
+.week-bars {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  height: 96px;
+  align-items: end;
+}
+.week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  height: 100%;
+}
+.week-day i {
+  width: 100%;
+  max-width: 26px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--ink3);
+}
+.week-day i.met {
+  background: linear-gradient(180deg, #7fd7a6, #3f9e6c);
+}
+.week-day span {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+}
+.week-day.today span {
+  color: var(--text);
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+.stat b {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 19px;
+}
+.stat span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.field-notes ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 14px;
+}
+.field-notes li {
+  display: grid;
+  grid-template-columns: 20px auto 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  font-size: 12.5px;
+  color: var(--faint);
+  padding: 3px 6px 3px 4px;
+  border-radius: var(--r-sm);
+}
+.field-notes li b {
+  font-weight: 600;
+  color: var(--dim);
+}
+.field-notes li span {
+  line-height: 1.3;
+}
+.field-notes li.on {
+  color: var(--text);
+  background: var(--ink2);
+}
+.field-notes li.on b {
+  color: var(--text);
+}
+.field-notes li em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t-legendary);
+}
+.field-notes li .egg-crop {
+  opacity: 0.5;
+}
+.field-notes li.on .egg-crop {
+  opacity: 1;
+}
+
+.element-row + .element-row {
+  margin-top: 14px;
+}
+.element-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.element-head b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.element-head span {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.species-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.species-cell,
+.pet-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 6px 9px;
+  border-radius: var(--r-md);
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  transition: border-color 130ms, background 130ms;
+  min-width: 0;
+}
+.species-cell:hover,
+.pet-cell:hover {
+  border-color: color-mix(in srgb, var(--tier, var(--t-common)) 45%, transparent);
+  background: var(--ink3);
+}
+.species-cell.found {
+  background:
+    radial-gradient(70px 44px at 50% 72%, color-mix(in srgb, var(--tier) 12%, transparent), transparent),
+    var(--ink2);
+}
+.species-cell b,
+.pet-cell b {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.species-cell.unknown b {
+  color: var(--faint);
+}
+.species-cell > span,
+.pet-cell > span {
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.pet-cell > span {
+  color: var(--faint);
+}
+.species-cell .shiny-star {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  margin: 0;
+}
+.pet-grid,
+.detail-pets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+}
+.pet-cell.current {
+  border-color: rgba(242, 193, 78, 0.5);
+  box-shadow: 0 0 0 1px rgba(242, 193, 78, 0.18);
+}
+
+/* ── modals: hatch ceremony & species detail ── */
+
+.hatch-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 6, 5, 0.78);
+  backdrop-filter: blur(3px);
+  animation: veil-in 220ms ease-out;
+}
+@keyframes veil-in {
+  from { opacity: 0; }
+}
+.hatch-stage {
+  position: relative;
+  width: min(460px, 92vw);
+  min-height: 420px;
+  display: grid;
+  place-items: center;
+}
+.hatch-light {
+  position: absolute;
+  inset: -40px;
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--tier) 16%, transparent) 0deg 10deg,
+    transparent 10deg 24deg
+  );
+  mask: radial-gradient(closest-side, #000 20%, transparent 72%);
+  animation: rays 24s linear infinite;
+  pointer-events: none;
+}
+@keyframes rays {
+  to { rotate: 360deg; }
+}
+.hatch-egg img {
+  transform-origin: 50% 88%;
+}
+.hatch-egg.rock-1 img { animation: egg-wobble 0.75s steps(6, end) infinite; }
+.hatch-egg.rock-2 img { animation: egg-wobble 0.5s steps(6, end) infinite; }
+.hatch-egg.rock-3 img { animation: egg-shake 0.16s steps(2, end) infinite; }
+@keyframes egg-shake {
+  0% { translate: -4px 0; }
+  100% { translate: 4px 0; }
+}
+.hatch-egg.pop img {
+  animation: egg-pop 350ms steps(4, end) forwards;
+}
+@keyframes egg-pop {
+  to { scale: 1.35; opacity: 0; }
+}
+.hatch-flash {
+  position: absolute;
+  inset: -60px;
+  background: radial-gradient(closest-side, #fffbe6, color-mix(in srgb, var(--tier) 40%, transparent) 45%, transparent);
+  animation: flash 500ms ease-out forwards;
+  pointer-events: none;
+}
+@keyframes flash {
+  from { opacity: 1; scale: 0.4; }
+  to { opacity: 0; scale: 1.3; }
+}
+.hatch-born {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.hatch-creature {
+  animation: born 420ms steps(5, end);
+}
+.hatch-creature .bob {
+  --bob: -6px;
+}
+@keyframes born {
+  0% { scale: 0.3; }
+  70% { scale: 1.12; }
+  100% { scale: 1; }
+}
+.shiny-tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--t-legendary);
+  text-shadow: 0 0 10px rgba(242, 193, 78, 0.7);
+}
+.hatch-card,
+.species-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(380px, 90vw);
+  padding: 20px 22px;
+  border-radius: var(--r-lg);
+  background: var(--ink1);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  text-align: center;
+  animation: card-up 300ms ease-out;
+}
+@keyframes card-up {
+  from { translate: 0 12px; opacity: 0; }
+}
+.hatch-card h2,
+.species-detail h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 26px;
+  line-height: 1.1;
+}
+.hatch-sub {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.hatch-lore,
+.detail-lore {
+  font-family: var(--serif);
+  font-size: 15px;
+  color: var(--dim);
+  line-height: 1.45;
+}
+.hatch-name {
+  font-size: 16px;
+  text-align: center;
+}
+.hatch-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.species-detail {
+  width: min(520px, 94vw);
+}
+.detail-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.element-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.detail-stages {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 4px 0;
+}
+.detail-stages figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.detail-stages figcaption {
+  display: flex;
+  flex-direction: column;
+}
+.detail-stages figcaption b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.detail-stages figcaption span {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+}
+.species-detail .detail-pets {
+  width: 100%;
+}
+
+/* ── the den: companion + egg in the reader's corner ── */
+
+/* Above the pages, below the reader's popovers (30) and markup rail (40) —
+   except while its card is open, which the reader asked for. */
+.den {
+  position: absolute;
+  left: 14px;
+  bottom: 10px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+.den.open {
+  z-index: 45;
+}
+.den > * {
+  pointer-events: auto;
+}
+.den-floor {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.den-pet,
+.den-egg {
+  position: relative;
+  padding: 0;
+  border-radius: 8px;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
+}
+.den-pet:hover img,
+.den-egg:hover img {
+  filter: brightness(1.12);
+}
+.den-pet img.asleep {
+  opacity: 0.85;
+}
+.den-pet .bob {
+  animation-duration: 2.6s;
+}
+
+/* One-shot reactions on the pet: waking hop, a heart for study habits, a
+   glow when it grows. Keyed in React so each one restarts the animation. */
+.den-react {
+  display: block;
+}
+.react-hop,
+.react-love {
+  animation: pix-hop 420ms steps(4, end);
+}
+.react-grow {
+  animation: pix-hop 420ms steps(4, end) 2, grow-glow 1.6s ease-out;
+}
+@keyframes pix-hop {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -6px; }
+}
+@keyframes grow-glow {
+  0%, 100% { filter: none; }
+  30% { filter: brightness(1.6) drop-shadow(0 0 10px var(--tier)); }
+}
+.den-heart {
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  margin-left: -7px;
+  pointer-events: none;
+  animation: heart-rise 1.1s steps(8, end) forwards;
+}
+@keyframes heart-rise {
+  0% { translate: 0 4px; opacity: 0; }
+  15% { translate: 0 0; opacity: 1; }
+  70% { opacity: 1; }
+  100% { translate: 0 -14px; opacity: 0; }
+}
+.den-egg {
+  /* Same 2× pixels as the pet, trimmed to the egg (x 6–25, y 6–29) so its
+     base sits on the pet's ground line (y≈30); the warmth bar hangs below
+     without lifting it. */
+  margin-bottom: 2px;
+}
+.den-egg img {
+  display: block;
+  margin: -12px -12px -4px;
+}
+.den-egg.ready img {
+  animation: egg-wobble-rest 3.2s steps(24, end) infinite;
+  transform-origin: 50% 90%;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--tier) 80%, transparent));
+}
+/* A wobble, then a rest — peripheral motion while reading stays rare. */
+@keyframes egg-wobble-rest {
+  0%, 30%, 100% { rotate: 0deg; }
+  6% { rotate: -8deg; }
+  12% { rotate: 7deg; }
+  18% { rotate: -4deg; }
+  24% { rotate: 2deg; }
+}
+/* A freshly found egg hops once. */
+.den-egg.nudge {
+  animation: pix-hop 420ms steps(4, end);
+}
+.den-egg-bar {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  translate: -50% 0;
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.den-egg-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--tier);
+  transition: width 600ms;
+}
+.den-bubble {
+  max-width: 250px;
+  padding: 7px 12px;
+  border-radius: 12px 12px 12px 3px;
+  background: var(--ink2);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-soft);
+  font-size: 12.5px;
+  color: var(--text);
+  animation: card-up 260ms ease-out, bubble-out 400ms ease-in 4.6s forwards;
+}
+.den-bubble {
+  cursor: pointer;
+}
+/* The pet talking: longer to read, so it stays longer; its name on top. */
+.den-bubble.quip {
+  max-width: 280px;
+  line-height: 1.4;
+  animation: card-up 260ms ease-out, bubble-out 400ms ease-in 9s forwards;
+}
+.den-speaker {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--tier, var(--t-legendary));
+}
+@keyframes bubble-out {
+  to { opacity: 0; translate: 0 -4px; }
+}
+.den-card {
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--ink1);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  animation: card-up 200ms ease-out;
+}
+.den-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.den-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.den-title b {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 16px;
+}
+.den-title span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.den-title span.tier-text {
+  color: var(--tier);
+}
+.den-note {
+  font-size: 12px;
+  color: var(--faint);
+}
+.den-live {
+  font-family: var(--mono);
+  line-height: 1.3;
+  font-size: 10.5px;
+  color: var(--faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.den-live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.den-live.on {
+  color: var(--dim);
+}
+.den-live.on::before {
+  background: var(--t-legendary);
+  box-shadow: 0 0 6px var(--t-legendary);
+}
+.den-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.den-actions .btn,
+.den-actions .icon-btn {
+  white-space: nowrap;
+}
+.den-actions .btn {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+.den-quiet {
+  display: flex;
+  gap: 10px;
+}
+.den-quiet .link-btn {
+  font-size: 11.5px;
+}

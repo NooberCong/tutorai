@@ -98,12 +98,23 @@ export interface Insight {
   createdAt: number;
 }
 
+/** A one-line aside the reader's hatchery pet says about a page. Written by
+ *  the same companion run as the margin notes (no extra quota); said once. */
+export interface PetQuip {
+  id: string;
+  page: number;
+  text: string;
+  said: boolean;
+}
+
 /** Proactive companion output for one document (the on/off switch is an
  *  app-wide setting). `sections` records analyzed page spans
  *  (key `p<start>-<end>`) so a span is never paid for twice. */
 export interface InsightsState {
   notes: Insight[];
   sections: Record<string, "done" | "empty">;
+  /** Absent in files written before pets could talk. */
+  quips?: PetQuip[];
 }
 
 export interface ProjectInfo {

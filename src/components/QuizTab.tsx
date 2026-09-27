@@ -4,6 +4,7 @@ import { useClaudeJob, useSession } from "../lib/session";
 import { scopeLabel, type Quiz, type Scope } from "../lib/types";
 import { ActivityFeed, Md, ScopePicker, Spinner } from "./AiPanel";
 import { Check, ChevronLeft, ChevronRight, Close } from "./Icons";
+import { recordHabit } from "../lib/hatchery/tracker";
 
 export function QuizTab() {
   const { meta, reg, model, artifacts, updateArtifacts } = useSession();
@@ -276,9 +277,10 @@ function QuizPlayer(props: { quiz: Quiz; onExit: () => void }) {
               key={i}
               className={cls}
               disabled={answered}
-              onClick={() =>
-                record(answers.map((a, j) => (j === step ? i : a)))
-              }
+              onClick={() => {
+                if (i === q.answer) recordHabit("quiz");
+                record(answers.map((a, j) => (j === step ? i : a)));
+              }}
             >
               <span className="choice-key">{String.fromCharCode(65 + i)}</span>
               {choice}

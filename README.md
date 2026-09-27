@@ -120,6 +120,10 @@ is by design. Every analyzed span is cached in the document's artifacts, so a
 span never spends your quota twice; a note can be dismissed or handed to the
 chat tab to dig deeper.
 
+With a reading pet around (below), the companion's runs also give your pet
+the occasional one-line aside about the page you're on. The same call does
+both, so it costs nothing extra.
+
 <p align="center">
   <img src="docs/screenshots/quiz.png" alt="Quiz tab: a graded multiple-choice question with an explanation and page citation" width="49%" />
   <img src="docs/screenshots/chat.png" alt="Chat tab: a page-grounded conversation streaming in, with live tool activity below the answer" width="49%" />
@@ -127,6 +131,27 @@ chat tab to dig deeper.
 <p align="center">
   <sub><i>Left: quizzes grade as you go and cite the page behind every answer. Right: chat streams in live — including which chapter files the tutor is reading.</i></sub>
 </p>
+
+### Reading pets
+
+An optional hatchery that rewards actual reading:
+
+- **Eggs warm while you read.** Only real reading counts: time on the page
+  with recent scrolls, page turns or selections. It pauses when you step away.
+  Every 25 minutes of reading turns up a new egg. Finishing a chapter or a
+  whole book finds a rarer one.
+- **80 creatures to collect.** There are 10 per element across 8 elements
+  (leaf, ember, tide, stone, sky, frost, moon, arcane). Each has four tiers
+  from common to legendary, three growth stages, and a rare shiny variant.
+  All of them are pixel art drawn by code (`src/lib/hatchery/`).
+- **A companion in the corner.** Your chosen pet sits by the page. It sleeps
+  when you stop reading, hops when you come back, and cheers finished
+  chapters and study habits (highlighting, quizzing, lookups). With the
+  reading companion on, it also cracks a joke now and then about what you're
+  reading.
+- **Out of the way when you want it to be.** Hide the pet from the reader and
+  keep hatching, or turn reading pets off entirely. Off means off: no
+  tracking, no tab. Your collection is kept for when you turn it back on.
 
 ---
 
@@ -198,14 +223,21 @@ src/                      React frontend
                           prompt builders, session state
   components/             Reader, Home/library, toolbar, and the
                           Summary / Quiz / Chat / Project tabs
+  lib/hatchery/           reading pets: game rules, reading tracker,
+                          pixel-art rasterizer and the 80 species
+                          (art guide in ART.md)
+  components/hatchery/    hatchery screen, hatch reveal, reader companion
 src-tauri/src/
   claude.rs               headless CLI runner: spawn, NDJSON→event
                           translation, cancellation
   jobs.rs                 in-flight job registry
-  store.rs                library index + per-document cache on disk
+  store.rs                library index, per-document cache and the
+                          hatchery save on disk
 scripts/
   render-icon.mjs         rasterizes the SVG app-icon design source
                           (regenerate everything with `npm run icon`)
+  sprite-sheet.ts         renders every egg and pet to a PNG contact
+                          sheet for art review (`node scripts/sprite-sheet.ts`)
 ```
 
 ### Design

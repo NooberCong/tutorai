@@ -6,6 +6,8 @@
 //! Layout:
 //!   <app-data>/settings.json                          (app preferences: model, layout)
 //!   <app-data>/library.json
+//!   <app-data>/hatchery.json                          (reading pets: eggs, collection,
+//!                                                      reading-time stats)
 //!   <app-data>/dictionaries/<id>/dict.ifo|idx|dict.dz (imported StarDict filesets;
 //!                                                      see dict.rs)
 //!   <app-data>/docs/<docId>/chapters/chapter-01.txt   (page-marked text)
@@ -146,6 +148,30 @@ pub fn read_settings(app: AppHandle) -> Result<Option<String>, String> {
 #[tauri::command]
 pub fn write_settings(app: AppHandle, content: String) -> Result<(), String> {
     fs::write(settings_path(&app)?, content).map_err(|e| e.to_string())
+}
+
+fn hatchery_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(data_root(app)?.join("hatchery.json"))
+}
+
+#[tauri::command]
+pub fn read_hatchery(app: AppHandle) -> Result<Option<String>, String> {
+    match fs::read_to_string(hatchery_path(&app)?) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// The hatchery save is the one file here a user would grieve over (their
+/// whole collection), so it's written to a temp file and renamed into place:
+/// a crash mid-write leaves the previous save intact, never a torn file.
+#[tauri::command]
+pub fn write_hatchery(app: AppHandle, content: String) -> Result<(), String> {
+    let path = hatchery_path(&app)?;
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, content).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
 /// Snips are one-shot chat attachments. The chat wipes them when the

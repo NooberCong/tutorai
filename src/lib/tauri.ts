@@ -15,6 +15,10 @@ export const readSettings = () => invoke<string | null>("read_settings");
 export const writeSettings = (content: string) =>
   invoke<void>("write_settings", { content });
 
+export const readHatchery = () => invoke<string | null>("read_hatchery");
+export const writeHatchery = (content: string) =>
+  invoke<void>("write_hatchery", { content });
+
 export const registerPdf = (path: string) =>
   invoke<RegisteredDoc>("register_pdf", { path });
 

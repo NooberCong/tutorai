@@ -99,6 +99,8 @@ pub fn run() {
             initial_file,
             store::read_settings,
             store::write_settings,
+            store::read_hatchery,
+            store::write_hatchery,
             store::register_pdf,
             store::get_library,
             store::upsert_library_entry,

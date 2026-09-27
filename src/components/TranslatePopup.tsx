@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { anyEnabled, lookup } from "../lib/dictionary";
 import type { DictHit } from "../lib/types";
 import { Close } from "./Icons";
+import { recordHabit } from "../lib/hatchery/tracker";
 
 export interface DictQuery {
   text: string;
@@ -53,7 +54,9 @@ export function TranslatePopup(props: {
           return;
         }
         const hits = await lookup(query.text);
-        if (!stale) setResult(hits.length ? { kind: "hits", hits } : { kind: "none" });
+        if (stale) return;
+        setResult(hits.length ? { kind: "hits", hits } : { kind: "none" });
+        if (hits.length) recordHabit("lookup");
       } catch (e) {
         if (!stale) setResult({ kind: "error", message: String(e) });
       }

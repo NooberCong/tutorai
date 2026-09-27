@@ -5,7 +5,11 @@
  *  chapters are split into spans of ≤ 8 pages; a span runs only after the
  *  reader dwells on it (plus one span of read-ahead); one job in flight at a
  *  time; results and empty verdicts are cached in artifacts.json forever, so
- *  no span is ever paid for twice. Failed spans are skipped for the session. */
+ *  no span is ever paid for twice. Failed spans are skipped for the session.
+ *
+ *  When a hatchery pet sits in the reader, the same run also asks for an
+ *  optional one-line aside in the pet's voice (a "quip"), stored alongside
+ *  the notes and said once by the pet when the reader reaches that page. */
 
 import {
   createContext,
@@ -22,13 +26,15 @@ import {
   NOTES_FILE,
   notesFileContent,
   parseInsights,
+  parseQuip,
   type InsightSpan,
 } from "./ai";
+import { talkingPet } from "./hatchery/store";
 import { wholeDocChapter } from "./pdf";
 import { useSession } from "./session";
 import { getSetting, saveSetting } from "./settings";
 import { readDocText, runJob, writeDocText } from "./tauri";
-import type { DocMeta, Insight } from "./types";
+import type { DocMeta, Insight, PetQuip } from "./types";
 
 const SPAN_PAGES = 8;
 const DWELL_MS = 8_000;
@@ -63,6 +69,9 @@ interface InsightsValue {
   dismiss: (id: string) => void;
   /** Hand a note to the chat tab as a conversation seed. */
   discuss: (note: Insight) => void;
+  /** The hatchery pet's asides for this book, from the same runs. */
+  quips: PetQuip[];
+  markQuipSaid: (id: string) => void;
 }
 
 const InsightsContext = createContext<InsightsValue | null>(null);
@@ -91,12 +100,12 @@ export function InsightsProvider(props: { children: ReactNode }) {
 
   // Snapshot for the async runner, so it reads current values without being
   // re-created (and re-triggering the scheduler) on every artifacts change.
-  const latest = useRef({ meta, model, insights });
-  latest.current = { meta, model, insights };
+  const latest = useRef({ meta, model, insights, currentPage });
+  latest.current = { meta, model, insights, currentPage };
 
   const runSpan = useCallback(
     async (span: InsightSpan) => {
-      const { meta, model, insights } = latest.current;
+      const { meta, model, insights, currentPage } = latest.current;
       if (!meta) return;
       setReading(span);
       try {
@@ -110,6 +119,10 @@ export function InsightsProvider(props: { children: ReactNode }) {
           .then((t): number[] => (t ? (JSON.parse(t) as { pages: number[] }).pages : []))
           .catch(() => [])
           .then((all) => all.filter((p) => p >= span.startPage && p <= span.endPage));
+        const pet = talkingPet();
+        // The quip may be about any page the reader hasn't passed yet.
+        const inSpan = currentPage >= span.startPage && currentPage <= span.endPage;
+        const quipFor = pet && { pet, fromPage: inSpan ? currentPage : span.startPage };
         const handle = runJob({
           prompt: insightsPrompt(
             meta,
@@ -117,6 +130,7 @@ export function InsightsProvider(props: { children: ReactNode }) {
             texts,
             figurePages,
             insights.notes.map((n) => n.title),
+            quipFor,
           ),
           cwd: reg.docDir,
           model: model || null,
@@ -124,11 +138,13 @@ export function InsightsProvider(props: { children: ReactNode }) {
         cancelRef.current = handle.cancel;
         const done = await handle.result;
         const notes = parseInsights(done.text, span, texts);
+        const quip = quipFor ? parseQuip(done.text, span, quipFor.fromPage) : null;
         updateArtifacts((a) => ({
           ...a,
           insights: {
             ...a.insights,
             notes: [...a.insights.notes, ...notes],
+            quips: quip ? [...(a.insights.quips ?? []), quip] : a.insights.quips,
             sections: {
               ...a.insights.sections,
               [spanKey(span)]: notes.length ? "done" : "empty",
@@ -203,6 +219,19 @@ export function InsightsProvider(props: { children: ReactNode }) {
     [openPanel],
   );
 
+  const markQuipSaid = useCallback(
+    (id: string) => {
+      updateArtifacts((a) => ({
+        ...a,
+        insights: {
+          ...a.insights,
+          quips: (a.insights.quips ?? []).map((q) => (q.id === id ? { ...q, said: true } : q)),
+        },
+      }));
+    },
+    [updateArtifacts],
+  );
+
   const notesByPage = useMemo(() => {
     const map = new Map<number, Insight[]>();
     for (const note of insights.notes) {
@@ -214,9 +243,11 @@ export function InsightsProvider(props: { children: ReactNode }) {
     return map;
   }, [insights.notes]);
 
+  const quips = useMemo(() => insights.quips ?? [], [insights.quips]);
+
   const value = useMemo<InsightsValue>(
-    () => ({ enabled, setEnabled, reading, notesByPage, dismiss, discuss }),
-    [enabled, setEnabled, reading, notesByPage, dismiss, discuss],
+    () => ({ enabled, setEnabled, reading, notesByPage, dismiss, discuss, quips, markQuipSaid }),
+    [enabled, setEnabled, reading, notesByPage, dismiss, discuss, quips, markQuipSaid],
   );
 
   return <InsightsContext.Provider value={value}>{props.children}</InsightsContext.Provider>;

@@ -7,12 +7,23 @@ import type { LibraryEntry } from "../lib/types";
 import { claudeVersion, getLibrary, readDocText, removeLibraryEntry } from "../lib/tauri";
 import { Close, LogoMark, Plus } from "./Icons";
 import { DictionaryManager } from "./DictionaryManager";
+import { HatcheryScreen } from "./hatchery/HatcheryScreen";
+import { TabEgg } from "./hatchery/TabEgg";
+import { saveSetting, useSetting } from "../lib/settings";
 
 /** Most-recent books shown before the grid collapses behind "Show all" —
  *  about two rows at the default window width. */
 const LIBRARY_PREVIEW = 12;
 
-export function Home(props: { onOpen: (path: string) => void; opening: string | null }) {
+export function Home(props: {
+  onOpen: (path: string) => void;
+  opening: string | null;
+  view: "library" | "hatchery";
+  setView: (v: "library" | "hatchery") => void;
+}) {
+  // With reading pets off, the library is the only view.
+  const hatcheryOn = useSetting("hatchery");
+  const view = hatcheryOn ? props.view : "library";
   const [library, setLibrary] = useState<LibraryEntry[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [claude, setClaude] = useState<string | null | undefined>(undefined);
@@ -73,6 +84,27 @@ export function Home(props: { onOpen: (path: string) => void; opening: string | 
           <LogoMark size={26} />
           <span className="wordmark">TutorAI</span>
         </div>
+        {hatcheryOn && (
+          <div className="home-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={view === "library"}
+              className={view === "library" ? "on" : ""}
+              onClick={() => props.setView("library")}
+            >
+              Library
+            </button>
+            <button
+              role="tab"
+              aria-selected={view === "hatchery"}
+              className={view === "hatchery" ? "on" : ""}
+              onClick={() => props.setView("hatchery")}
+            >
+              <TabEgg />
+              Hatchery
+            </button>
+          </div>
+        )}
         <button className="btn primary" onClick={pick} disabled={!!props.opening}>
           <Plus width={13} height={13} />
           {props.opening ? "Opening…" : "Open PDF"}
@@ -88,7 +120,9 @@ export function Home(props: { onOpen: (path: string) => void; opening: string | 
             </div>
           )}
 
-          {library.length === 0 ? (
+          {view === "hatchery" ? (
+            <HatcheryScreen onTurnOff={() => props.setView("library")} />
+          ) : library.length === 0 ? (
             <header className="home-hero">
               <h1>
                 Every book, with a <em>tutor</em> inside.
@@ -168,9 +202,19 @@ export function Home(props: { onOpen: (path: string) => void; opening: string | 
             </section>
           )}
 
-          {library.length > 0 && <DictionaryManager />}
+          {view === "library" && library.length > 0 && <DictionaryManager />}
 
-          {claude && <footer className="home-foot">{claude} · local · no api keys</footer>}
+          {(claude || !hatcheryOn) && (
+            <footer className="home-foot">
+              {claude && `${claude} · local · no api keys`}
+              {claude && !hatcheryOn && " · "}
+              {!hatcheryOn && (
+                <button className="link-btn" onClick={() => saveSetting("hatchery", true)}>
+                  turn reading pets on
+                </button>
+              )}
+            </footer>
+          )}
         </div>
       </div>
 

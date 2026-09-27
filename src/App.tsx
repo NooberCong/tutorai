@@ -17,6 +17,7 @@ import { MarkupRail } from "./components/MarkupRail";
 import { SearchBar } from "./components/SearchBar";
 import { SelectionPopover } from "./components/SelectionPopover";
 import { Undo } from "./components/Icons";
+import { ReaderCompanion } from "./components/hatchery/ReaderCompanion";
 import { AnnotationsProvider, useAnnotations } from "./lib/annotations";
 import { InsightsProvider, useInsights } from "./lib/insights";
 import { SearchProvider } from "./lib/search";
@@ -32,7 +33,7 @@ import {
   writeDocText,
 } from "./lib/tauri";
 import type { RegisteredDoc } from "./lib/types";
-import { getSetting, saveSetting, SETTINGS_DEFAULTS } from "./lib/settings";
+import { getSetting, saveSetting, SETTINGS_DEFAULTS, useSetting } from "./lib/settings";
 
 /** One open document. `page`/`scroll` are where the reader resumes when the
  *  tab (re)activates — seeded from the library index on open, refreshed by the
@@ -191,6 +192,13 @@ export default function App() {
   // "Back to library" keeps every tab alive — the strip stays visible on the
   // library screen, so open documents remain one click away.
   const goHome = useCallback(() => setActiveId(null), []);
+  // Which library-screen view shows: the book grid or the hatchery. Lives
+  // here so the reader's companion can jump straight to the hatchery.
+  const [homeView, setHomeView] = useState<"library" | "hatchery">("library");
+  const openHatchery = useCallback(() => {
+    setHomeView("hatchery");
+    setActiveId(null);
+  }, []);
 
   const closeTab = useCallback((docId: string) => {
     const idx = tabsRef.current.findIndex((t) => t.reg.docId === docId);
@@ -297,6 +305,7 @@ export default function App() {
                 <SearchProvider>
                   <DocScreen
                     onHome={goHome}
+                    onOpenHatchery={openHatchery}
                     initialPage={active.page}
                     initialScroll={active.scroll}
                   />
@@ -310,7 +319,7 @@ export default function App() {
           </div>
         )
       ) : (
-        <Home onOpen={openPath} opening={opening} />
+        <Home onOpen={openPath} opening={opening} view={homeView} setView={setHomeView} />
       )}
     </div>
   );
@@ -350,6 +359,7 @@ function clampWidth(spec: PanelSpec, w: number): number {
 
 function DocScreen(props: {
   onHome: () => void;
+  onOpenHatchery: () => void;
   initialPage: number;
   initialScroll: number;
 }) {
@@ -359,6 +369,7 @@ function DocScreen(props: {
   const [scale, setScale] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => getSetting("sidebarOpen"));
   const [panelOpen, setPanelOpen] = useState(() => getSetting("panelOpen"));
+  const hatcheryOn = useSetting("hatchery");
 
   // Remember panel visibility across restarts (covers every way they change,
   // including panel requests force-opening the tutor).
@@ -476,6 +487,7 @@ function DocScreen(props: {
           <SearchBar />
           <SelectionPopover hostRef={readerHostRef} />
           <MarkupRail />
+          {hatcheryOn && <ReaderCompanion onOpenHatchery={props.onOpenHatchery} />}
           {undoToast && (
             <button
               key={undoToast.nonce}

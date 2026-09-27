@@ -10,6 +10,7 @@
  *  reads are synchronous and saves write through in the background.
  */
 
+import { useSyncExternalStore } from "react";
 import { readSettings, writeSettings } from "./tauri";
 
 /** One pen-tray preset: a remembered pen the reader can switch to in one tap. */
@@ -42,6 +43,12 @@ export interface Settings {
   /** Dictionary ids switched off for lookups. Storing the disabled set means
    *  new imports and the built-in are on by default, with no migration. */
   dictDisabled: string[];
+  /** Reading pets (the hatchery). Off means off: no tracking, no pet in the
+   *  reader, no hatchery tab — the collection is kept for when it's back. */
+  hatchery: boolean;
+  /** Show the pet and egg in the reader's corner. When hidden, reading still
+   *  warms eggs and grows pets. */
+  hatcheryInReader: boolean;
 }
 
 export const SETTINGS_DEFAULTS: Settings = {
@@ -62,9 +69,12 @@ export const SETTINGS_DEFAULTS: Settings = {
   inkPresetIdx: 0,
   openTabs: { paths: [], activePath: null },
   dictDisabled: [],
+  hatchery: true,
+  hatcheryInReader: true,
 };
 
 let settings: Settings = { ...SETTINGS_DEFAULTS };
+const listeners = new Set<() => void>();
 
 /** Missing keys (older files) and unreadable files both fall back to
  *  defaults — a broken settings.json must never block the app. */
@@ -90,4 +100,16 @@ export function saveSetting<K extends keyof Settings>(
 ): void {
   settings = { ...settings, [key]: value };
   writeSettings(JSON.stringify(settings, null, 2)).catch(() => {});
+  listeners.forEach((l) => l());
+}
+
+/** A setting that re-renders its readers when it changes anywhere — for
+ *  switches shown in more than one place. */
+export function useSetting<K extends keyof Settings>(key: K): Settings[K] {
+  return useSyncExternalStore(subscribe, () => settings[key]);
+}
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
 }

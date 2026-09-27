@@ -28,6 +28,7 @@ import {
   type FracRect,
   type TextMarkupAnnot,
 } from "./types";
+import { recordHabit } from "./hatchery/tracker";
 
 const FILE = "annotations.json";
 const SAVE_DEBOUNCE = 400;
@@ -364,6 +365,7 @@ export function AnnotationsProvider(props: { children: ReactNode }) {
       }));
       commit(annots.map((a) => ({ before: null, after: a })));
       markFresh(annots.map((a) => a.id));
+      recordHabit("highlight");
     },
     [commit, markFresh],
   );
@@ -372,6 +374,7 @@ export function AnnotationsProvider(props: { children: ReactNode }) {
     (page: number, at: { x: number; y: number }, quote?: string) => {
       const a: Annotation = { ...newBase(), type: "note", page, color: noteColor, at, note: "", quote };
       commit([{ before: null, after: a }]);
+      recordHabit("highlight");
       markFresh([a.id]);
       setSelectedId(null);
       setEditingId(a.id);

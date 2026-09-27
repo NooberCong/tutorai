@@ -7,6 +7,7 @@ import type {
   Insight,
   InsightKind,
   InsightSource,
+  PetQuip,
   QuizQuestion,
   Scope,
 } from "./types";
@@ -198,12 +199,31 @@ export interface InsightSpan {
   title: string;
 }
 
+/** The reader's hatchery pet, as the companion should voice it. */
+export interface PetPersona {
+  /** What the reader calls it (its own name, or its stage name). */
+  name: string;
+  /** e.g. "a young leaf-element creature, one day a Bloomstag". */
+  kind: string;
+  about: string;
+}
+
+/** The pet's quip rides along on an insights run. It may be about any page
+ *  from `fromPage` on — the reader's current page, or a read-ahead span's
+ *  start — never one they've already passed, since the pet says it when
+ *  the reader reaches that page. */
+export interface QuipRequest {
+  pet: PetPersona;
+  fromPage: number;
+}
+
 export function insightsPrompt(
   meta: DocMeta,
   span: InsightSpan,
   pageTexts: { page: number; text: string }[],
   figurePages: number[],
   deliveredTitles: string[],
+  quipFor: QuipRequest | null,
 ): string {
   const text = pageTexts
     .map(({ page, text }) => `[[PAGE ${page}]]\n${text}`)
@@ -218,6 +238,19 @@ export function insightsPrompt(
         ``,
         `Notes already delivered elsewhere in this book — do not repeat or overlap them:`,
         ...deliveredTitles.map((t) => `- ${t}`),
+      ]
+    : [];
+  // The pet's aside rides along on this run, so it costs no extra quota.
+  const pet = quipFor?.pet;
+  const quip = quipFor && pet
+    ? [
+        ``,
+        `Separately, the reader has a small pet reading along: ${pet.name}, ${pet.kind}. ${pet.about}`,
+        `Optionally write one "quip" — something ${pet.name} blurts out about these pages, the kind of aside that makes the reader smile:`,
+        `- Pick the funniest moment on page ${quipFor.fromPage} or later in this span (the reader is on page ${quipFor.fromPage}; ${pet.name} will say it when they reach that page). Set "page" to the page it's about.`,
+        `- One sentence, at most 110 characters, first person, in the voice of a small, curious, slightly cheeky creature.`,
+        `- About something specific on that page (a name, idea, example, number, odd phrase) — a joke, pun, or funny reaction. Never a summary, lesson, or fact dump; never mean about the reader or the author; no spoilers beyond that page.`,
+        `- Skip it (null) for front matter, tables of contents, indexes, or when nothing is genuinely fun.`,
       ]
     : [];
   return [
@@ -242,9 +275,10 @@ export function insightsPrompt(
     `- Every "update" note MUST be verified with WebSearch before you write it, and MUST carry 1–2 source URLs; if you cannot verify it, drop it. For other kinds use the web only when it buys real specificity — at most 3 searches for this whole task.`,
     `- Writing: "title" ≤ 60 characters, concrete and punchy. "body" is 2–4 short sentences, plain language, specific (names, versions, numbers), zero filler, no "the document/author says". It must be effortless to read.`,
     ...delivered,
+    ...quip,
     ``,
     `Output ONLY a JSON object — no fences, no prose before or after — matching:`,
-    `{"insights":[{"kind":"example|gotcha|context|update","page":${span.startPage},"anchor":"...","title":"...","body":"...","sources":[{"title":"...","url":"https://..."}]}]}`,
+    `{"insights":[{"kind":"example|gotcha|context|update","page":${span.startPage},"anchor":"...","title":"...","body":"...","sources":[{"title":"...","url":"https://..."}]}]${quipFor ? `,"quip":{"page":${quipFor.fromPage},"text":"..."} or null` : ""}}`,
     `"page" is the physical page the note belongs to. "anchor" is a verbatim 3–10 word quote copied exactly from that page's text, at the spot the note is about. "sources" may be [] for non-update notes.`,
   ].join("\n");
 }
@@ -393,6 +427,27 @@ export function parseInsights(
     if (notes.length === 3) break;
   }
   return notes;
+}
+
+/** The pet's optional aside from an insights run; null when absent or
+ *  malformed — a missing joke is never an error. */
+export function parseQuip(text: string, span: InsightSpan, fromPage: number): PetQuip | null {
+  let raw: { quip?: { page?: unknown; text?: unknown } | null };
+  try {
+    raw = extractJson(text);
+  } catch {
+    return null;
+  }
+  const q = raw.quip;
+  if (!q || typeof q.text !== "string") return null;
+  const line = q.text.trim().replace(/^["“]|["”]$/g, "");
+  if (!line || line.length > 160) return null;
+  // A page behind the reader would never be said; pull it up to where they are.
+  const page = Math.min(
+    Math.max(fromPage, typeof q.page === "number" ? Math.round(q.page) : fromPage),
+    span.endPage,
+  );
+  return { id: crypto.randomUUID(), page, text: line, said: false };
 }
 
 /** Initial guess at a quote's vertical position, as a fraction of the page
