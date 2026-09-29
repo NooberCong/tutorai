@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { GameEvent, HatcheryState } from "../../lib/hatchery/game";
+import { ACCESSORY } from "../../lib/hatchery/accessories";
 import { FIND_EVERY_MIN, companion, eggReady, growth, speciesById, stageOf } from "../../lib/hatchery/game";
 import { flushHatchery, onHatcheryEvent, useHatchery, useReaderActive } from "../../lib/hatchery/store";
 import { useReadingTracker } from "../../lib/hatchery/tracker";
@@ -58,7 +59,14 @@ function describe(e: GameEvent): string | null {
     case "chapter-done":
       return e.title ? `Chapter finished: ${e.title}` : "Chapter finished!";
     case "nest-full":
-      return "The nest is full — hatch an egg to make room.";
+      return "The nest is full — new finds wait until you hatch one.";
+    case "accessory": {
+      const a = ACCESSORY[e.id];
+      const sp = e.pet && speciesById(e.pet.species);
+      const who = e.pet && sp ? (e.pet.name ?? sp.stages[stageOf(e.pet)]) : "You";
+      const worn = e.pet?.wear?.[a.slot] === e.id;
+      return `${who} earned ${a.name.toLowerCase()}!${worn ? "" : " It's in the wardrobe."}`;
+    }
     case "habit":
       return null;
   }
@@ -99,7 +107,7 @@ function Den(props: { onOpenHatchery: () => void }) {
     () =>
       onHatcheryEvent((e) => {
         if (e.kind === "habit") react("love");
-        if (e.kind === "grew") react("grow");
+        if (e.kind === "grew" || e.kind === "accessory") react("grow");
         if (e.kind === "chapter-done") react("hop");
         if (e.kind === "egg-found") setEggNudge((n) => n + 1);
         const text = describe(e);
@@ -249,7 +257,7 @@ function Den(props: { onOpenHatchery: () => void }) {
       <div className="den-floor">
         {pet && sp && (
           <button
-            className={`den-pet tier-${sp.tier}`}
+            className={`den-pet tier-${sp.tier} ${pet.wear?.head ? "hatted" : ""}`}
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-label={`${petName} — ${active ? "reading with you" : "asleep"}`}

@@ -139,7 +139,9 @@ An optional hatchery that rewards actual reading:
 - **Eggs warm while you read.** Only real reading counts: time on the page
   with recent scrolls, page turns or selections. It pauses when you step away.
   Every 25 minutes of reading turns up a new egg. Finishing a chapter or a
-  whole book finds a rarer one.
+  whole book finds a rarer one. How you read decides what hatches: mornings
+  draw Sky eggs, late nights Moon, long sittings Ember, slow careful reading
+  Frost, and the study tools Arcane. The `?` beside each egg type explains it.
 - **80 creatures to collect.** There are 10 per element across 8 elements
   (leaf, ember, tide, stone, sky, frost, moon, arcane). Each has four tiers
   from common to legendary, three growth stages, and a rare shiny variant.
@@ -149,6 +151,12 @@ An optional hatchery that rewards actual reading:
   chapters and study habits (highlighting, quizzing, lookups). With the
   reading companion on, it also cracks a joke now and then about what you're
   reading.
+- **A wardrobe earned by reading.** Eight accessories: reading glasses, a
+  knit scarf, a nightcap, a sun hat, a flower crown, a wizard hat, a bow tie
+  and a mortarboard. Each one comes from a habit, like slow careful reading,
+  late nights, days you came back, finished chapters or a finished book. Any
+  pet can wear any accessory you've earned, and each one is fitted by hand to
+  all 80 creatures at every growth stage.
 - **Out of the way when you want it to be.** Hide the pet from the reader and
   keep hatching, or turn reading pets off entirely. Off means off: no
   tracking, no tab. Your collection is kept for when you turn it back on.
@@ -163,6 +171,12 @@ An optional hatchery that rewards actual reading:
 </p>
 <p align="center">
   <sub><i>Left: the hatchery, with the egg you're warming, your companion, the nest and your reading week. Right: the collection fills in as you hatch; undiscovered species show as silhouettes.</i></sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/pets-dressed.png" alt="A row of pets wearing earned accessories: a mortarboard and bow tie, a nightcap, silver glasses and a scarf, a sun hat, and a nightcap with reading glasses" width="100%" />
+  <img src="docs/screenshots/wardrobe.png" alt="The wardrobe: eight accessories, six earned and two locked with progress bars for reading days and study-tool uses" width="100%" />
+  <sub><i>Accessories are earned by how you read and fitted by hand to every creature. Locked ones show what earns them.</i></sub>
 </p>
 
 ---
@@ -236,8 +250,9 @@ src/                      React frontend
   components/             Reader, Home/library, toolbar, and the
                           Summary / Quiz / Chat / Project tabs
   lib/hatchery/           reading pets: game rules, reading tracker,
-                          pixel-art rasterizer and the 80 species
-                          (art guide in ART.md)
+                          pixel-art rasterizer, the 80 species
+                          (art guide in ART.md), accessories and
+                          their per-species fits (fit/)
   components/hatchery/    hatchery screen, hatch reveal, reader companion
 src-tauri/src/
   claude.rs               headless CLI runner: spawn, NDJSON→event
@@ -250,6 +265,8 @@ scripts/
                           (regenerate everything with `npm run icon`)
   sprite-sheet.ts         renders every egg and pet to a PNG contact
                           sheet for art review (`node scripts/sprite-sheet.ts`)
+  wardrobe-sheet.ts       renders each species wearing every accessory,
+                          for fitting them (`node scripts/wardrobe-sheet.ts`)
 ```
 
 ### Design

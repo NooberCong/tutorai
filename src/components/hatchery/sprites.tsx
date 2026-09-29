@@ -6,7 +6,16 @@ import type { Sprite } from "../../lib/hatchery/pixel";
 import type { Pose, Stage } from "../../lib/hatchery/kit";
 import type { Egg, Pet } from "../../lib/hatchery/game";
 import { speciesById, stageOf } from "../../lib/hatchery/game";
-import { renderSpecies } from "../../lib/hatchery/catalog";
+import {
+  DRESSED_H,
+  DRESSED_PAD,
+  DRESSED_W,
+  renderDressed,
+  renderItem,
+  renderSpecies,
+  wearKey,
+} from "../../lib/hatchery/catalog";
+import type { AccessoryId, Wear } from "../../lib/hatchery/accessories";
 import { drawEgg } from "../../lib/hatchery/eggs";
 
 const urls = new Map<string, string>();
@@ -50,6 +59,32 @@ export function speciesUrl(id: string, stage: Stage, pose: Pose = "idle", shiny 
   });
 }
 
+const dressedKey = (id: string, stage: Stage, pose: Pose, shiny: boolean, wear: Wear) =>
+  `pet/${id}/${stage}/${pose}/${shiny ? 1 : 0}/${wearKey(wear)}`;
+
+const isDressed = (wear?: Wear): wear is Wear => !!wear && Object.values(wear).some(Boolean);
+
+/** A creature as a given pet wears it: the plain sprite, or the dressed
+ *  one on its padded canvas (then `dressed` tells PixelImg to overflow). */
+export function petUrl(
+  id: string,
+  stage: Stage,
+  pose: Pose,
+  shiny: boolean,
+  wear?: Wear,
+): { src: string; dressed: boolean } {
+  if (!isDressed(wear)) return { src: speciesUrl(id, stage, pose, shiny), dressed: false };
+  const sp = speciesById(id);
+  if (!sp) return { src: "", dressed: false };
+  const src = toUrl(dressedKey(id, stage, pose, shiny, wear), () => renderDressed(sp, stage, pose, shiny, wear));
+  return { src, dressed: true };
+}
+
+/** An accessory on its own, for the wardrobe. */
+export function itemUrl(id: AccessoryId): string {
+  return toUrl(`item/${id}`, () => renderItem(id));
+}
+
 export function eggUrl(egg: Pick<Egg, "element" | "tier">, crack = 0) {
   return toUrl(`egg/${egg.element}/${egg.tier}/${crack}`, () => drawEgg(egg.element, egg.tier, crack));
 }
@@ -66,14 +101,30 @@ export function PixelImg(props: {
   scale: number;
   className?: string;
   alt?: string;
+  /** A dressed sprite: drawn on the padded canvas, but laid out as the
+   *  creature's own 32×32 box — hats and tails overflow it. */
+  dressed?: boolean;
 }) {
-  const size = 32 * props.scale;
+  const k = props.scale;
+  if (props.dressed) {
+    return (
+      <img
+        className={`pixel ${props.className ?? ""}`}
+        src={props.src}
+        width={DRESSED_W * k}
+        height={DRESSED_H * k}
+        style={{ margin: `${-DRESSED_PAD.top * k}px ${-DRESSED_PAD.x * k}px 0` }}
+        alt={props.alt ?? ""}
+        draggable={false}
+      />
+    );
+  }
   return (
     <img
       className={`pixel ${props.className ?? ""}`}
       src={props.src}
-      width={size}
-      height={size}
+      width={32 * k}
+      height={32 * k}
       alt={props.alt ?? ""}
       draggable={false}
     />
@@ -109,26 +160,30 @@ export function SpeciesImg(props: {
   stage: Stage;
   shiny?: boolean;
   hidden?: boolean;
+  /** A pet's accessories (grids of your own pets). */
+  wear?: Wear;
   scale: number;
 }) {
-  const { id, stage, shiny = false, hidden = false, scale } = props;
-  const key = speciesKey(id, stage, "idle", shiny, hidden);
+  const { id, stage, shiny = false, hidden = false, scale, wear } = props;
+  const dressed = !hidden && isDressed(wear);
+  const key = dressed ? dressedKey(id, stage, "idle", shiny, wear) : speciesKey(id, stage, "idle", shiny, hidden);
   const [ready, setReady] = useState<{ key: string; url: string } | null>(null);
   const cached = urls.get(key);
   useEffect(() => {
     if (urls.has(key)) return;
     let live = true;
     whenIdle(() => {
-      const url = speciesUrl(id, stage, "idle", shiny, hidden);
+      const url = dressed ? petUrl(id, stage, "idle", shiny, wear).src : speciesUrl(id, stage, "idle", shiny, hidden);
       if (live) setReady({ key, url });
     });
     return () => {
       live = false;
     };
-  }, [key, id, stage, shiny, hidden]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   const url = cached ?? (ready?.key === key ? ready.url : null);
   if (!url) return <span className="pixel-slot" style={{ width: 32 * scale, height: 32 * scale }} />;
-  return <PixelImg src={url} scale={scale} />;
+  return <PixelImg src={url} scale={scale} dressed={dressed} />;
 }
 
 /** A pet, alive: idle with an occasional blink, or asleep. */
@@ -157,9 +212,11 @@ export function PetSprite(props: {
   }, [asleep]);
   const pose: Pose = asleep ? "sleep" : blink ? "blink" : "idle";
   const name = speciesById(pet.species)?.name ?? pet.species;
+  const { src, dressed } = petUrl(pet.species, stageOf(pet), pose, pet.shiny, pet.wear);
   return (
     <PixelImg
-      src={speciesUrl(pet.species, stageOf(pet), pose, pet.shiny)}
+      src={src}
+      dressed={dressed}
       scale={scale}
       className={`${props.className ?? ""} ${asleep ? "asleep" : "awake"}`}
       alt={pet.name ?? name}

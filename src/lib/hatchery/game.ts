@@ -18,6 +18,8 @@
 import type { Element, Species, Stage, Tier } from "./kit.ts";
 import { ELEMENTS } from "./kit.ts";
 import { SPECIES, speciesById } from "./species.ts";
+import type { AccessoryId, Slot, Wear } from "./accessories.ts";
+import { ACCESSORIES, ACCESSORY } from "./accessories.ts";
 
 export { speciesById };
 
@@ -28,7 +30,18 @@ export const STARTER_MIN = 8;
 const GROW_MIN: [number, number] = [45, 180];
 const GROW_TIER: Record<Tier, number> = { common: 1, rare: 1.3, epic: 1.6, legendary: 2 };
 export const FIND_EVERY_MIN = 25;
+/** Reading finds pause while the nest is this full; chapter and book eggs
+ *  are rare and earned, so they always fit. */
 export const NEST_MAX = 12;
+/** Pauses shorter than this don't end a sitting. */
+const SITTING_GAP_MIN = 10;
+/** A sitting this long (first to last activity) attracts ember. */
+export const LONG_SITTING_MIN = 40;
+/** Frost: this many seconds per page on average, over FROST_PAGES pages. */
+export const SLOW_PAGE_S = 120;
+const FROST_PAGES = 5;
+/** One page's time is capped, so a page left open doesn't skew the pace. */
+const PAGE_CAP_MS = 5 * 60_000;
 /** A day "counts" toward the week once this much reading happened. */
 export const DAY_MIN = 10;
 
@@ -61,6 +74,8 @@ export interface Pet {
   hatchedAt: number;
   foundIn?: Where;
   hatchedIn?: Where;
+  /** Accessories it has on, one per slot. */
+  wear?: Wear;
 }
 
 export interface DexEntry {
@@ -96,10 +111,25 @@ export interface HatcheryState {
   dex: Record<string, DexEntry>;
   /** Recent study-tool use, decaying with active reading time. */
   habits: Record<Habit, number>;
-  /** Current sitting: continuous active ms and per-page dwell. */
-  session: { ms: number; lastActive: number; pages: number; dwellMs: number };
+  /** Current sitting. Pauses under SITTING_GAP_MIN don't end it. */
+  session: Sitting;
   docs: Record<string, DocProgress>;
   hatchedTotal: number;
+  /** Accessories earned: when, and which companion was reading along. */
+  wardrobe: Partial<Record<AccessoryId, { at: number; by?: string }>>;
+  /** Reading-time and study counters toward accessories (the rest are
+   *  counted from `days` and `docs`). */
+  earn: { slowMs: number; deepMs: number; nightMs: number; dayMs: number; study: number };
+}
+
+export interface Sitting {
+  /** First and latest active moment — the sitting's length in real time. */
+  start: number;
+  lastActive: number;
+  /** Time on each page read this sitting ("docId:page" → ms, capped),
+   *  counted while the reader is on screen, not only while touched: slow
+   *  readers don't scroll much. Revisits add to the same page. */
+  dwell: Record<string, number>;
 }
 
 /** What a transition did, for the UI to celebrate or react to. */
@@ -109,7 +139,8 @@ export type GameEvent =
   | { kind: "nest-full" }
   | { kind: "egg-ready"; egg: Egg }
   | { kind: "grew"; pet: Pet; stage: Stage }
-  | { kind: "chapter-done"; title: string };
+  | { kind: "chapter-done"; title: string }
+  | { kind: "accessory"; id: AccessoryId; pet: Pet | null };
 
 export type Rng = () => number;
 
@@ -133,9 +164,11 @@ export function newState(now = Date.now(), rng: Rng = Math.random): HatcheryStat
     companionId: null,
     dex: {},
     habits: { highlight: 0, lookup: 0, quiz: 0, ask: 0 },
-    session: { ms: 0, lastActive: 0, pages: 0, dwellMs: 0 },
+    session: { start: 0, lastActive: 0, dwell: {} },
     docs: {},
     hatchedTotal: 0,
+    wardrobe: {},
+    earn: { slowMs: 0, deepMs: 0, nightMs: 0, dayMs: 0, study: 0 },
   };
 }
 
@@ -148,7 +181,9 @@ export function migrate(raw: unknown, now = Date.now()): HatcheryState {
     ...base,
     ...s,
     habits: { ...base.habits, ...(s.habits ?? {}) },
-    session: { ...base.session, ...(s.session ?? {}) },
+    earn: { ...base.earn, ...(s.earn ?? {}) },
+    // Saves from before sittings kept real time and per-page dwell.
+    session: s.session && "dwell" in s.session ? s.session : base.session,
     v: 1,
   };
 }
@@ -226,21 +261,30 @@ export interface Attraction {
 export function attractions(s: HatcheryState, now: Date): Attraction[] {
   const h = now.getHours();
   const study = s.habits.highlight + s.habits.lookup + s.habits.quiz + s.habits.ask;
-  const avgDwell = s.session.pages ? s.session.dwellMs / s.session.pages : 0;
+  const { long, slow } = sittingPace(s, now);
   return [
     { element: "sky", why: "Reading in the morning", active: h >= 5 && h < 12 },
     { element: "leaf", why: "Reading in the afternoon", active: h >= 12 && h < 17 },
     { element: "tide", why: "Reading in the evening", active: h >= 17 && h < 21 },
     { element: "moon", why: "Reading late at night", active: h >= 21 || h < 5 },
-    { element: "ember", why: "A long, unbroken sitting", active: s.session.ms >= 45 * 60_000 },
-    {
-      element: "frost",
-      why: "Slow, careful reading",
-      active: s.session.pages >= 5 && avgDwell >= 75_000,
-    },
+    { element: "ember", why: "A long, unbroken sitting", active: long },
+    { element: "frost", why: "Slow, careful reading", active: slow },
     { element: "stone", why: "Reading 4+ days a week", active: readingDaysThisWeek(s, now) >= 4 },
     { element: "arcane", why: "Using the study tools", active: study >= 3 },
   ];
+}
+
+/** Whether the current sitting is long (ember) and slow-paced (frost). A
+ *  sitting that ended more than SITTING_GAP_MIN ago is neither. */
+export function sittingPace(s: HatcheryState, now: Date): { long: boolean; slow: boolean } {
+  const se = s.session;
+  if (now.getTime() - se.lastActive > SITTING_GAP_MIN * 60_000) return { long: false, slow: false };
+  const times = Object.values(se.dwell);
+  const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0;
+  return {
+    long: se.lastActive - se.start >= LONG_SITTING_MIN * 60_000,
+    slow: times.length >= FROST_PAGES && avg >= SLOW_PAGE_S * 1000,
+  };
 }
 
 function rollElement(s: HatcheryState, now: Date, rng: Rng): Element {
@@ -256,8 +300,7 @@ const TIER_ODDS: Record<EggSource, Record<Tier, number>> = {
   book: { common: 0, rare: 55, epic: 33, legendary: 12 },
 };
 
-function findEgg(s: HatcheryState, source: EggSource, now: Date, rng: Rng, where?: Where): GameEvent {
-  if (s.nest.length >= NEST_MAX) return { kind: "nest-full" };
+function findEgg(s: HatcheryState, source: EggSource, now: Date, rng: Rng, where?: Where): GameEvent[] {
   const tier = weighted(TIER_ODDS[source], rng);
   const egg: Egg = {
     id: uid(),
@@ -272,7 +315,14 @@ function findEgg(s: HatcheryState, source: EggSource, now: Date, rng: Rng, where
   // An empty incubator takes the new egg straight away.
   if (!s.incubator) s.incubator = egg;
   else s.nest.push(egg);
-  return { kind: "egg-found", egg };
+  const events: GameEvent[] = [{ kind: "egg-found", egg }];
+  if (source === "reading" && nestFull(s)) events.push({ kind: "nest-full" });
+  return events;
+}
+
+/** Reading finds pause while this holds (chapter and book eggs don't). */
+export function nestFull(s: HatcheryState): boolean {
+  return s.nest.length >= NEST_MAX;
 }
 
 // ── transitions ──
@@ -288,11 +338,9 @@ export function tick(
   const events: GameEvent[] = [];
   const t = now.getTime();
 
-  // A gap of more than 10 minutes starts a new sitting.
-  if (t - s.session.lastActive > 10 * 60_000) {
-    s.session = { ms: 0, lastActive: t, pages: 0, dwellMs: 0 };
+  if (t - s.session.lastActive > SITTING_GAP_MIN * 60_000) {
+    s.session = { start: t - ms, lastActive: t, dwell: {} };
   }
-  s.session.ms += ms;
   s.session.lastActive = t;
   s.activeMs += ms;
   const key = dayKey(now);
@@ -320,17 +368,29 @@ export function tick(
     }
   }
 
-  s.findMs += ms;
-  if (s.findMs >= FIND_EVERY_MIN * 60_000) {
-    s.findMs -= FIND_EVERY_MIN * 60_000;
-    events.push(findEgg(s, "reading", now, rng, where));
+  const h = now.getHours();
+  const { long, slow } = sittingPace(s, now);
+  if (slow) s.earn.slowMs += ms;
+  if (long) s.earn.deepMs += ms;
+  if (h >= 21 || h < 5) s.earn.nightMs += ms;
+  if (h >= 5 && h < 17) s.earn.dayMs += ms;
+  events.push(...checkWardrobe(s, t));
+
+  // A full nest pauses the find meter rather than throwing finds away.
+  if (!nestFull(s)) {
+    s.findMs += ms;
+    if (s.findMs >= FIND_EVERY_MIN * 60_000) {
+      s.findMs -= FIND_EVERY_MIN * 60_000;
+      events.push(...findEgg(s, "reading", now, rng, where));
+    }
   }
   return events;
 }
 
 export function noteHabit(s: HatcheryState, habit: Habit): GameEvent[] {
   s.habits[habit] += 1;
-  return [{ kind: "habit", habit }];
+  s.earn.study += 1;
+  return [{ kind: "habit", habit }, ...checkWardrobe(s, Date.now())];
 }
 
 /** A page the reader actually dwelled on. Rewards finished chapters and
@@ -361,21 +421,22 @@ export function pageRead(
     if (n / len >= 0.7) {
       doc.chapters.push(i);
       events.push({ kind: "chapter-done", title: ch.title });
-      events.push(findEgg(s, "chapter", now, rng, where));
+      events.push(...findEgg(s, "chapter", now, rng, where));
     }
   });
   if (!doc.finished && info.pages >= 20 && read.size / info.pages >= 0.85) {
     doc.finished = true;
-    events.push(findEgg(s, "book", now, rng, where));
+    events.push(...findEgg(s, "book", now, rng, where));
   }
+  events.push(...checkWardrobe(s, now.getTime()));
   return events;
 }
 
-/** The reader left a page they'd read after `ms` of active time on it —
- *  feeds the sitting's average pace (slow, careful reading attracts frost). */
-export function noteDwell(s: HatcheryState, ms: number): void {
-  s.session.pages += 1;
-  s.session.dwellMs += Math.min(ms, 5 * 60_000);
+/** `ms` more on a page read this sitting — feeds the sitting's pace (slow,
+ *  careful reading attracts frost). */
+export function noteDwell(s: HatcheryState, page: string, ms: number): void {
+  const d = s.session.dwell;
+  d[page] = Math.min(PAGE_CAP_MS, (d[page] ?? 0) + ms);
 }
 
 /** Swap a nest egg into the incubator (the old one keeps its warmth). */
@@ -443,4 +504,51 @@ export function setCompanion(s: HatcheryState, petId: string): void {
 export function renamePet(s: HatcheryState, petId: string, name: string): void {
   const pet = s.pets.find((p) => p.id === petId);
   if (pet) pet.name = name.trim().slice(0, 24) || undefined;
+}
+
+// ── accessories ──
+
+/** Progress toward each accessory, in its own unit (minutes, days, uses,
+ *  chapters, books). Days, chapters and books count from the reading
+ *  history, so what you'd already read before accessories existed counts. */
+export function accessoryProgress(s: HatcheryState): Record<AccessoryId, number> {
+  const min = (ms: number) => Math.floor(ms / 60_000);
+  const docs = Object.values(s.docs);
+  return {
+    glasses: min(s.earn.slowMs),
+    scarf: min(s.earn.deepMs),
+    nightcap: min(s.earn.nightMs),
+    sunhat: min(s.earn.dayMs),
+    flowercrown: Object.values(s.days).filter((ms) => ms >= DAY_MIN * 60_000).length,
+    wizardhat: s.earn.study,
+    bowtie: docs.reduce((n, d) => n + d.chapters.length, 0),
+    mortarboard: docs.filter((d) => d.finished).length,
+  };
+}
+
+/** Award anything newly reached. The companion reading along gets the
+ *  credit, and puts it on if that slot is free. */
+function checkWardrobe(s: HatcheryState, at: number): GameEvent[] {
+  const events: GameEvent[] = [];
+  const progress = accessoryProgress(s);
+  const pet = companion(s);
+  for (const a of ACCESSORIES) {
+    if (s.wardrobe[a.id] || progress[a.id] < a.goal) continue;
+    s.wardrobe[a.id] = { at, by: pet?.id };
+    if (pet && !pet.wear?.[a.slot]) pet.wear = { ...pet.wear, [a.slot]: a.id };
+    events.push({ kind: "accessory", id: a.id, pet });
+  }
+  return events;
+}
+
+/** Put an earned accessory on a pet (replacing whatever is in that slot),
+ *  or take a slot off with `id` null. */
+export function dress(s: HatcheryState, petId: string, slot: Slot, id: AccessoryId | null): void {
+  const pet = s.pets.find((p) => p.id === petId);
+  if (!pet) return;
+  if (id && (!s.wardrobe[id] || ACCESSORY[id].slot !== slot)) return;
+  const wear = { ...pet.wear };
+  if (id) wear[slot] = id;
+  else delete wear[slot];
+  pet.wear = Object.keys(wear).length ? wear : undefined;
 }

@@ -65,6 +65,9 @@ export interface Part {
   glow?: boolean;
   /** Recolor regions of this part, keeping its shading (bellies, spots). */
   paint?: Paint[];
+  /** Worn on top (accessories): the creature's own decals — eyes, blush,
+   *  mouths — don't paint over it; only decals marked `cover` do. */
+  cover?: boolean;
 }
 
 /** An ink is "mat:level" (a ramp step of a palette material) or "#rrggbb". */
@@ -79,6 +82,8 @@ export interface Decal {
   inks: Record<string, Ink>;
   /** Draw after the outline pass (things that float outside the body). */
   over?: boolean;
+  /** Belongs with `cover` parts, so it may paint over them. */
+  cover?: boolean;
 }
 
 export interface Drawing {
@@ -130,6 +135,48 @@ export function mirror(p: Prim, w = SIZE): Prim {
 
 /** A primitive and its mirror image. */
 export const both = (p: Prim, w = SIZE): Prim[] => [p, mirror(p, w)];
+
+/** Move a primitive: points through `f`, radii scaled by `s`, ellipses
+ *  turned by `rot` degrees (match `f`'s rotation). */
+export function transform(p: Prim, f: (v: V) => V, s = 1, rot = 0): Prim {
+  switch (p.k) {
+    case "ell":
+      return { ...p, c: f(p.c), r: [p.r[0] * s, p.r[1] * s], rot: (p.rot ?? 0) + rot };
+    case "cap":
+      return { ...p, a: f(p.a), b: f(p.b), ra: p.ra * s, rb: p.rb * s };
+    case "path":
+      return { ...p, pts: p.pts.map(f), r0: p.r0 * s, r1: p.r1 * s };
+    case "poly":
+      return { ...p, pts: p.pts.map(f), round: p.round * s };
+    case "egg":
+      return { ...p, c: f(p.c), r: [p.r[0] * s, p.r[1] * s] };
+  }
+}
+
+/** Shift a whole drawing by whole pixels (decals stay on the grid). */
+export function shiftDrawing(d: Drawing, dx: number, dy: number): Drawing {
+  const f = ([x, y]: V): V => [x + dx, y + dy];
+  const part = (p: Part): Part => ({
+    ...p,
+    prims: p.prims.map((q) => transform(q, f)),
+    cut: p.cut?.map((q) => transform(q, f)),
+    paint: p.paint?.map((pt) => ({
+      ...pt,
+      prims: pt.prims.map((q) => transform(q, f)),
+      cut: pt.cut?.map((q) => transform(q, f)),
+    })),
+  });
+  return {
+    parts: d.parts.map(part),
+    decals: d.decals?.map((dc) => ({ ...dc, x: dc.x + dx, y: dc.y + dy })),
+  };
+}
+
+/** Whether pixel (x, y) — its center — lies inside a part's own shape,
+ *  whatever is drawn over it. For measuring sprites (fit.ts). */
+export function partCovers(part: Part, x: number, y: number): boolean {
+  return sdPart(part, x + 0.5, y + 0.5) < 0;
+}
 
 // ── signed distance functions (negative inside) ──
 
@@ -439,9 +486,14 @@ export function render(d: Drawing, palette: Palette, w = SIZE, h = SIZE): Sprite
     color[i] = rampOf(palette, mat[i], cache)[level[i]];
   }
 
+  // Outline pixels around worn items, filled in by the outline pass.
+  const coverEdge = new Uint8Array(n);
   const decalPass = (over: boolean) => {
     for (const dc of d.decals ?? []) {
       if (!!dc.over !== over) continue;
+      // Worn items (`cover` parts) and their outlines hide the creature's
+      // decals, drawn-on-top ones too (a web thread, a sleep "z").
+      const guarded = !dc.cover;
       dc.rows.forEach((row, dy) => {
         for (let dx = 0; dx < row.length; dx++) {
           const ch = row[dx];
@@ -451,6 +503,8 @@ export function render(d: Drawing, palette: Palette, w = SIZE, h = SIZE): Sprite
           if (x < 0 || y < 0 || x >= w || y >= h) continue;
           const ink = dc.inks[ch];
           if (!ink) throw new Error(`decal ink "${ch}" undefined`);
+          const o = owner[y * w + x];
+          if (guarded && ((o >= 0 && d.parts[o].cover) || coverEdge[y * w + x])) continue;
           color[y * w + x] = resolveInk(ink, palette, cache);
           if (!over && owner[y * w + x] < 0) owner[y * w + x] = -2; // decal-only pixel
         }
@@ -482,6 +536,7 @@ export function render(d: Drawing, palette: Palette, w = SIZE, h = SIZE): Sprite
           const part = owner[q] >= 0 ? d.parts[owner[q]] : null;
           const lit = !(nb[0] >= 0 && color[nb[0]]) && !(nb[1] >= 0 && color[nb[1]]);
           outline[idx] = rampOf(palette, m, cache)[part?.glow || lit ? DARK : OUTLINE];
+          if (part?.cover) coverEdge[idx] = 1;
         } else {
           outline[idx] = rampOf(palette, "eye", cache)[OUTLINE];
         }

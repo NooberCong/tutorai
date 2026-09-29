@@ -134,3 +134,22 @@ Each element has ten species: 4 common, 3 rare, 2 epic, 1 legendary.
 - [ ] Blink and sleep frames look right (eyes are decals, not parts).
 - [ ] Shiny looks special.
 - [ ] `npx tsc --noEmit` passes.
+
+## Accessories
+
+Pets wear earned accessories (`accessories.ts`) drawn in the same render
+pass, so they shade and outline like parts. Each is placed from a per-stage
+`Fit` (`fit.ts`): the skull top and width (hats), the eye decals (glasses),
+and the neck (scarf, bow tie). It's measured automatically, then corrected
+by hand in `fit/<element>.ts`. Items can be nudged there too, flipped, or
+switched to a second colorway where the first blends into the creature.
+
+```
+node scripts/wardrobe-sheet.ts <out-dir> <element-or-id> [scale=4] [columns]
+```
+
+A new species isn't done until every accessory looks fitted at every stage:
+hats sit on the skull, not on a crest or ear tip, and clear of the eyes;
+glasses ring the real eyes; the scarf wraps where the head meets the body and
+keeps the mouth visible; and nothing blends into the creature's colors.
+Eyes drawn without `eyes()` need their positions set by hand.

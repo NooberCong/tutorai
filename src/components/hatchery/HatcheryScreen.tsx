@@ -7,13 +7,16 @@ import { createPortal } from "react-dom";
 import type { Element, Species, Stage } from "../../lib/hatchery/kit";
 import { ELEMENTS, TIERS } from "../../lib/hatchery/kit";
 import { SPECIES } from "../../lib/hatchery/species";
-import type { Pet } from "../../lib/hatchery/game";
+import type { HatcheryState, Pet } from "../../lib/hatchery/game";
+import { ACCESSORIES } from "../../lib/hatchery/accessories";
 import {
   DAY_MIN,
   FIND_EVERY_MIN,
   NEST_MAX,
+  accessoryProgress,
   attractions,
   companion,
+  dress,
   dayKey,
   eggReady,
   growth,
@@ -25,10 +28,11 @@ import {
 } from "../../lib/hatchery/game";
 import { flushHatchery, mutate, useHatchery } from "../../lib/hatchery/store";
 import { saveSetting, useSetting } from "../../lib/settings";
+import { EggHelp } from "./EggHelp";
 import { HatchModal } from "./HatchModal";
 import { Meter } from "./Meter";
 import { ELEMENT_LABEL, STAGE_LABEL, TIER_LABEL, minutes } from "./labels";
-import { PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, speciesUrl } from "./sprites";
+import { PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, itemUrl, petUrl, speciesUrl } from "./sprites";
 import "./hatchery.css";
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -113,13 +117,15 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
         </section>
       </div>
 
+      <Wardrobe s={s} pet={pet} />
+
       <section className="nest">
         <div className="section-head">
           <h2>Nest</h2>
           <span className="count">
-            {s.nest.length}/{NEST_MAX} ·{" "}
+            {s.nest.length > NEST_MAX ? `${s.nest.length} eggs` : `${s.nest.length}/${NEST_MAX}`} ·{" "}
             {s.nest.length >= NEST_MAX
-              ? "full — hatch an egg to make room"
+              ? "full — reading finds wait until you hatch one"
               : `next find in ${minutes(FIND_EVERY_MIN * 60_000 - s.findMs)} of reading`}
           </span>
         </div>
@@ -181,7 +187,10 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
                 </span>
                 <b>{ELEMENT_LABEL[a.element]}</b>
                 <span>{a.why}</span>
-                {a.active && <em>now</em>}
+                <span className="fn-end">
+                  {a.active && <em>now</em>}
+                  <EggHelp element={a.element} />
+                </span>
               </li>
             ))}
           </ul>
@@ -217,7 +226,7 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
                   onClick={() => mutate((st2) => setCompanion(st2, p.id), true)}
                   title={p.id === s.companionId ? "Your reading companion" : "Make companion"}
                 >
-                  <SpeciesImg id={p.species} stage={st} shiny={p.shiny} scale={2} />
+                  <SpeciesImg id={p.species} stage={st} shiny={p.shiny} wear={p.wear} scale={2} />
                   <b>{p.name ?? sp?.stages[st] ?? p.species}</b>
                   <span>
                     {p.shiny ? "✦ " : ""}
@@ -258,6 +267,65 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
       {hatching && <HatchModal onClose={() => setHatching(false)} />}
       {detail && <SpeciesDetail species={detail} onClose={() => setDetail(null)} />}
     </div>
+  );
+}
+
+const UNIT: Record<string, string> = { min: "min", days: "days", uses: "uses", chapters: "chapters", books: "book" };
+
+/** Accessories: earned by reading habits, worn by any pet. Click one to put
+ *  it on your companion (or take it off); locked ones show what earns them. */
+function Wardrobe(props: { s: HatcheryState; pet: Pet | null }) {
+  const { s, pet } = props;
+  const progress = accessoryProgress(s);
+  const earned = ACCESSORIES.filter((a) => s.wardrobe[a.id]).length;
+  const petName = (p: Pet) => p.name ?? speciesById(p.species)?.stages[stageOf(p)] ?? "your pet";
+  return (
+    <section className="wardrobe">
+      <div className="section-head">
+        <h2>Wardrobe</h2>
+        <span className="count">
+          {earned}/{ACCESSORIES.length} earned
+          {pet && earned > 0 ? ` · click to dress ${petName(pet)}` : " · earned by how you read"}
+        </span>
+      </div>
+      <div className="wardrobe-grid">
+        {ACCESSORIES.map((a) => {
+          const got = s.wardrobe[a.id];
+          const on = !!pet && pet.wear?.[a.slot] === a.id;
+          const by = got?.by ? s.pets.find((p) => p.id === got.by) : undefined;
+          const tip = got
+            ? `${a.blurb}
+Earned ${new Date(got.at).toLocaleDateString()}${by ? ` with ${petName(by)}` : ""}.`
+            : `${a.how} — ${Math.min(progress[a.id], a.goal)} of ${a.goal} ${UNIT[a.unit]}`;
+          return (
+            <button
+              key={a.id}
+              className={`wardrobe-item ${got ? "got" : "locked"} ${on ? "on" : ""}`}
+              disabled={!got || !pet}
+              title={tip}
+              onClick={() => pet && mutate((st) => dress(st, pet.id, a.slot, on ? null : a.id), true)}
+            >
+              <span className="wardrobe-icon">
+                <PixelImg src={itemUrl(a.id)} scale={3} />
+              </span>
+              <b>{a.name}</b>
+              {got ? (
+                <span className="wardrobe-state">{on ? "wearing" : pet ? "put on" : "earned"}</span>
+              ) : (
+                <>
+                  <Meter
+                    value={Math.min(progress[a.id], a.goal)}
+                    max={a.goal}
+                    label={`${Math.min(progress[a.id], a.goal)} / ${a.goal} ${UNIT[a.unit]}`}
+                  />
+                  <span className="wardrobe-how">{a.how}</span>
+                </>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -354,6 +422,7 @@ function ElementRow(props: {
         <span>
           {found}/{list.length}
         </span>
+        <EggHelp element={props.element} />
       </div>
       <div className="species-row">
         {list.map((sp) => {
@@ -424,7 +493,7 @@ function SpeciesDetail(props: { species: Species; onClose: () => void }) {
                 className={`pet-cell ${p.id === s.companionId ? "current" : ""}`}
                 onClick={() => mutate((st) => setCompanion(st, p.id), true)}
               >
-                <PixelImg src={speciesUrl(p.species, stageOf(p), "idle", p.shiny)} scale={2} />
+                <PixelImg {...petUrl(p.species, stageOf(p), "idle", p.shiny, p.wear)} scale={2} />
                 <b>{p.name ?? sp.stages[stageOf(p)]}</b>
                 <span>{p.id === s.companionId ? "companion" : "read together"}</span>
               </button>

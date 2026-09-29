@@ -11,6 +11,7 @@ import { getSetting } from "../settings";
 import { readHatchery, writeHatchery } from "../tauri";
 import type { GameEvent, HatcheryState } from "./game";
 import { companion, migrate, newState, speciesById, stageOf } from "./game";
+import { ACCESSORY } from "./accessories";
 
 let state: HatcheryState = newState();
 let version = 0;
@@ -97,9 +98,11 @@ export function talkingPet(): PetPersona | null {
   const stage = stageOf(pet);
   const age = ["a baby", "a young", "a grown"][stage];
   const future = stage < 2 ? `, one day a ${sp.name}` : "";
+  const worn = Object.values(pet.wear ?? {}).map((id) => ACCESSORY[id].name.toLowerCase());
+  const wearing = worn.length ? `, wearing ${worn.join(" and ")}` : "";
   return {
     name: pet.name ?? sp.stages[stage],
-    kind: `${age} ${sp.element}-element creature${pet.name ? ` (a ${sp.stages[stage]})` : ""}${future}`,
+    kind: `${age} ${sp.element}-element creature${pet.name ? ` (a ${sp.stages[stage]})` : ""}${future}${wearing}`,
     about: sp.lore,
   };
 }

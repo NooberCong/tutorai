@@ -996,3 +996,163 @@
 .den-quiet .link-btn {
   font-size: 11.5px;
 }
+
+/* ── "?" — how to find an element's eggs ── */
+.fn-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.egg-help {
+  position: relative;
+  display: inline-flex;
+}
+.egg-help-btn {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--faint);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  cursor: pointer;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.egg-help-btn:hover,
+.egg-help-btn.open {
+  color: var(--text);
+  border-color: var(--dim);
+  background: var(--ink3);
+}
+.egg-help-pop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: -6px;
+  width: 280px;
+  padding: 12px 14px;
+  background: var(--ink2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--lift), 0 10px 30px rgba(0, 0, 0, 0.35);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+}
+.element-head .egg-help-pop {
+  right: auto;
+  left: -6px;
+}
+.egg-help-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.egg-help-head img {
+  margin: -12px -10px -6px -12px;
+}
+.egg-help-head b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.egg-help-pop p {
+  margin: 0;
+}
+.egg-help-pop .egg-help-fine {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+/* ── wardrobe ── */
+.wardrobe-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.wardrobe-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px 10px;
+  border-radius: var(--r-md);
+  background: var(--ink2);
+  border: 1px solid var(--line);
+  text-align: center;
+  min-width: 0;
+  transition: border-color 130ms, background 130ms;
+}
+.wardrobe-item b {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wardrobe-item.got {
+  cursor: pointer;
+}
+.wardrobe-item.got:hover {
+  border-color: var(--line-strong);
+  background: var(--ink3);
+}
+.wardrobe-item.on {
+  border-color: color-mix(in srgb, var(--t-legendary) 55%, transparent);
+  background: color-mix(in srgb, var(--t-legendary) 7%, var(--ink2));
+}
+.wardrobe-state {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.wardrobe-item.on .wardrobe-state {
+  color: var(--t-legendary);
+}
+.wardrobe-item.locked {
+  cursor: default;
+}
+.wardrobe-item.locked img {
+  filter: brightness(0) invert(0.22) sepia(0.2) hue-rotate(80deg);
+}
+.wardrobe-item.locked b {
+  color: var(--dim);
+}
+.wardrobe-item .meter {
+  width: 100%;
+  --tier: var(--t-rare);
+}
+.wardrobe-item .meter span {
+  font-size: 10.5px;
+}
+.wardrobe-how {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--faint);
+}
+/* Icons sit centered on a 32px canvas; crop the empty margin. */
+.wardrobe-icon {
+  display: block;
+  height: 60px;
+  overflow: hidden;
+}
+.wardrobe-icon img {
+  margin-top: -18px;
+}
+/* Room above your pets for hats (dressed sprites overflow upward). */
+.pet-grid .pet-cell,
+.detail-pets .pet-cell {
+  padding-top: 24px;
+}
+/* A hat rises above the pet's box; keep the bubble clear of it. */
+.den-pet.hatted {
+  margin-top: 18px;
+}
