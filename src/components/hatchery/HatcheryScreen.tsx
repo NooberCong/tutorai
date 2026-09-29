@@ -20,9 +20,12 @@ import {
   dayKey,
   eggReady,
   growth,
+  habitats,
+  homeOf,
   incubate,
   renamePet,
   setCompanion,
+  setHome,
   speciesById,
   stageOf,
 } from "../../lib/hatchery/game";
@@ -32,7 +35,7 @@ import { EggHelp } from "./EggHelp";
 import { HatchModal } from "./HatchModal";
 import { Meter } from "./Meter";
 import { ELEMENT_LABEL, STAGE_LABEL, TIER_LABEL, minutes } from "./labels";
-import { PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, itemUrl, petUrl, speciesUrl } from "./sprites";
+import { Habitat, PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, itemUrl, petUrl, sceneUrl, speciesUrl } from "./sprites";
 import "./hatchery.css";
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -71,8 +74,9 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
                 onClick={() => setHatching(true)}
                 title={ready ? "Hatch!" : "Warms while you read"}
               >
-                <span className="pedestal" />
-                <PixelImg src={eggUrl(egg, crackOf(egg))} scale={5} />
+                <Habitat element={egg.element} scale={5} live>
+                  <PixelImg src={eggUrl(egg, crackOf(egg))} scale={5} />
+                </Habitat>
               </button>
               <div className="incubator-meta">
                 <h3>
@@ -118,6 +122,7 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
       </div>
 
       <Wardrobe s={s} pet={pet} />
+      <Habitats s={s} pet={pet} />
 
       <section className="nest">
         <div className="section-head">
@@ -226,7 +231,9 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
                   onClick={() => mutate((st2) => setCompanion(st2, p.id), true)}
                   title={p.id === s.companionId ? "Your reading companion" : "Make companion"}
                 >
-                  <SpeciesImg id={p.species} stage={st} shiny={p.shiny} wear={p.wear} scale={2} />
+                  <Habitat element={homeOf(p)} scale={2}>
+                    <SpeciesImg id={p.species} stage={st} shiny={p.shiny} wear={p.wear} scale={2} />
+                  </Habitat>
                   <b>{p.name ?? sp?.stages[st] ?? p.species}</b>
                   <span>
                     {p.shiny ? "✦ " : ""}
@@ -329,6 +336,58 @@ Earned ${new Date(got.at).toLocaleDateString()}${by ? ` with ${petName(by)}` : "
   );
 }
 
+const HABITAT_NAME: Record<Element, string> = {
+  leaf: "Sunlit glade",
+  ember: "Ember crags",
+  tide: "Kelp shallows",
+  stone: "Crystal cavern",
+  sky: "Above the clouds",
+  frost: "Aurora pines",
+  moon: "Moonlit meadow",
+  arcane: "Night library",
+};
+
+/** Where your companion lives: its own element's scene, or any other you've
+ *  opened by discovering a creature of that element. */
+function Habitats(props: { s: HatcheryState; pet: Pet | null }) {
+  const { s, pet } = props;
+  const open = habitats(s);
+  const own = pet ? speciesById(pet.species)?.element : undefined;
+  if (own) open.add(own);
+  const here = pet ? homeOf(pet) : undefined;
+  return (
+    <section className="habitats">
+      <div className="section-head">
+        <h2>Habitats</h2>
+        <span className="count">
+          {open.size}/{ELEMENTS.length} open{pet ? " · click to move your companion" : ""} · discover a creature
+          of an element to open its home
+        </span>
+      </div>
+      <div className="habitat-grid">
+        {ELEMENTS.map((el) => {
+          const ok = open.has(el);
+          return (
+            <button
+              key={el}
+              className={`habitat-card ${ok ? "open" : "locked"} ${el === here ? "on" : ""}`}
+              disabled={!ok || !pet || el === here}
+              onClick={() => pet && mutate((st) => setHome(st, pet.id, el), true)}
+              title={ok ? HABITAT_NAME[el] : `Discover a ${ELEMENT_LABEL[el]} creature to open this habitat`}
+            >
+              <img className="pixel" src={sceneUrl(el)} alt="" draggable={false} />
+              <b>{ok ? HABITAT_NAME[el] : "???"}</b>
+              <span className="wardrobe-state">
+                {el === here ? "home" : !ok ? `${ELEMENT_LABEL[el]} · locked` : el === own ? `${ELEMENT_LABEL[el]} · its own` : ELEMENT_LABEL[el]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function Stat(props: { value: string; label: string }) {
   return (
     <div className="stat">
@@ -353,10 +412,9 @@ function CompanionDetail(props: { pet: Pet }) {
   };
   return (
     <div className="companion-detail">
-      <div className="companion-stage">
-        <span className="pedestal" />
+      <Habitat element={homeOf(pet)} scale={5} live className="companion-stage">
         <PetSprite pet={pet} scale={5} className="bob" />
-      </div>
+      </Habitat>
       <div className="companion-meta">
         {editing ? (
           <input

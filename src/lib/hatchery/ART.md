@@ -153,3 +153,13 @@ hats sit on the skull, not on a crest or ear tip, and clear of the eyes;
 glasses ring the real eyes; the scarf wraps where the head meets the body and
 keeps the mouth visible; and nothing blends into the creature's colors.
 Eyes drawn without `eyes()` need their positions set by hand.
+
+## Habitats
+
+`scenes.ts` paints one 56×48 scene per element, at the creature's pixel
+size, with the creature's 32×32 box at `STAGE`. Review with
+`node scripts/scene-sheet.ts <out.png> [element] [scale]` (each scene empty,
+with three of its own creatures, a foreign one, and its egg). Keep scenes
+darker and calmer than the creatures: shading lives in `tint` steps with
+dithering only at step edges, and `finish()` adds the light pool and dark rim.
+Motes (embers, snow, bubbles) are CSS-animated in the UI from `MOTES`.

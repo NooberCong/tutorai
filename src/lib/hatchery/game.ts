@@ -76,6 +76,8 @@ export interface Pet {
   hatchedIn?: Where;
   /** Accessories it has on, one per slot. */
   wear?: Wear;
+  /** The habitat it's shown in, when not its own element's. */
+  home?: Element;
 }
 
 export interface DexEntry {
@@ -499,6 +501,30 @@ export function hatch(
 
 export function setCompanion(s: HatcheryState, petId: string): void {
   if (s.pets.some((p) => p.id === petId)) s.companionId = petId;
+}
+
+// ── habitats ──
+
+/** Habitats you can move a pet to: one per element you've discovered a
+ *  creature of (a pet's own element is always open to it). */
+export function habitats(s: HatcheryState): Set<Element> {
+  const open = new Set<Element>();
+  for (const id of Object.keys(s.dex)) {
+    const sp = speciesById(id);
+    if (sp) open.add(sp.element);
+  }
+  return open;
+}
+
+export function homeOf(pet: Pet): Element {
+  return pet.home ?? speciesById(pet.species)?.element ?? "leaf";
+}
+
+export function setHome(s: HatcheryState, petId: string, el: Element): void {
+  const pet = s.pets.find((p) => p.id === petId);
+  const own = pet && speciesById(pet.species)?.element;
+  if (!pet || (el !== own && !habitats(s).has(el))) return;
+  pet.home = el === own ? undefined : el;
 }
 
 export function renamePet(s: HatcheryState, petId: string, name: string): void {

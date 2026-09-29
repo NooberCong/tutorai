@@ -2,8 +2,9 @@
  *  with nearest-neighbor scaling so pixels stay crisp at any size. */
 
 import { useEffect, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Sprite } from "../../lib/hatchery/pixel";
-import type { Pose, Stage } from "../../lib/hatchery/kit";
+import type { Element, Pose, Stage } from "../../lib/hatchery/kit";
 import type { Egg, Pet } from "../../lib/hatchery/game";
 import { speciesById, stageOf } from "../../lib/hatchery/game";
 import {
@@ -17,6 +18,7 @@ import {
 } from "../../lib/hatchery/catalog";
 import type { AccessoryId, Wear } from "../../lib/hatchery/accessories";
 import { drawEgg } from "../../lib/hatchery/eggs";
+import { MOTES, SCENE_H, SCENE_W, STAGE, motes, renderScene } from "../../lib/hatchery/scenes";
 
 const urls = new Map<string, string>();
 
@@ -221,5 +223,49 @@ export function PetSprite(props: {
       className={`${props.className ?? ""} ${asleep ? "asleep" : "awake"}`}
       alt={pet.name ?? name}
     />
+  );
+}
+
+export function sceneUrl(el: Element): string {
+  return toUrl(`scene/${el}`, () => renderScene(el));
+}
+
+/** A creature (or egg) standing in its habitat. `children` is its 32×32
+ *  sprite at the same `scale`; it's placed on the scene's floor. Motes —
+ *  embers, snow, bubbles — drift over the scene when `live`. */
+export function Habitat(props: {
+  element: Element;
+  scale: number;
+  live?: boolean;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const { element, scale: k } = props;
+  return (
+    <span
+      className={`habitat ${props.className ?? ""}`}
+      style={{ width: SCENE_W * k, height: SCENE_H * k, backgroundImage: `url(${sceneUrl(element)})`, "--k": `${k}px` } as CSSProperties}
+    >
+      <span className="habitat-stage" style={{ left: STAGE.x * k, top: STAGE.y * k, width: 32 * k, height: 32 * k }}>
+        {props.children}
+      </span>
+      {props.live && (
+        <span className={`motes motes-${MOTES[element].kind}`} aria-hidden>
+          {motes(element).map((m, i) => (
+            <i
+              key={i}
+              style={{
+                left: m.x * k,
+                top: m.y * k,
+                background: m.color,
+                color: m.color,
+                animationDelay: `${m.delay}s`,
+                animationDuration: `${m.dur}s`,
+              }}
+            />
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
