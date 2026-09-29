@@ -16,7 +16,7 @@
 import type { Element } from "./kit.ts";
 import type { Sprite } from "./pixel.ts";
 import type { Rgb } from "./color.ts";
-import { hexToRgb } from "./color.ts";
+import { hexToRgb, oklchToRgb, rgbToOklch } from "./color.ts";
 
 export const SCENE_W = 56;
 export const SCENE_H = 48;
@@ -124,6 +124,23 @@ class Canvas {
     });
   }
 
+  /** Remap every pixel's lightness into lo…hi and scale its chroma. */
+  grade(lo: number, hi: number, chroma: number) {
+    const memo = new Map<number, Rgb>();
+    for (let i = 0; i < this.data.length; i += 4) {
+      const key = (this.data[i] << 16) | (this.data[i + 1] << 8) | this.data[i + 2];
+      let out = memo.get(key);
+      if (!out) {
+        const [L, C, H] = rgbToOklch([this.data[i], this.data[i + 1], this.data[i + 2]]);
+        out = oklchToRgb(lo + L * (hi - lo), C * chroma, H);
+        memo.set(key, out);
+      }
+      this.data[i] = out[0];
+      this.data[i + 1] = out[1];
+      this.data[i + 2] = out[2];
+    }
+  }
+
   sprite(): Sprite {
     return { w: SCENE_W, h: SCENE_H, data: this.data };
   }
@@ -152,21 +169,24 @@ function ridge(seed: number, scale = 1) {
 const inEll = (cx: number, cy: number, rx: number, ry: number) => (x: number, y: number) =>
   ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1;
 
-/** The finishing passes every scene shares: light pooled where the
- *  creature stands, a glow behind it, and a darker rim. */
-function finish(c: Canvas, light: Paint, shade: Paint, pool = 0.4, glow = 0.14) {
+/** The finishing passes every scene shares: a little light pooled where
+ *  the creature stands, a darker rim, then the grade that keeps the scene
+ *  behind the creature — its lightness squeezed into a dim middle range and
+ *  its color muted, so a creature's full range (pale fur, bright shine)
+ *  always stands out against it. */
+function finish(c: Canvas, light: Paint, shade: Paint, pool = 0.4) {
   const cx = STAGE.x + 16;
-  c.tint(light, (x, y) => {
-    const floor = y >= FLOOR ? pool * (1 - Math.hypot((x + 0.5 - cx) / 17, (y + 0.5 - 43.5) / 4.2)) : 0;
-    const halo = glow * (1 - Math.hypot((x + 0.5 - cx) / 22, (y + 0.5 - 26) / 20));
-    return Math.max(floor, halo);
-  });
+  c.tint(light, (x, y) => (y >= FLOOR ? pool * 0.6 * (1 - Math.hypot((x + 0.5 - cx) / 15, (y + 0.5 - 43.5) / 3.6)) : 0));
   c.tint(shade, (x, y) => {
     const dx = Math.abs(x + 0.5 - SCENE_W / 2) / (SCENE_W / 2);
     const dy = Math.abs(y + 0.5 - SCENE_H * 0.55) / (SCENE_H * 0.55);
     return Math.max(0, Math.hypot(dx * 1.05, dy * 0.8) - 0.78) * 1.2;
   });
+  c.grade(GRADE.lo, GRADE.hi, GRADE.chroma);
 }
+
+/** Scene lightness maps into lo…hi (OKLCH), chroma scales by `chroma`. */
+const GRADE = { lo: 0.17, hi: 0.62, chroma: 0.85 };
 
 // ── habitats ──
 
@@ -213,7 +233,7 @@ function leaf(c: Canvas) {
   // A toadstool on the left, a fern on the right.
   c.stamp(2, 38, [".rrr.", "rwrrw", "rrrrr", "..s..", "..s.."], { r: "#c9503f", w: "#f6ead2", s: "#eadfc4" });
   c.stamp(47, 36, ["....f.", "..f.f.", ".f.ff.", "f.ff..", ".ff...", "..f..."], { f: "#79aa52" }, true);
-  finish(c, "#fff2b0", "#10180f", 0.32, 0.12);
+  finish(c, "#fff2b0", "#10180f", 0.32);
 }
 
 function ember(c: Canvas) {
@@ -254,7 +274,7 @@ function ember(c: Canvas) {
   c.tint("#ff6a2a", (x, y) => (y >= FLOOR ? 0.4 * (1 - Math.min(...seam.map(([sx, sy]) => Math.hypot(sx - x, (sy - y) * 1.5))) / 3) : 0));
   for (const [x, y] of seam) c.set(x, y, "#e8581e");
   for (const [x, y] of [[7, 42], [8, 43], [46, 42], [47, 43], [22, 46], [34, 46]]) c.set(x, y, "#ffc060");
-  finish(c, "#ffb070", "#0e0708", 0.3, 0.1);
+  finish(c, "#ffb070", "#0e0708", 0.3);
 }
 
 function tide(c: Canvas) {
@@ -289,7 +309,7 @@ function tide(c: Canvas) {
   c.fill((x, y) => y > FLOOR && y % 3 === 0 && ((x + y * 2) % 8) < 3, "#b89e68");
   c.stamp(45, 44, [".s.", "sss", ".s."], { s: "#f08a6a" });
   c.stamp(6, 45, [".w.", "www"], { w: "#f4e8d8" });
-  finish(c, "#e8fff4", "#08141c", 0.3, 0.12);
+  finish(c, "#e8fff4", "#08141c", 0.3);
 }
 
 function stone(c: Canvas) {
@@ -336,7 +356,7 @@ function stone(c: Canvas) {
   }
   c.tint("#b48ae0", (x, y) => (y >= FLOOR ? 0.3 * (1 - Math.hypot((x - 6) / 12, (y - 42) / 5)) : 0));
   c.tint("#e0b04a", (x, y) => (y >= FLOOR ? 0.3 * (1 - Math.hypot((x - 50) / 12, (y - 42) / 5)) : 0));
-  finish(c, "#ffe8c0", "#0b0a10", 0.26, 0.1);
+  finish(c, "#ffe8c0", "#0b0a10", 0.26);
 }
 
 /** A crystal cluster, bottom-aligned (rows trimmed from the top for
@@ -377,7 +397,7 @@ function sky(c: Canvas) {
   const lower = (x: number) => FLOOR + 4 + Math.round(Math.abs(Math.sin(x * 0.35 + 1)) * 2);
   c.fill((x, y) => y >= lower(x), (x, y) => (y === lower(x) ? "#f4f6fc" : "#cfd8ea"));
   c.fill((x, y) => y > lower(x) + 1 && Math.abs(Math.sin(x * 0.35 + 1)) < 0.3, "#b8c4dc");
-  finish(c, "#fff4dc", "#18203a", 0.2, 0.1);
+  finish(c, "#fff4dc", "#18203a", 0.2);
 }
 
 function frost(c: Canvas) {
@@ -421,7 +441,7 @@ function frost(c: Canvas) {
   c.fill((x, y) => y >= FLOOR + 3 && y < FLOOR + 5 && bayer(x, y) > 0.5, "#b8cce0");
   const glint = rng(29);
   for (let i = 0; i < 7; i++) c.set(Math.floor(glint() * SCENE_W), FLOOR + 1 + Math.floor(glint() * 6), "#ffffff");
-  finish(c, "#e8f4ff", "#070c18", 0.18, 0.12);
+  finish(c, "#e8f4ff", "#070c18", 0.18);
 }
 
 function moon(c: Canvas) {
@@ -464,7 +484,7 @@ function moon(c: Canvas) {
     c.stamp(x - 1, y - 1, [".f.", "fcf", ".f."], { f: "#9ab0ff", c: "#f0f4ff" });
   }
   c.tint("#9ab0ff", (x, y) => (y >= FLOOR - 1 ? 0.2 * (1 - Math.min(...[[8, 42], [15, 45], [44, 43], [50, 46], [36, 46]].map(([fx, fy]) => Math.hypot(fx - x, fy - y))) / 3.5) : 0));
-  finish(c, "#c8d4ff", "#05061a", 0.26, 0.12);
+  finish(c, "#c8d4ff", "#05061a", 0.26);
 }
 
 function arcane(c: Canvas) {
@@ -518,7 +538,7 @@ function arcane(c: Canvas) {
   };
   c.fill(ring, (x, y) => ((x * 7 + y) % 5 === 0 ? "#f0d8ff" : "#b07aff"));
   c.tint("#b07aff", (x, y) => (y >= FLOOR ? 0.3 * (1 - Math.hypot((x + 0.5 - 28) / 16, (y + 0.5 - 44) / 4.5)) : 0));
-  finish(c, "#f0d8ff", "#07040e", 0.18, 0.08);
+  finish(c, "#f0d8ff", "#07040e", 0.18);
 }
 
 const PAINT: Record<Element, (c: Canvas) => void> = { leaf, ember, tide, stone, sky, frost, moon, arcane };

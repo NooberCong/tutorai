@@ -161,5 +161,8 @@ size, with the creature's 32×32 box at `STAGE`. Review with
 `node scripts/scene-sheet.ts <out.png> [element] [scale]` (each scene empty,
 with three of its own creatures, a foreign one, and its egg). Keep scenes
 darker and calmer than the creatures: shading lives in `tint` steps with
-dithering only at step edges, and `finish()` adds the light pool and dark rim.
+dithering only at step edges, and `finish()` adds the light pool and dark
+edges, then grades the whole scene (`GRADE`: lightness squeezed into a dim
+middle range, color muted) so any creature — even a white one on snow —
+stands out. The UI adds a dark one-pixel rim around the creature.
 Motes (embers, snow, bubbles) are CSS-animated in the UI from `MOTES`.

@@ -1186,6 +1186,12 @@
   position: absolute;
   display: block;
 }
+/* A dark one-pixel rim lifts the creature off its scene. */
+.habitat-stage > img {
+  --rim: rgba(5, 7, 10, 0.5);
+  filter: drop-shadow(var(--k) 0 0 var(--rim)) drop-shadow(calc(var(--k) * -1) 0 0 var(--rim))
+    drop-shadow(0 var(--k) 0 var(--rim)) drop-shadow(0 calc(var(--k) * -1) 0 var(--rim));
+}
 .habitat .motes {
   position: absolute;
   inset: 0;

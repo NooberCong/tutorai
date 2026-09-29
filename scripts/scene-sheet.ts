@@ -41,6 +41,18 @@ const blit = (s: Sprite, x0: number, y0: number) => {
   }
 };
 
+/** The dark rim the app draws around a creature in its habitat
+ *  (`.habitat-stage` in hatchery.css). */
+const rim = (s: Sprite, x0: number, y0: number) => {
+  const on = (x: number, y: number) => x >= 0 && y >= 0 && x < s.w && y < s.h && s.data[(y * s.w + x) * 4 + 3] > 0;
+  for (let y = -1; y <= s.h; y++) {
+    for (let x = -1; x <= s.w; x++) {
+      if (on(x, y) || !(on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1))) continue;
+      svg += `<rect x="${x0 + x * SCALE}" y="${y0 + y * SCALE}" width="${SCALE}" height="${SCALE}" fill="#07090c" fill-opacity="0.55"/>`;
+    }
+  }
+};
+
 rows.forEach((el, ri) => {
   const y0 = GAP + ri * CH;
   const own = SPECIES.filter((s) => s.element === el);
@@ -56,7 +68,10 @@ rows.forEach((el, ri) => {
   cast.forEach((sp, ci) => {
     const x0 = GAP + ci * CW;
     blit(renderScene(el), x0, y0);
-    if (sp) blit(sp, x0 + STAGE.x * SCALE, y0 + STAGE.y * SCALE);
+    if (sp) {
+      rim(sp, x0 + STAGE.x * SCALE, y0 + STAGE.y * SCALE);
+      blit(sp, x0 + STAGE.x * SCALE, y0 + STAGE.y * SCALE);
+    }
   });
 });
 svg += "</svg>";
