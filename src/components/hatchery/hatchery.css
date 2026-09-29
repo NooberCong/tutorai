@@ -1008,12 +1008,14 @@
   display: inline-flex;
 }
 .egg-help-btn {
+  box-sizing: border-box;
   width: 16px;
   height: 16px;
+  padding: 0;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
