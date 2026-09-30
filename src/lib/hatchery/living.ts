@@ -2,7 +2,8 @@
  *  WebGL shader, so its big features move. Aurora curtains ripple and
  *  surge, kelp sways in the swell under a moving surface, clouds billow,
  *  lava creeps, crowns and grass stir in the wind, mist drifts through
- *  the hollows, and the runes on the study floor turn.
+ *  the hollows, candlelight wavers over the library's shelves, where a
+ *  book wakes now and then, and the runes on the study floor turn.
  *
  *  The painter (backdrops.ts, `paintLive`) leaves the moving parts out of
  *  the painting and records where they go: masks for what sways and for
@@ -230,11 +231,49 @@ vec3 scene(vec2 P) {
   col = mix(col, rgb(138.0, 150.0, 216.0) * L, mist(P, 580.0, 700.0, 0.3, 0.006) * m.g);
   return mix(col, rgb(122.0, 134.0, 200.0) * L, mist(P, 740.0, 860.0, 0.18, 0.01) * m.a);
 }`,
-  // the rune circle turns and breathes
+  // candlelight wavers over the room; now and then a book on the shelves
+  // wakes, its gilt glowing and sparks rising along its spine (book number
+  // on its shelf in 0, gilt bands in 1); the rune circle turns and breathes
   arcane: `
 float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+float flame(vec2 P, vec2 at, float i) {
+  vec2 d = (P - at) / 280.0;
+  float f = 0.6 * N(vec2(t * 0.9 + i * 7.0, i * 3.1)) + 0.4 * N2(vec2(t * 2.3, i * 5.7 + 11.0));
+  return exp(-dot(d, d)) * f;
+}
+/** How awake the book at P is, 0…1: each wakes for a while now and then.
+ *  Nearest texel, so a book's number doesn't blend with its neighbour's. */
+float awake(vec2 P) {
+  float id = floor(texelFetch(uMask, ivec2(clamp(P / S, 0.0, 0.9999) * vec2(textureSize(uMask, 0))), 0).r * 32.0 + 0.5);
+  if (id < 1.0) return 0.0;
+  float key = id + floor((P.y - 30.0) / 136.0) * 37.0 + (P.x > 800.0 ? 500.0 : 0.0);
+  float c = t / 24.0 + hash(key) * 17.0;
+  return step(0.92, hash(floor(c) * 1.618 + key * 0.37)) * pow(sin(3.14159 * fract(c)), 2.0);
+}
 vec3 scene(vec2 P) {
   vec3 col = base(P);
+  float L = lit(P);
+  float fl = flame(P, vec2(290.0, 560.0), 1.0) + flame(P, vec2(318.0, 574.0), 2.0) + flame(P, vec2(1290.0, 566.0), 3.0)
+           + flame(P, vec2(250.0, 748.0), 4.0) + flame(P, vec2(1350.0, 758.0), 5.0);
+  col *= 1.0 + vec3(0.32, 0.22, 0.1) * fl;
+  if (P.x < 215.0 || P.x > 1385.0) {
+    float gilt = texture(uMask, P / S).g;
+    // candle glints running along the gilt
+    col += col * gilt * 0.6 * pow(max(0.0, N(vec2(P.x * 0.012 - t * 0.06, P.y * 0.005 + t * 0.01))), 2.0);
+    float w = awake(P);
+    vec3 v = rgb(196.0, 150.0, 255.0) * L;
+    // a faint light rising off it, flickering up into the shelf above
+    if (w == 0.0) {
+      float up = 0.0;
+      for (float k = 1.0; k <= 6.0; k++) up += awake(P + vec2(0.0, k * 6.0)) * (1.0 - k / 7.0) * 0.3;
+      col += v * up * 0.22 * (0.6 + 0.4 * N2(vec2(P.x * 0.15, P.y * 0.05 + t * 0.8)));
+    }
+    if (w > 0.0) {
+      float spark = smoothstep(0.35, 0.75, N2(vec2(P.x * 0.25, P.y * 0.06 + t * 0.5)));
+      col = mix(col, col * vec3(1.1, 1.0, 1.4) + v * 0.05, w * 0.7);
+      col += v * w * (gilt * 0.9 + spark * 0.35);
+    }
+  }
   if (P.y > 820.0 && P.x > 200.0 && P.x < 1400.0) {
     vec2 d = vec2((P.x - 800.0) / 520.0, (P.y - 910.0) / 70.0);
     float e = length(d);

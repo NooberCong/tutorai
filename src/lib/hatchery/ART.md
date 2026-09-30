@@ -190,8 +190,10 @@ records where things go in four mask channels per scene. A "hide" channel
 starts at 1 and is covered by everything painted after it, so it says
 where an effect behind the scenery shows (the aurora behind the mountains).
 A "tag" channel follows `p.brush`, so it says how much a pixel belongs to
-something that moves (a crown that sways); tag channels are blurred, since
-a sway field has to reach a little past the thing that sways. Kelp and lava
+something that moves (a crown that sways); a sway field is blurred, since
+it has to reach a little past the thing that sways. A tag can also carry a
+value: the library's books are numbered along each shelf, so the shader
+can wake one book at a time (read nearest-texel, so numbers don't blend). Kelp and lava
 light go to a separate layer (`beginLayer`), moved or animated over the
 rest. Each scene's comments name its channels, and its shader in `living.ts`
 reads them. Motion there is slow, continuous and time-based. Review the

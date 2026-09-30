@@ -1431,6 +1431,8 @@ function arcane(p: Paint) {
   win(1210, false);
 
   // bookshelves at the edges
+  p.tag(0);
+  p.tag(1);
   const wood = (X: number, Y: number, dark: string, lit: string) => {
     mix(hex(dark), hex(lit), clamp(0.45 + (n(X * 0.01, Y * 0.2) * 0.5 + n(X * 0.03, Y * 0.5) * 0.3) * 0.5));
   };
@@ -1444,7 +1446,11 @@ function arcane(p: Paint) {
     const palette = ["#7a3448", "#344a7a", "#4e6a38", "#8a6230", "#4c3a7c", "#94503a", "#2c5e5e", "#6a2a2a"].map(hex);
     for (let y = 30; y < H - 40; y += 136) {
       let x = x0 + 18;
+      // (live: each book's number along its shelf in 0, 1/32…31/32, and its
+      // gilt bands in 1, so the shader can wake single books)
+      let book = 0;
       while (x < x1 - 30) {
+        p.brush[0] = (book++ % 31 + 1) / 32;
         const bw = 14 + r() * 18;
         const bh = 84 + r() * 34;
         const c = palette[Math.floor(r() * palette.length)];
@@ -1457,11 +1463,14 @@ function arcane(p: Paint) {
         p.each(bx, top, bx + bw, y + 122, (X, Y, i) => {
           const u = ((X - bx) / bw) * 2 - 1;
           ramp(0.4 - u * 0.45 + 0.35 * (1 - u * u) - 0.1, dark, c, lit);
-          if (Math.abs(Y - b1) < 2 || Math.abs(Y - b2) < 2) toward(hex("#e8c070"), 0.55);
+          const gilt = Math.abs(Y - b1) < 2 || Math.abs(Y - b2) < 2;
+          if (gilt) toward(hex("#e8c070"), 0.55);
+          p.brush[1] = gilt ? 1 : 0;
           p.over(i, 1);
         });
         x += bw + 1 + (r() < 0.1 ? 22 : 0);
       }
+      p.brush[0] = p.brush[1] = 0;
       p.each(x0, y + 122, x1, y + 136, (X, Y, i) => {
         wood(X, Y, "#2a1820", "#6a4034");
         scale(1 - (Y - y - 122) / 30);
