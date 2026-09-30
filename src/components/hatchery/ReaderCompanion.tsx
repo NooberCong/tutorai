@@ -81,6 +81,7 @@ function intro(s: HatcheryState): string | null {
 
 function Den(props: { onOpenHatchery: () => void }) {
   const s = useHatchery();
+  const backdrop = useSetting("hatcheryBackdrop");
   const active = useReaderActive();
   const { meta, currentPage } = useSession();
   const { enabled: companionOn, quips, markQuipSaid } = useInsights();
@@ -233,6 +234,13 @@ function Den(props: { onOpenHatchery: () => void }) {
               Open hatchery
             </button>
             <span className="den-quiet">
+              <button
+                className="link-btn"
+                title={backdrop ? "Plain dark background behind the pages" : "Show the habitat behind the pages"}
+                onClick={() => saveSetting("hatcheryBackdrop", !backdrop)}
+              >
+                {backdrop ? "Plain background" : "Habitat background"}
+              </button>
               <button
                 className="link-btn"
                 title="Hide the pet from the reader. Reading still warms eggs and grows pets."

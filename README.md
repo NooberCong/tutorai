@@ -168,7 +168,8 @@ An optional hatchery that rewards actual reading:
   rippling aurora, embers rise, bubbles wobble up, fireflies wander, candles
   flicker. The animation runs in a worker, off the reader's thread. It stops
   when the reader is out of sight and respects "reduce motion". The motion
-  and the backdrop can each be turned off in the hatchery.
+  and the backdrop can each be turned off in the hatchery, and "Plain
+  background" in the pet's card brings back the plain dark reader.
 - **Out of the way when you want it to be.** Hide the pet from the reader and
   keep hatching, or turn reading pets off entirely. Off means off: no
   tracking, no tab. Your collection is kept for when you turn it back on.
