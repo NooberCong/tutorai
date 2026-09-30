@@ -196,9 +196,9 @@ An optional hatchery that rewards actual reading:
   <sub><i>Each element has its own habitat. Pets stand in theirs, or in any you've unlocked.</i></sub>
 </p>
 <p align="center">
-  <img src="docs/screenshots/reader-habitat-frost.png" alt="The reader with a gradient descent chapter open; beside the page, snowy pines under an aurora, dimmed" width="49%" />
-  <img src="docs/screenshots/reader-habitat-glade.png" alt="The same page with a sunlit forest glade beside it, dimmed" width="49%" />
-  <sub><i>Your companion's habitat fills the space beside the page, dimmed toward the text.</i></sub>
+  <img src="docs/screenshots/reader-habitat-frost.gif" alt="The reader with a gradient descent chapter open; beside the page, snow falls over dimmed pines while the aurora ripples" width="49%" />
+  <img src="docs/screenshots/reader-habitat-ember.gif" alt="The same page beside ember crags, embers rising past rock spires and the volcano's glow breathing" width="49%" />
+  <sub><i>Your companion's habitat fills the space beside the page, dimmed toward the text, and drifts slowly.</i></sub>
 </p>
 
 ---
