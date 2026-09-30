@@ -247,7 +247,7 @@ export function insightsPrompt(
         ``,
         `Separately, the reader has a small pet reading along: ${pet.name}, ${pet.kind}. ${pet.about}`,
         `Optionally write one "quip" — something ${pet.name} blurts out about these pages, the kind of aside that makes the reader smile:`,
-        `- Pick the funniest moment on page ${quipFor.fromPage} or later in this span (the reader is on page ${quipFor.fromPage}; ${pet.name} will say it when they reach that page). Set "page" to the page it's about.`,
+        `- Pick the funniest moment on page ${quipFor.fromPage} or later in this span (the reader is on page ${quipFor.fromPage}; ${pet.name} will say it just after the reader reads that spot). Set "page" to the page it's about and "anchor" to a verbatim 3–10 word quote from that page at the spot.`,
         `- One sentence, at most 110 characters, first person, in the voice of a small, curious, slightly cheeky creature.`,
         `- About something specific on that page (a name, idea, example, number, odd phrase) — a joke, pun, or funny reaction. Never a summary, lesson, or fact dump; never mean about the reader or the author; no spoilers beyond that page.`,
         `- Skip it (null) for front matter, tables of contents, indexes, or when nothing is genuinely fun.`,
@@ -278,7 +278,7 @@ export function insightsPrompt(
     ...quip,
     ``,
     `Output ONLY a JSON object — no fences, no prose before or after — matching:`,
-    `{"insights":[{"kind":"example|gotcha|context|update","page":${span.startPage},"anchor":"...","title":"...","body":"...","sources":[{"title":"...","url":"https://..."}]}]${quipFor ? `,"quip":{"page":${quipFor.fromPage},"text":"..."} or null` : ""}}`,
+    `{"insights":[{"kind":"example|gotcha|context|update","page":${span.startPage},"anchor":"...","title":"...","body":"...","sources":[{"title":"...","url":"https://..."}]}]${quipFor ? `,"quip":{"page":${quipFor.fromPage},"anchor":"...","text":"..."} or null` : ""}}`,
     `"page" is the physical page the note belongs to. "anchor" is a verbatim 3–10 word quote copied exactly from that page's text, at the spot the note is about. "sources" may be [] for non-update notes.`,
   ].join("\n");
 }
@@ -431,8 +431,13 @@ export function parseInsights(
 
 /** The pet's optional aside from an insights run; null when absent or
  *  malformed — a missing joke is never an error. */
-export function parseQuip(text: string, span: InsightSpan, fromPage: number): PetQuip | null {
-  let raw: { quip?: { page?: unknown; text?: unknown } | null };
+export function parseQuip(
+  text: string,
+  span: InsightSpan,
+  pageTexts: { page: number; text: string }[],
+  fromPage: number,
+): PetQuip | null {
+  let raw: { quip?: { page?: unknown; anchor?: unknown; text?: unknown } | null };
   try {
     raw = extractJson(text);
   } catch {
@@ -447,7 +452,9 @@ export function parseQuip(text: string, span: InsightSpan, fromPage: number): Pe
     Math.max(fromPage, typeof q.page === "number" ? Math.round(q.page) : fromPage),
     span.endPage,
   );
-  return { id: crypto.randomUUID(), page, text: line, said: false };
+  const anchor = typeof q.anchor === "string" && q.anchor.trim() ? q.anchor.trim() : undefined;
+  const y = anchorY(anchor, pageTexts.find((p) => p.page === page)?.text ?? "");
+  return { id: crypto.randomUUID(), page, text: line, anchor, y, said: false };
 }
 
 /** Initial guess at a quote's vertical position, as a fraction of the page

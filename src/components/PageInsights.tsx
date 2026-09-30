@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { anchorFracs } from "../lib/anchor";
 import { useInsights } from "../lib/insights";
 import type { Insight, InsightKind } from "../lib/types";
 import { Md } from "./AiPanel";
@@ -36,31 +37,15 @@ export function PageInsights(props: { page: number; heightPx: number }) {
     const pageEl = layerRef.current?.closest(".pdf-page");
     if (!pageEl || !notes?.length) return;
     const locate = () => {
-      const spans = Array.from(pageEl.querySelectorAll<HTMLElement>(".textLayer span"));
-      if (!spans.length) return;
-      const squash = (s: string) => s.replace(/\s+/g, " ").toLowerCase();
-      let text = "";
-      const starts = spans.map((s) => {
-        const at = text.length;
-        text += squash(s.textContent ?? "") + " ";
-        return at;
-      });
-      const pageRect = pageEl.getBoundingClientRect();
-      if (!pageRect.height) return;
+      const fracs = anchorFracs(pageEl, notes.map((n) => n.anchor));
       setAnchorFrac((prev) => {
         let next: Map<string, number> | null = null;
-        for (const n of notes) {
-          const at = n.anchor ? text.indexOf(squash(n.anchor)) : -1;
-          if (at < 0) continue;
-          let idx = 0;
-          while (idx + 1 < starts.length && starts[idx + 1] <= at) idx++;
-          const rect = spans[idx].getBoundingClientRect();
-          const frac = (rect.top + rect.height / 2 - pageRect.top) / pageRect.height;
-          if (prev.get(n.id) !== frac) {
-            next ??= new Map(prev);
-            next.set(n.id, frac);
-          }
-        }
+        notes.forEach((n, i) => {
+          const frac = fracs[i];
+          if (frac === undefined || prev.get(n.id) === frac) return;
+          next ??= new Map(prev);
+          next.set(n.id, frac);
+        });
         return next ?? prev;
       });
     };

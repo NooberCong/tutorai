@@ -20,6 +20,7 @@ import { flushHatchery, onHatcheryEvent, useHatchery, useReaderActive } from "..
 import { useReadingTracker } from "../../lib/hatchery/tracker";
 import { useInsights } from "../../lib/insights";
 import { useSession } from "../../lib/session";
+import { anchorFracs } from "../../lib/anchor";
 import { saveSetting, useSetting } from "../../lib/settings";
 import { HatchModal } from "./HatchModal";
 import { Meter } from "./Meter";
@@ -37,10 +38,11 @@ export function ReaderCompanion(props: { onOpenHatchery: () => void }) {
  *  each get their moment; repeats of a line already waiting are dropped. */
 const MAX_QUEUED = 3;
 
-/** The pet speaks up at most this often, and only once the reader has
- *  settled on the page the aside is about. */
+/** The pet speaks up at most this often, just after the reader has read
+ *  the spot the aside is about: once it scrolls up past the reading line,
+ *  this far down the view. */
 const QUIP_GAP_MS = 3 * 60_000;
-const QUIP_SETTLE_MS = 3000;
+const READ_LINE = 0.25;
 let lastQuipAt = 0;
 
 type Reaction = { kind: "hop" | "love" | "grow"; n: number };
@@ -122,22 +124,59 @@ function Den(props: { onOpenHatchery: () => void }) {
   const stage = pet ? stageOf(pet) : 0;
   const petName = pet && sp ? (pet.name ?? sp.stages[stage]) : "";
 
-  // The pet's aside about the page you're on, once you've settled on it.
-  const quip =
-    companionOn && active && pet
-      ? quips.find((q) => !q.said && currentPage >= q.page - 1 && currentPage <= q.page + 3)
-      : undefined;
+  // The pet's aside, said just after you've read the spot it's about: when
+  // that spot, first seen below the reading line, scrolls up past it. The
+  // scroll is itself the sign of reading, so this doesn't wait on `active`.
+  const armed = useRef(new Set<string>());
+  const talk = companionOn && pet ? quips.filter((q) => !q.said) : [];
+  const talkKey = talk.map((q) => q.id).join();
   useEffect(() => {
-    if (!quip || Date.now() - lastQuipAt < QUIP_GAP_MS) return;
-    const t = window.setTimeout(() => {
-      lastQuipAt = Date.now();
-      markQuipSaid(quip.id);
-      say(quip.text, petName);
-      react("hop");
-    }, QUIP_SETTLE_MS);
-    return () => window.clearTimeout(t);
+    if (!talk.length) return;
+    let pending = 0;
+    const check = () => {
+      pending = 0;
+      const reader = rootRef.current?.closest(".reader-host")?.querySelector<HTMLElement>(".reader");
+      if (!reader) return;
+      const view = reader.clientHeight;
+      const line = reader.scrollTop + view * READ_LINE;
+      const atEnd = reader.scrollTop + view >= reader.scrollHeight - 2;
+      for (const q of talk) {
+        const pageEl = reader.querySelector<HTMLElement>(`.pdf-page[data-page="${q.page}"]`);
+        if (!pageEl) continue;
+        let at = pageEl.offsetTop + (q.y ?? 0.5) * pageEl.offsetHeight;
+        // near the view, the text layer knows where the quote really is
+        if (Math.abs(at - line) < 2 * view) {
+          const frac = anchorFracs(pageEl, [q.anchor])[0];
+          if (frac !== undefined) at = pageEl.offsetTop + frac * pageEl.offsetHeight;
+        }
+        // the last page can't scroll its end past the line; seeing it counts
+        const passed = at <= line || (atEnd && at <= reader.scrollTop + view);
+        if (!passed) {
+          armed.current.add(q.id);
+          continue;
+        }
+        // a spot flicked far past on the way elsewhere stays unsaid
+        const near = at >= reader.scrollTop - view;
+        if (!armed.current.has(q.id) || !near || Date.now() - lastQuipAt < QUIP_GAP_MS) continue;
+        lastQuipAt = Date.now();
+        armed.current.delete(q.id);
+        markQuipSaid(q.id);
+        say(q.text, petName);
+        react("hop");
+        return;
+      }
+    };
+    const onScroll = (e: Event) => {
+      if (!pending && (e.target as Element).classList?.contains("reader")) pending = requestAnimationFrame(check);
+    };
+    check();
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      cancelAnimationFrame(pending);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quip?.id, currentPage]);
+  }, [talkKey, petName]);
 
   // Waking up when you come back to the page.
   const wasActive = useRef(active);

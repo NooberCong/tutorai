@@ -104,6 +104,11 @@ export interface PetQuip {
   id: string;
   page: number;
   text: string;
+  /** Verbatim quote at the spot it's about; the pet speaks once the reader
+   *  has scrolled past it. Absent on quips saved before anchors. */
+  anchor?: string;
+  /** Heuristic position of the anchor, as a fraction of the page height. */
+  y?: number;
   said: boolean;
 }
 

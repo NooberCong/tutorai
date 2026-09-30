@@ -138,7 +138,7 @@ export function InsightsProvider(props: { children: ReactNode }) {
         cancelRef.current = handle.cancel;
         const done = await handle.result;
         const notes = parseInsights(done.text, span, texts);
-        const quip = quipFor ? parseQuip(done.text, span, quipFor.fromPage) : null;
+        const quip = quipFor ? parseQuip(done.text, span, texts, quipFor.fromPage) : null;
         updateArtifacts((a) => ({
           ...a,
           insights: {

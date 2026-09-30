@@ -121,7 +121,8 @@ span never spends your quota twice; a note can be dismissed or handed to the
 chat tab to dig deeper.
 
 With a reading pet around (below), the companion's runs also give your pet
-the occasional one-line aside about the page you're on. The same call does
+the occasional one-line aside about something on the page. It pipes up just
+after you've read that spot, as it scrolls up past you. The same call does
 both, so it costs nothing extra.
 
 <p align="center">
