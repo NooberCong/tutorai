@@ -975,9 +975,10 @@
 }
 .den-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px 6px;
 }
 .den-actions .btn,
 .den-actions .icon-btn {
@@ -993,6 +994,7 @@
 }
 .den-quiet .link-btn {
   font-size: 11.5px;
+  white-space: nowrap;
 }
 
 /* ── "?" — how to find an element's eggs ── */
