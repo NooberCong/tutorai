@@ -181,3 +181,13 @@ pages. The reader shows each half pinned to its own edge and dims it
 `node scripts/backdrop-sheet.ts <dir> [element] [--dim] [--w=1200]`. In the
 app it renders in a worker (`components/hatchery/backdrop.worker.ts`) once
 per element per session.
+
+The painting is still; `ambience.ts` is what moves over it. It draws pollen
+and falling leaves, embers, bubbles, snow, aurora ripples, fireflies,
+meteors, crystal glints, candle flicker and cloud wisps, in the same scene
+space and mapped the same two-halves way. Anything that moves is left out
+of the painting (only stars and flowers stay baked in), so nothing looks
+frozen. Motion is time-based and eased by sums of sines, and slow on
+purpose. It runs on an OffscreenCanvas in `ambience.worker.ts`: the main
+thread only forwards resizes and visibility, and the loop stops when the
+reader is hidden or "reduce motion" is set.

@@ -208,9 +208,13 @@ class Paint {
     const r = rng(99);
     for (let j = 0, i = 0; j < out.length; j += 4, i += 3) {
       const d = (r() + r() - 1) * 0.75 + 0.5;
-      out[j] = this.px[i] * 255 + d;
-      out[j + 1] = this.px[i + 1] * 255 + d;
-      out[j + 2] = this.px[i + 2] * 255 + d;
+      // over-bright light (lava, glows) keeps its hue: scale the pixel down
+      // as a whole instead of clipping channels, which turns orange yellow
+      const m = Math.max(this.px[i], this.px[i + 1], this.px[i + 2]);
+      const k = m > 1 ? 255 / m : 255;
+      out[j] = this.px[i] * k + d;
+      out[j + 1] = this.px[i + 1] * k + d;
+      out[j + 2] = this.px[i + 2] * k + d;
       out[j + 3] = 255;
     }
     return out;
@@ -682,7 +686,6 @@ function leaf(p: Paint) {
     const c = petals[Math.floor(fr() * petals.length)];
     ball(p, n, x, y, 3 + fr() * 3.5, { dark: times(c, 0.6), mid: c, light: hex("#ffffff"), rough: 0.3, freq: 0.5, tex: 0 });
   }
-  motes(p, 32, 90, [0, 120, W, 820], [1.2, 3.5], [hex("#fff8d0"), hex("#f0ffc0")], 0.7);
   vignette(p, 0.3);
 }
 
@@ -800,7 +803,6 @@ function ember(p: Paint) {
     return 1;
   });
   glow(p, 800, 735, 700, hex("#ff6a20"), 0.08);
-  motes(p, 51, 160, [0, 120, W, 900], [1.2, 4], [lava, hot, hex("#ff9a40")], 0.9);
   vignette(p, 0.3);
 }
 
@@ -831,7 +833,6 @@ function tide(p: Paint) {
     toward(water, 0.2);
     return 1;
   });
-  motes(p, 61, 140, [0, 100, W, 900], [0.8, 2.2], [hex("#d8f4ff")], 0.35);
 
   // sand: rippled, with caustics dancing on it
   land(p, curve((X) => 820 + 16 * fbm(n2, X * 0.003, 8.5, 3)), (X, Y, d) => {
@@ -893,7 +894,8 @@ function tide(p: Paint) {
   coral(80, 940, "#d070b8", 3);
   coral(1540, 930, "#f07a8e", 4);
 
-  // a school of fish in the distance, and bubbles rising
+  // a school of fish in the distance (bubbles, specks and the like move:
+  // ambience.ts)
   const fr = rng(91);
   for (let i = 0; i < 14; i++) {
     const x = 1130 + fr() * 330;
@@ -901,18 +903,6 @@ function tide(p: Paint) {
     const s = 0.7 + fr() * 0.5;
     ball(p, n, x, y, 13 * s, { dark: hex("#0c3c5a"), mid: hex("#1a5a7c"), light: hex("#5aa0bc"), rough: 0, freq: 0, tex: 0, alpha: 0.7 }, 0.38);
     limb(p, x + 12 * s, y, x + 22 * s, y, 1, 6 * s, () => set(hex("#124a6a")));
-  }
-  const br = rng(92);
-  for (let i = 0; i < 60; i++) {
-    const x = i % 2 ? 1600 - br() * 480 : br() * 480;
-    const y = 120 + br() * 780;
-    const r = 2 + br() * br() * 9;
-    p.each(x - r - 2, y - r - 2, x + r + 2, y + r + 2, (X, Y, j) => {
-      const d = Math.hypot(X - x, Y - y);
-      const ring = Math.exp(-(((d - r) / 0.9) ** 2));
-      const spec = Math.exp(-((Math.hypot(X - x + r * 0.4, Y - y + r * 0.4) / (r * 0.25)) ** 2));
-      p.add(j, foam, ring * 0.5 + spec * 0.7);
-    });
   }
   vignette(p, 0.4);
 }
@@ -1008,7 +998,6 @@ function stone(p: Paint) {
   crystal(1525, -20, 90, Math.PI + 0.2, hex("#c8f4ff"), hex("#2a78b0"));
   glow(p, 130, 40, 110, violet, 0.4);
   crystal(130, -15, 110, Math.PI + 0.25, hex("#eadcff"), hex("#5a2eb0"));
-  motes(p, 81, 90, [0, 80, W, 860], [0.8, 2.6], [hex("#dff6ff"), hex("#e8d8ff")], 0.7);
   vignette(p, 0.35);
 }
 
@@ -1065,12 +1054,7 @@ function skyScene(p: Paint) {
   cluster(p, n, 12, 1500, 560, 140, 220, 50, [36, 76], tower, 0.12);
   bank(900, [90, 150], 4, 0);
 
-  // a few birds far off
-  for (const [x, y, k] of [[300, 240, 1], [340, 262, 0.8], [270, 276, 0.7], [1380, 330, 0.9], [1415, 312, 0.7]]) {
-    const c = hex("#3e4470");
-    limb(p, x - 10 * k, y - 4 * k, x, y, 1.1 * k, 1.6 * k, () => set(c));
-    limb(p, x, y, x + 10 * k, y - 4 * k, 1.6 * k, 1.1 * k, () => set(c));
-  }
+  // birds and drifting wisps move: ambience.ts
   vignette(p, 0.25);
 }
 
@@ -1139,8 +1123,6 @@ function frost(p: Paint) {
     mix(hex("#8aa0c8"), hex("#d8e4f6"), clamp(0.7 + fbm(n, X * 0.004, Y * 0.03, 3) - smooth(0, 60, d) * 0.4));
     return 1;
   });
-  motes(p, 103, 60, [0, 780, W, H], [0.6, 1.4], [hex("#ffffff")], 0.9);
-  motes(p, 104, 120, [0, 0, W, H], [1, 3.2], [hex("#ffffff")], 0.45);
   vignette(p, 0.35);
 }
 
@@ -1226,7 +1208,7 @@ function moon(p: Paint) {
     limb(p, x, y, x + lean, y - h, 1.8, 0.4, (u) => mix(hex("#0c1034"), hex("#3a4690"), clamp(0.3 - u * 0.3)));
   }
 
-  // moonflowers and fireflies
+  // moonflowers (the fireflies move: ambience.ts)
   const fr = rng(131);
   for (let i = 0; i < 60; i++) {
     const x = i % 2 ? 1600 - fr() * 520 : fr() * 520;
@@ -1234,7 +1216,6 @@ function moon(p: Paint) {
     glow(p, x, y, 10, hex("#b8ccff"), 0.35);
     ball(p, n, x, y, 3 + fr() * 2.5, { dark: hex("#8a9ad8"), mid: hex("#dfe6ff"), light: hex("#ffffff"), rough: 0.4, freq: 0.6, tex: 0 });
   }
-  motes(p, 132, 40, [0, 480, W, 900], [2, 4], [hex("#e8ff9a")], 0.9, (x) => Math.abs(x - 800) > 280);
   vignette(p, 0.35);
 }
 
@@ -1379,7 +1360,6 @@ function arcane(p: Paint) {
   candle(250, 830, 70);
   candle(1350, 830, 60);
 
-  motes(p, 141, 90, [0, 100, W, 860], [1, 3], [hex("#d8b8ff"), hex("#a8e0ff"), hex("#ffe0a8")], 0.7);
   vignette(p, 0.35);
 }
 

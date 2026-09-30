@@ -40,10 +40,10 @@ function backdropUrl(el: Element): Promise<string> {
   return url;
 }
 
-/** The backdrop image URL for the reader, or null for the plain well: off in
- *  settings, the hatchery off, or not painted yet. Before the first pet
- *  hatches, the egg's element stands in. */
-export function useReaderBackdrop(hatcheryOn: boolean): string | null {
+/** The reader's backdrop, its image and element, or null for the plain
+ *  well: off in settings, the hatchery off, or not painted yet. Before the
+ *  first pet hatches, the egg's element stands in. */
+export function useReaderBackdrop(hatcheryOn: boolean): { el: Element; url: string } | null {
   const s = useHatchery();
   const enabled = useSetting("hatcheryBackdrop");
   const pet = companion(s);
@@ -60,5 +60,5 @@ export function useReaderBackdrop(hatcheryOn: boolean): string | null {
       live = false;
     };
   }, [el]);
-  return el && shown?.el === el ? shown.url : null;
+  return el && shown?.el === el ? shown : null;
 }

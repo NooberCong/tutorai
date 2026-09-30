@@ -51,6 +51,9 @@ export interface Settings {
   hatcheryInReader: boolean;
   /** Paint the companion's habitat, dimmed, behind the reader's pages. */
   hatcheryBackdrop: boolean;
+  /** Animate it: drifting motes, snow, bubbles (off-thread, pauses when
+   *  hidden). */
+  hatcheryBackdropMotion: boolean;
 }
 
 export const SETTINGS_DEFAULTS: Settings = {
@@ -74,6 +77,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   hatchery: true,
   hatcheryInReader: true,
   hatcheryBackdrop: true,
+  hatcheryBackdropMotion: true,
 };
 
 let settings: Settings = { ...SETTINGS_DEFAULTS };

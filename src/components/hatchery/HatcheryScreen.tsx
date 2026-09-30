@@ -46,6 +46,7 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
   const [detail, setDetail] = useState<Species | null>(null);
   const inReader = useSetting("hatcheryInReader");
   const backdrop = useSetting("hatcheryBackdrop");
+  const backdropMotion = useSetting("hatcheryBackdropMotion");
   const now = new Date();
   const pet = companion(s);
   const egg = s.incubator;
@@ -270,6 +271,19 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
             <small>Your companion's home, dimmed, beside what you're reading.</small>
           </span>
         </label>
+        {backdrop && (
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={backdropMotion}
+              onChange={(e) => saveSetting("hatcheryBackdropMotion", e.target.checked)}
+            />
+            <span>
+              Let it drift
+              <small>Snow, embers, fireflies and the like, moving slowly.</small>
+            </span>
+          </label>
+        )}
         <button
           className="link-btn"
           onClick={() => {

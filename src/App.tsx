@@ -19,6 +19,7 @@ import { SelectionPopover } from "./components/SelectionPopover";
 import { Undo } from "./components/Icons";
 import { ReaderCompanion } from "./components/hatchery/ReaderCompanion";
 import { useReaderBackdrop } from "./components/hatchery/backdrop";
+import { ReaderAmbience } from "./components/hatchery/ReaderAmbience";
 import { AnnotationsProvider, useAnnotations } from "./lib/annotations";
 import { InsightsProvider, useInsights } from "./lib/insights";
 import { SearchProvider } from "./lib/search";
@@ -372,6 +373,7 @@ function DocScreen(props: {
   const [panelOpen, setPanelOpen] = useState(() => getSetting("panelOpen"));
   const hatcheryOn = useSetting("hatchery");
   const backdrop = useReaderBackdrop(hatcheryOn);
+  const backdropMotion = useSetting("hatcheryBackdropMotion");
 
   // Remember panel visibility across restarts (covers every way they change,
   // including panel requests force-opening the tutor).
@@ -481,8 +483,9 @@ function DocScreen(props: {
         <div
           className={`reader-host ${backdrop ? "has-backdrop" : ""}`}
           ref={readerHostRef}
-          style={backdrop ? ({ "--reader-backdrop": `url(${backdrop})` } as CSSProperties) : undefined}
+          style={backdrop ? ({ "--reader-backdrop": `url(${backdrop.url})` } as CSSProperties) : undefined}
         >
+          {backdrop && backdropMotion && <ReaderAmbience element={backdrop.el} />}
           <Reader
             scale={scale}
             initialPage={props.initialPage}
