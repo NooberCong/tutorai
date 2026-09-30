@@ -1,20 +1,23 @@
 /** Render the reader backdrops, for painting by eye.
  *
- *    node scripts/backdrop-sheet.ts <out-dir> [element] [--dim] [--w=1600]
+ *    node scripts/backdrop-sheet.ts <out-dir> [element] [--dim] [--live] [--w=1600]
  *
  *  Writes one PNG per element. With --dim, each is shown the way the reader
- *  shows it: dimmed, with a blank page column in the middle. Backdrops live
- *  in src/lib/hatchery/backdrops.ts. */
+ *  shows it: dimmed, with a blank page column in the middle. With --live,
+ *  writes what the living backdrop draws from instead: the still base, its
+ *  mask channels 0–2 as RGB and 3 as gray, and the layer if any. Backdrops
+ *  live in src/lib/hatchery/backdrops.ts. */
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { ELEMENTS } from "../src/lib/hatchery/kit.ts";
-import { BACKDROP_H, BACKDROP_W, renderBackdrop } from "../src/lib/hatchery/backdrops.ts";
+import { BACKDROP_H, BACKDROP_W, paintLive, renderBackdrop } from "../src/lib/hatchery/backdrops.ts";
 
 const dir = process.argv[2] ?? "backdrops";
 const args = process.argv.slice(3);
 const dim = args.includes("--dim");
+const live = args.includes("--live");
 const w = Number(args.find((a) => a.startsWith("--w="))?.slice(4) ?? BACKDROP_W);
 const h = Math.round((w * BACKDROP_H) / BACKDROP_W);
 const filter = args.find((a) => !a.startsWith("--")) ?? "";
@@ -54,7 +57,29 @@ function png(data: Uint8ClampedArray, w: number, h: number): Buffer {
   ]);
 }
 
+/** Channels of an RGBA image as an opaque one: `pick` maps a pixel's four
+ *  values to its RGB. */
+function view(src: Uint8ClampedArray, pick: (v: Uint8ClampedArray, i: number) => [number, number, number]) {
+  const out = new Uint8ClampedArray(src.length);
+  for (let i = 0; i < src.length; i += 4) {
+    out.set(pick(src, i), i);
+    out[i + 3] = 255;
+  }
+  return out;
+}
+
 for (const el of ELEMENTS.filter((e) => !filter || e === filter)) {
+  if (live) {
+    const t0 = performance.now();
+    const b = paintLive(el, w, h);
+    const ms = Math.round(performance.now() - t0);
+    writeFileSync(join(dir, `${el}-base.png`), png(b.base, w, h));
+    writeFileSync(join(dir, `${el}-mask.png`), png(view(b.mask, (v, i) => [v[i], v[i + 1], v[i + 2]]), w, h));
+    writeFileSync(join(dir, `${el}-mask3.png`), png(view(b.mask, (v, i) => [v[i + 3], v[i + 3], v[i + 3]]), w, h));
+    if (b.layer) writeFileSync(join(dir, `${el}-layer.png`), png(view(b.layer, (v, i) => [v[i], v[i + 1], v[i + 2]]), w, h));
+    console.log(`${el} live  ${ms} ms`);
+    continue;
+  }
   const t0 = performance.now();
   const data = renderBackdrop(el, w, h);
   const ms = Math.round(performance.now() - t0);

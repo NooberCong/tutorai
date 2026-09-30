@@ -182,12 +182,31 @@ pages. The reader shows each half pinned to its own edge and dims it
 app it renders in a worker (`components/hatchery/backdrop.worker.ts`) once
 per element per session.
 
-The painting is still; `ambience.ts` is what moves over it. It draws pollen
-and falling leaves, embers, bubbles, snow, aurora ripples, fireflies,
-meteors, crystal glints, candle flicker and cloud wisps, in the same scene
-space and mapped the same two-halves way. Anything that moves is left out
-of the painting (only stars and flowers stay baked in), so nothing looks
-frozen. Motion is time-based and eased by sums of sines, and slow on
-purpose. It runs on an OffscreenCanvas in `ambience.worker.ts`: the main
-thread only forwards resizes and visibility, and the loop stops when the
-reader is hidden or "reduce motion" is set.
+With motion on, the painting itself moves: `living.ts` redraws it every
+frame with a WebGL shader. For that the painter runs in live mode
+(`paintLive`), which leaves out whatever the shader draws (aurora, the
+moon's clouds, mist in the hollows, the caustic nets, the rune circle) and
+records where things go in four mask channels per scene. A "hide" channel
+starts at 1 and is covered by everything painted after it, so it says
+where an effect behind the scenery shows (the aurora behind the mountains).
+A "tag" channel follows `p.brush`, so it says how much a pixel belongs to
+something that moves (a crown that sways); tag channels are blurred, since
+a sway field has to reach a little past the thing that sways. Kelp and lava
+light go to a separate layer (`beginLayer`), moved or animated over the
+rest. Each scene's comments name its channels, and its shader in `living.ts`
+reads them. Motion there is slow, continuous and time-based. Review the
+masks and layer with `backdrop-sheet.ts --live`.
+
+`ambience.ts` is what drifts over the painting: pollen and falling leaves,
+embers, bubbles, snow, fireflies, meteors, crystal glints, candle flicker
+and cloud wisps, in the same scene space and mapped the same two-halves
+way. Particles that move are left out of the painting (only stars and
+flowers stay baked in), so nothing looks frozen.
+
+Both run in `ambience.worker.ts` on OffscreenCanvases: the main thread only
+forwards resizes, visibility and where the page column is. The painting
+draws only beside the pages at about 30 frames a second, the particles at
+about 60, and nothing runs when the reader is hidden or "reduce motion" is
+set. The still painting stays underneath: it shows first, the living one
+fades in over it (they line up exactly), and it's what's left without
+WebGL2.

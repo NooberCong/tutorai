@@ -165,10 +165,13 @@ An optional hatchery that rewards actual reading:
   unlocks its habitat, and you can move your companion to any unlocked one.
 - **Your habitat behind the page.** The space beside the reader's pages
   shows your companion's habitat, painted wide and dimmed so it sets a mood
-  without pulling your eye off the text. It moves, slowly: snow falls under a
-  rippling aurora, embers rise, bubbles wobble up, fireflies wander, candles
-  flicker. The animation runs in a worker, off the reader's thread. It stops
-  when the reader is out of sight and respects "reduce motion". The motion
+  without pulling your eye off the text. It lives, slowly: the aurora's
+  curtains ripple and surge over the pines, kelp sways in the swell under a
+  moving surface, clouds billow, lava creeps downhill, crowns and grass stir,
+  mist drifts through the hollows. Snow, embers, bubbles and fireflies drift
+  through it all. It's drawn on the GPU in a worker, off the reader's
+  thread, and only beside the pages. It stops when the reader is out of
+  sight and respects "reduce motion". The motion
   and the backdrop can each be turned off in the hatchery, and "Plain
   background" in the pet's card brings back the plain dark reader.
 - **Out of the way when you want it to be.** Hide the pet from the reader and
@@ -278,8 +281,9 @@ src/                      React frontend
                           (art guide in ART.md), accessories and
                           their per-species fits (fit/), habitat
                           scenes (scenes.ts), the wide reader
-                          backdrops (backdrops.ts) and what drifts
-                          over them (ambience.ts)
+                          backdrops (backdrops.ts), the shader that
+                          brings them to life (living.ts) and what
+                          drifts over them (ambience.ts)
   components/hatchery/    hatchery screen, hatch reveal, reader companion
 src-tauri/src/
   claude.rs               headless CLI runner: spawn, NDJSON→event
@@ -297,7 +301,8 @@ scripts/
   scene-sheet.ts          renders every habitat with creatures standing in
                           it (`node scripts/scene-sheet.ts`)
   backdrop-sheet.ts       renders the reader backdrops, optionally dimmed
-                          as the reader shows them
+                          as the reader shows them, or the masks and
+                          layer the living ones draw from
                           (`node scripts/backdrop-sheet.ts`)
 ```
 

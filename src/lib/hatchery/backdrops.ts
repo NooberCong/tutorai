@@ -158,17 +158,63 @@ function ramp(t: number, dark: C, mid: C, light: C) {
 
 // ── the canvas ──
 
+/** A mask channel's meaning. "hide" starts at 1 and is covered by whatever
+ *  is painted after it: where a moving effect behind the scenery shows
+ *  (aurora behind the mountains). "tag" follows the brush: how much a
+ *  pixel belongs to something that moves (a crown that sways). */
+type MaskMode = "hide" | "tag";
+
 class Paint {
   readonly w: number;
   readonly h: number;
   readonly px: Float32Array;
   /** Device pixels per scene unit. */
   readonly k: number;
-  constructor(w: number, h: number) {
+  /** Painting for the living backdrop (living.ts): the moving parts are
+   *  left out for its shader to draw, and it gets the masks and layer
+   *  it needs. */
+  readonly live: boolean;
+  /** 4 channels per pixel, meaning set per scene (see MaskMode). */
+  readonly mask: Float32Array | null;
+  readonly modes: (MaskMode | null)[] = [null, null, null, null];
+  /** What "tag" channels are painted with. */
+  readonly brush = new Float32Array(4);
+  /** Blur radius per channel, in scene units: a sway field has to reach a
+   *  little past the thing that sways, or its edge can't move. */
+  readonly blur = [0, 0, 0, 0];
+  /** A separate layer the shader moves (kelp) or animates (lava light):
+   *  premultiplied RGBA, painted into while `toLayer` is set. */
+  layer: Float32Array | null = null;
+  layerMode: "over" | "add" | null = null;
+  toLayer = false;
+  constructor(w: number, h: number, live = false) {
     this.w = w;
     this.h = h;
     this.px = new Float32Array(w * h * 3);
     this.k = w / W;
+    this.live = live;
+    this.mask = live ? new Float32Array(w * h * 4) : null;
+  }
+  /** Start a "hide" channel: everything painted from now on covers it. */
+  hide(ch: number) {
+    if (!this.mask) return;
+    this.modes[ch] = "hide";
+    for (let j = ch; j < this.mask.length; j += 4) this.mask[j] = 1;
+  }
+  /** Start a "tag" channel, blurred by `blur` scene units at the end. */
+  tag(ch: number, blur = 0) {
+    this.modes[ch] = "tag";
+    this.blur[ch] = blur;
+  }
+  /** Send what follows to the separate layer (live only). */
+  beginLayer(mode: "over" | "add") {
+    if (!this.live) return;
+    this.layer ??= new Float32Array(this.w * this.h * 4);
+    this.layerMode = mode;
+    this.toLayer = true;
+  }
+  endLayer() {
+    this.toLayer = false;
   }
   /** Visit every pixel of a scene-space box: fn(sceneX, sceneY, index). */
   each(x0: number, y0: number, x1: number, y1: number, fn: (X: number, Y: number, i: number) => void) {
@@ -184,13 +230,39 @@ class Paint {
   }
   /** Paint T over pixel i at alpha a. */
   over(i: number, a: number) {
+    if (this.toLayer) {
+      const L = this.layer!;
+      const j = (i / 3) * 4;
+      L[j] += (T[0] - L[j]) * a;
+      L[j + 1] += (T[1] - L[j + 1]) * a;
+      L[j + 2] += (T[2] - L[j + 2]) * a;
+      L[j + 3] += (1 - L[j + 3]) * a;
+      return;
+    }
     const p = this.px;
     p[i] += (T[0] - p[i]) * a;
     p[i + 1] += (T[1] - p[i + 1]) * a;
     p[i + 2] += (T[2] - p[i + 2]) * a;
+    const m = this.mask;
+    if (m) {
+      const j = (i / 3) * 4;
+      for (let ch = 0; ch < 4; ch++) {
+        const mode = this.modes[ch];
+        if (mode === "hide") m[j + ch] *= 1 - a;
+        else if (mode === "tag") m[j + ch] += (this.brush[ch] - m[j + ch]) * a;
+      }
+    }
   }
   /** Add light. */
   add(i: number, c: ArrayLike<number>, s: number) {
+    if (this.toLayer) {
+      const L = this.layer!;
+      const j = (i / 3) * 4;
+      L[j] += c[0] * s;
+      L[j + 1] += c[1] * s;
+      L[j + 2] += c[2] * s;
+      return;
+    }
     const p = this.px;
     p[i] += c[0] * s;
     p[i + 1] += c[1] * s;
@@ -526,14 +598,26 @@ function faceLight(top: Curve, X: number, d: number, span = 18, gain = 2): numbe
   return clamp(0.5 - ((top(x + span) - top(x - span)) / (2 * span)) * gain);
 }
 
-/** Darken the corners a touch. */
-function vignette(p: Paint, s = 0.35) {
+/** How much each scene darkens its corners. */
+export const VIGNETTE: Record<Element, number> = { leaf: 0.3, ember: 0.3, tide: 0.4, stone: 0.35, sky: 0.25, frost: 0.35, moon: 0.35, arcane: 0.35 };
+
+/** Darken the corners a touch (the layer too; masks are left alone). The
+ *  living shader applies the same falloff to what it draws. */
+function vignette(p: Paint, s: number) {
+  const L = p.layer;
   p.each(0, 0, W, H, (X, Y, i) => {
     const dx = (X - W / 2) / (W / 2);
     const dy = (Y - H * 0.45) / (H * 0.6);
-    p.get(i);
-    scale(1 - s * smooth(0.5, 1.6, dx * dx + dy * dy));
-    p.over(i, 1);
+    const k = 1 - s * smooth(0.5, 1.6, dx * dx + dy * dy);
+    p.px[i] *= k;
+    p.px[i + 1] *= k;
+    p.px[i + 2] *= k;
+    if (L) {
+      const j = (i / 3) * 4;
+      L[j] *= k;
+      L[j + 1] *= k;
+      L[j + 2] *= k;
+    }
   });
 }
 
@@ -541,7 +625,7 @@ function vignette(p: Paint, s = 0.35) {
 
 /** A pine at (x, base), `h` tall: tiered, jagged, lit from the left; snow
  *  on the tier tops when `snow` is given. */
-function pine(p: Paint, n: Noise, x: number, base: number, h: number, dark: C, lit: C, snow?: C, haze?: { c: C; a: number }) {
+function pine(p: Paint, n: Noise, x: number, base: number, h: number, dark: C, lit: C, snow?: C, haze?: { c: C; a: number }, sway = 0) {
   const w = h * 0.34;
   const tiers = Math.max(3, Math.round(h / 55));
   p.each(x - w - 3, base - h - 3, x + w + 3, base + 3, (X, Y, i) => {
@@ -563,6 +647,7 @@ function pine(p: Paint, n: Noise, x: number, base: number, h: number, dark: C, l
       let hw = w * jitter * (1 - (ti / tiers) * 0.85) * (1 - f * 0.62);
       hw *= 1 + 0.16 * n(X * 0.12, Y * 0.12);
       hw *= Math.min(1, (1 - v) * 10);
+      if (hw <= 0) return;
       const u = (X - x) / hw;
       a = clamp((1 - Math.abs(u)) * hw * p.k + 0.5);
       if (a <= 0) return;
@@ -573,6 +658,7 @@ function pine(p: Paint, n: Noise, x: number, base: number, h: number, dark: C, l
       }
     }
     if (haze) toward(haze.c, haze.a);
+    p.brush[0] = sway * v * v;
     p.over(i, a);
   });
 }
@@ -638,7 +724,11 @@ function leaf(p: Paint) {
   });
   mist(p, n2, 580, 700, haze, 0.35);
 
-  // the meadow, a sunlit clearing in the middle
+  // the meadow, a sunlit clearing in the middle (live: sun-dapples drift
+  // over it, channel 3; crowns, bushes and flowers sway, channel 0)
+  p.tag(0, 10);
+  p.tag(3);
+  p.brush[3] = 1;
   land(p, curve((X) => 690 + 22 * fbm(n, X * 0.003, 4.2, 3)), (X, Y, d) => {
     const streak = fbm(n2, X * 0.2, Y * 0.03, 2) * 0.25 + fbm(n, X * 0.006, Y * 0.02, 3) * 0.6;
     const sun = Math.exp(-(((X - 800) / 520) ** 2) - ((Y - 740) / 160) ** 2);
@@ -646,6 +736,7 @@ function leaf(p: Paint) {
     toward(hex("#d8e79a"), sun * 0.35 * (1 - smooth(0, 60, d)));
     return 1;
   });
+  p.brush[3] = 0;
   rays(p, n, 700, -140, Math.PI / 2 + 0.05, 0.75, 900, hex("#fff5c8"), 0.16, 11);
 
   // the framing trees: trunks, then crowns spilling off the top corners
@@ -664,14 +755,18 @@ function leaf(p: Paint) {
     rim: hex("#e8f2a0"),
     rimAmt: 0.35,
   };
+  p.brush[0] = 1;
   cluster(p, n, 21, 150, 80, 330, 170, 34, [60, 120], foliage);
   cluster(p, n, 22, 1460, 70, 330, 160, 34, [60, 120], foliage);
+  p.brush[0] = 0.7;
   cluster(p, n, 23, 350, 340, 110, 70, 12, [36, 66], foliage);
 
   // undergrowth, then the dark foreground lip with grass tips
   const bush = { ...foliage, light: hex("#86b85a") };
+  p.brush[0] = 0.5;
   cluster(p, n, 24, 170, 870, 280, 60, 26, [40, 80], bush, 0.5);
   cluster(p, n, 25, 1440, 860, 280, 60, 26, [40, 80], bush, 0.5);
+  p.brush[0] = 0.25;
   land(p, curve((X) => 915 + 18 * fbm(n2, X * 0.004, 9.5, 3) - 12 * Math.abs(n(X * 0.3, 2.2))), (X, Y, d) => {
     mix(hex("#1f3a1c"), hex("#3f6e30"), clamp(0.5 + fbm(n, X * 0.2, Y * 0.03, 3) * 0.8 - smooth(0, 40, d) * 0.4));
     return 1;
@@ -680,13 +775,14 @@ function leaf(p: Paint) {
   // wildflowers in the undergrowth, pollen drifting in the light
   const fr = rng(31);
   const petals = ["#fff6e0", "#ffd86b", "#f3a6c8", "#c9b6ff"].map(hex);
+  p.brush[0] = 0.5;
   for (let i = 0; i < 70; i++) {
     const x = i % 2 ? 1600 - fr() * 520 : fr() * 520;
     const y = 830 + fr() * 150;
     const c = petals[Math.floor(fr() * petals.length)];
     ball(p, n, x, y, 3 + fr() * 3.5, { dark: times(c, 0.6), mid: c, light: hex("#ffffff"), rough: 0.3, freq: 0.5, tex: 0 });
   }
-  vignette(p, 0.3);
+  vignette(p, VIGNETTE.leaf);
 }
 
 function ember(p: Paint) {
@@ -696,7 +792,10 @@ function ember(p: Paint) {
   const lava = hex("#ff7a28");
   const hot = hex("#ffd27a");
 
-  // smoke rolling over the sky, lit from below by the lava
+  // smoke rolling over the sky, lit from below by the lava (live: it
+  // billows, channel 1)
+  p.tag(1, 20);
+  p.brush[1] = 1;
   p.each(0, 0, W, 640, (X, Y, i) => {
     const wx = fbm(n2, X * 0.0015, Y * 0.003, 3) * 140;
     const d = fbm(n, (X + wx) * 0.0022, Y * 0.0045, 6);
@@ -707,6 +806,7 @@ function ember(p: Paint) {
     mix(hex("#1a0a10"), hex("#8a3020"), clamp(Y / 700 + near * 0.7) * (0.4 + under * 0.8));
     p.over(i, a);
   });
+  p.brush[1] = 0;
   glow(p, 800, 740, 520, hex("#ff8a3a"), 0.22);
 
   // far range, rim-lit
@@ -744,6 +844,8 @@ function ember(p: Paint) {
     toward(hex("#a8401e"), clamp(heat) * 0.55);
     return 1;
   });
+  // the lava's own light (live: a layer, its crust creeping downhill)
+  p.beginLayer("add");
   p.each(900, 330, 1650, 800, (X, Y, i) => {
     if (Y < cone(X) - 1) return;
     for (const f of flows) {
@@ -755,6 +857,7 @@ function ember(p: Paint) {
       p.add(i, hot, Math.exp(-d * d * 2) * 0.9 * (1 - crust));
     }
   });
+  p.endLayer();
   glow(p, 1270, 345, 110, hot, 0.9);
   glow(p, 1270, 330, 300, lava, 0.35);
 
@@ -788,6 +891,7 @@ function ember(p: Paint) {
     mix(hex("#12060a"), hex("#321216"), clamp(0.3 + b * 0.3 - smooth(0, 200, d) * 0.2));
     return 1;
   });
+  p.beginLayer("add");
   p.each(0, 760, W, H, (X, Y, i) => {
     if (Y < ground(X)) return;
     const c = ridged(n2, X * 0.004, Y * 0.013, 3);
@@ -798,12 +902,13 @@ function ember(p: Paint) {
       p.add(i, hot, smooth(0.94, 0.99, c) * side * 0.6);
     }
   });
+  p.endLayer();
   land(p, curve((X) => 905 + 20 * fbm(n, X * 0.005, 7.7, 3)), (X, Y) => {
     mix(hex("#0c0407"), hex("#26100f"), clamp(0.3 + bump(n2, X, Y, 0.01, 0.02) * 0.3));
     return 1;
   });
   glow(p, 800, 735, 700, hex("#ff6a20"), 0.08);
-  vignette(p, 0.3);
+  vignette(p, VIGNETTE.ember);
 }
 
 function tide(p: Paint) {
@@ -813,12 +918,15 @@ function tide(p: Paint) {
   const water = hex("#1a6f9c");
   const foam = hex("#e8fffa");
 
-  // the rippling surface overhead: a caustic net
-  p.each(0, 0, W, 220, (X, Y, i) => {
-    const wx = fbm(n2, X * 0.004, Y * 0.02, 3) * 60;
-    const c = 1 - Math.abs(n((X + wx) * 0.012, Y * 0.04));
-    p.add(i, foam, c ** 12 * (1 - smooth(0, 220, Y)) * 0.45);
-  });
+  // the rippling surface overhead: a caustic net (live: the shader's,
+  // always re-forming)
+  if (!p.live) {
+    p.each(0, 0, W, 220, (X, Y, i) => {
+      const wx = fbm(n2, X * 0.004, Y * 0.02, 3) * 60;
+      const c = 1 - Math.abs(n((X + wx) * 0.012, Y * 0.04));
+      p.add(i, foam, c ** 12 * (1 - smooth(0, 220, Y)) * 0.45);
+    });
+  }
   rays(p, n2, 800, -420, Math.PI / 2, 0.55, 1000, hex("#d8fff8"), 0.34, 14);
 
   // distant reef, lost in the blue
@@ -834,49 +942,26 @@ function tide(p: Paint) {
     return 1;
   });
 
-  // sand: rippled, with caustics dancing on it
+  // sand: rippled, with caustics dancing on it (live: the shader's, where
+  // channel 3 says)
+  p.tag(3);
   land(p, curve((X) => 820 + 16 * fbm(n2, X * 0.003, 8.5, 3)), (X, Y, d) => {
     const ripple = Math.sin(X * 0.09 + 7 * fbm(n, X * 0.004, Y * 0.012, 3) + Y * 0.05) * 0.5 + 0.5;
     mix(hex("#8a7a58"), hex("#e0cc92"), clamp(0.45 + ripple * 0.3 - smooth(0, 180, d) * 0.45));
-    const c = 1 - Math.abs(n(X * 0.02 + fbm(n2, X * 0.01, Y * 0.03, 2) * 2, Y * 0.06));
-    toward(hex("#fff4d0"), c ** 8 * 0.5 * (1 - smooth(0, 160, d)));
+    const reach = 1 - smooth(0, 160, d);
+    if (p.live) p.brush[3] = reach;
+    else toward(hex("#fff4d0"), (1 - Math.abs(n(X * 0.02 + fbm(n2, X * 0.01, Y * 0.03, 2) * 2, Y * 0.06))) ** 8 * 0.5 * reach);
     toward(water, 0.18 + smooth(300, 800, Math.abs(X - 800)) * 0.1);
     return 1;
   });
+  p.brush[3] = 0;
 
   // rocks both sides
   const rock: Ball = { dark: hex("#0f2a38"), mid: hex("#2b5566"), light: hex("#6a9aa4"), rough: 0.25, freq: 0.012, tex: 0.25, texFreq: 0.05, L: light(-0.2, -1, 0.5) };
   cluster(p, n, 71, 150, 870, 220, 50, 9, [60, 110], rock, 0.4);
   cluster(p, n, 72, 1460, 860, 220, 50, 9, [60, 115], rock, 0.4);
 
-  // kelp: tall ribbons swaying up toward the light, with blades
-  const kelp = (x: number, h: number, seed: number, hue: number) => {
-    const kn = perlin(seed);
-    const dark = hex(hue ? "#1c4a2c" : "#2a4a1c");
-    const lit = hex(hue ? "#7ec46a" : "#a8c85a");
-    const base = 900;
-    const top = base - h;
-    const cx = (v: number) => x + 50 * fbm(kn, v * 1.6, 0.5, 3) * (1 - v) + (1 - v) * 20;
-    strand(p, top, base, cx, (v) => 4 + 7 * v, (_x, _y, u, v) => {
-      mix(dark, lit, clamp(0.55 - 0.45 * u + 0.25 * (1 - v)));
-      return 1;
-    });
-    const r = rng(seed);
-    for (let y = base - 40; y > top + 30; y -= 26 + r() * 18) {
-      const sx = cx((y - top) / h);
-      const dir = r() < 0.5 ? -1 : 1;
-      const len = 40 + r() * 40;
-      const ang = -0.9 + (r() - 0.5) * 0.5;
-      blade(p, sx, y, dir * Math.cos(ang), Math.sin(ang), len, 9 + r() * 5, dark, lit);
-    }
-  };
-  const kelps = [
-    [40, 740], [120, 560], [230, 820], [330, 480], [420, 360],
-    [1200, 380], [1290, 540], [1390, 780], [1480, 600], [1560, 840],
-  ];
-  kelps.forEach(([x, h], i) => kelp(x, h, 80 + i, i % 2));
-
-  // coral at the kelp's feet
+  // coral among the kelp's feet
   const coral = (x: number, y: number, c: string, seed: number) => {
     const r = rng(seed);
     const col = hex(c);
@@ -904,7 +989,37 @@ function tide(p: Paint) {
     ball(p, n, x, y, 13 * s, { dark: hex("#0c3c5a"), mid: hex("#1a5a7c"), light: hex("#5aa0bc"), rough: 0, freq: 0, tex: 0, alpha: 0.7 }, 0.38);
     limb(p, x + 12 * s, y, x + 22 * s, y, 1, 6 * s, () => set(hex("#124a6a")));
   }
-  vignette(p, 0.4);
+  // kelp: tall ribbons reaching up toward the light, with blades, in front
+  // (live: a layer the shader sways)
+  const kelp = (x: number, h: number, seed: number, hue: number) => {
+    const kn = perlin(seed);
+    const dark = hex(hue ? "#1c4a2c" : "#2a4a1c");
+    const lit = hex(hue ? "#7ec46a" : "#a8c85a");
+    const base = 900;
+    const top = base - h;
+    const cx = (v: number) => x + 50 * fbm(kn, v * 1.6, 0.5, 3) * (1 - v) + (1 - v) * 20;
+    strand(p, top, base, cx, (v) => 4 + 7 * v, (_x, _y, u, v) => {
+      mix(dark, lit, clamp(0.55 - 0.45 * u + 0.25 * (1 - v)));
+      return 1;
+    });
+    const r = rng(seed);
+    for (let y = base - 40; y > top + 30; y -= 26 + r() * 18) {
+      const sx = cx((y - top) / h);
+      const dir = r() < 0.5 ? -1 : 1;
+      const len = 40 + r() * 40;
+      const ang = -0.9 + (r() - 0.5) * 0.5;
+      blade(p, sx, y, dir * Math.cos(ang), Math.sin(ang), len, 9 + r() * 5, dark, lit);
+    }
+  };
+  const kelps = [
+    [40, 740], [120, 560], [230, 820], [330, 480], [420, 360],
+    [1200, 380], [1290, 540], [1390, 780], [1480, 600], [1560, 840],
+  ];
+  p.beginLayer("over");
+  kelps.forEach(([x, h], i) => kelp(x, h, 80 + i, i % 2));
+  p.endLayer();
+
+  vignette(p, VIGNETTE.tide);
 }
 
 function stone(p: Paint) {
@@ -956,7 +1071,10 @@ function stone(p: Paint) {
   });
 
   // crystal clusters: faceted, glowing, lighting the rock around them
+  // (live: light slides across the faces, where channel 3 says)
+  p.tag(3);
   const crystal = (x: number, y: number, h: number, a: number, lit: C, dark: C) => {
+    p.brush[3] = 1;
     const w = Math.min(h * 0.19, 38);
     const sx = Math.sin(a);
     const cy = -Math.cos(a);
@@ -976,6 +1094,7 @@ function stone(p: Paint) {
       toward(hex("#ffffff"), Math.exp(-(((edge * w) / 1.2) ** 2)) * 0.45 * face);
       p.over(i, cov * 0.94);
     });
+    p.brush[3] = 0;
   };
   const crop = (x: number, y: number, s: number, lit: string, dark: string, gl: C, seed: number) => {
     const cr = rng(seed);
@@ -998,7 +1117,7 @@ function stone(p: Paint) {
   crystal(1525, -20, 90, Math.PI + 0.2, hex("#c8f4ff"), hex("#2a78b0"));
   glow(p, 130, 40, 110, violet, 0.4);
   crystal(130, -15, 110, Math.PI + 0.25, hex("#eadcff"), hex("#5a2eb0"));
-  vignette(p, 0.35);
+  vignette(p, VIGNETTE.stone);
 }
 
 function skyScene(p: Paint) {
@@ -1008,7 +1127,10 @@ function skyScene(p: Paint) {
   glow(p, 1180, 610, 260, hex("#ffd8a0"), 0.55);
   glow(p, 1180, 610, 40, hex("#fff0c8"), 1.2);
 
-  // cirrus: long combed streaks high up
+  // cirrus: long combed streaks high up (live: combed along, channel 3)
+  p.tag(3, 12);
+  p.tag(1, 16);
+  p.brush[3] = 1;
   p.each(0, 0, W, 520, (X, Y, i) => {
     const d = fbm(n, X * 0.0012 + fbm(n2, X * 0.002, Y * 0.01, 2) * 0.6, Y * 0.018, 5);
     const a = smooth(0.08, 0.45, d) * (1 - smooth(300, 520, Y)) * 0.55;
@@ -1017,7 +1139,11 @@ function skyScene(p: Paint) {
     p.over(i, a);
   });
 
+  p.brush[3] = 0;
+
   // the cloud sea: banks of puffs lit warm from the low sun, far ones hazed
+  // (live: they billow, channel 1)
+  p.brush[1] = 1;
   const sunDir = light(0.6, -0.5, 0.6);
   const puff: Ball = {
     dark: hex("#a898c8"),
@@ -1055,7 +1181,7 @@ function skyScene(p: Paint) {
   bank(900, [90, 150], 4, 0);
 
   // birds and drifting wisps move: ambience.ts
-  vignette(p, 0.25);
+  vignette(p, VIGNETTE.sky);
 }
 
 function frost(p: Paint) {
@@ -1082,8 +1208,12 @@ function frost(p: Paint) {
       p.add(i, c, up * streak * fold * s);
     });
   };
-  curtain(300, 90, 0.0018, 13, 0.5);
-  curtain(230, 70, 0.0025, 14, 0.3);
+  // (live: the shader's, moving, where channel 2 shows the sky)
+  if (p.live) p.hide(2);
+  else {
+    curtain(300, 90, 0.0018, 13, 0.5);
+    curtain(230, 70, 0.0025, 14, 0.3);
+  }
 
   // mountains: snow on the lit faces and up high
   const range = (top: Curve, seed: number, snowLine: number, rock: [string, string], hz: number) => {
@@ -1101,7 +1231,9 @@ function frost(p: Paint) {
     });
   };
   range(curve((X) => 560 - 240 * ridged(n, X * 0.0022, 0.5, 6)), 15, 120, ["#1c2a48", "#34466e"], 0.35);
-  mist(p, n2, 560, 700, hex("#5a78a4"), 0.35);
+  // (live: drifting, where channel 1 shows it)
+  if (p.live) p.hide(1);
+  else mist(p, n2, 560, 700, hex("#5a78a4"), 0.35);
   range(curve((X) => 690 - 150 * ridged(n2, X * 0.003, 3.5, 6)), 16, 70, ["#141f38", "#2a3a5c"], 0.12);
 
   // the snowfield
@@ -1110,20 +1242,22 @@ function frost(p: Paint) {
     return 1;
   });
 
-  // pines: rows of small hazy ones, tall ones framing the sides
+  // pines: rows of small hazy ones, tall ones framing the sides (live: the
+  // tops sway, channel 0)
+  p.tag(0, 8);
   const r = rng(17);
   for (let i = 0; i < 70; i++) {
     const x = i % 2 ? 1600 - r() * 560 : r() * 560;
-    pine(p, n, x, 780 + r() * 16, 50 + r() * 60, hex("#1a2a48"), hex("#3a5078"), hex("#9fb4d8"), { c: hex("#3a5a86"), a: 0.35 });
+    pine(p, n, x, 780 + r() * 16, 50 + r() * 60, hex("#1a2a48"), hex("#3a5078"), hex("#9fb4d8"), { c: hex("#3a5a86"), a: 0.35 }, 0.1);
   }
   for (const [x, h] of [[40, 620], [160, 460], [280, 560], [400, 340], [1210, 360], [1330, 520], [1450, 440], [1570, 640]]) {
-    pine(p, n2, x, 915 + (x % 3) * 10, h, hex("#0a1426"), hex("#28406a"), hex("#e2ecfa"));
+    pine(p, n2, x, 915 + (x % 3) * 10, h, hex("#0a1426"), hex("#28406a"), hex("#e2ecfa"), undefined, h / 640);
   }
   land(p, curve((X) => 918 + 16 * fbm(n2, X * 0.004, 9.1, 3)), (X, Y, d) => {
     mix(hex("#8aa0c8"), hex("#d8e4f6"), clamp(0.7 + fbm(n, X * 0.004, Y * 0.03, 3) - smooth(0, 60, d) * 0.4));
     return 1;
   });
-  vignette(p, 0.35);
+  vignette(p, VIGNETTE.frost);
 }
 
 function moon(p: Paint) {
@@ -1147,13 +1281,17 @@ function moon(p: Paint) {
   });
   glow(p, mx, my, 90, hex("#fff8e8"), 0.08);
 
-  // thin clouds drifting past, silvered near the moon
-  p.each(0, 60, W, 520, (X, Y, i) => {
-    const a = smooth(0.1, 0.45, fbm(n2, X * 0.0018, Y * 0.01, 5)) * 0.5;
-    if (a <= 0) return;
-    mix(hex("#2a3270"), hex("#c8ccf0"), Math.exp(-(((X - mx) / 360) ** 2) - ((Y - my) / 220) ** 2));
-    p.over(i, a);
-  });
+  // thin clouds drifting past, silvered near the moon (live: the
+  // shader's, where channel 2 shows the sky)
+  if (p.live) p.hide(2);
+  else {
+    p.each(0, 60, W, 520, (X, Y, i) => {
+      const a = smooth(0.1, 0.45, fbm(n2, X * 0.0018, Y * 0.01, 5)) * 0.5;
+      if (a <= 0) return;
+      mix(hex("#2a3270"), hex("#c8ccf0"), Math.exp(-(((X - mx) / 360) ** 2) - ((Y - my) / 220) ** 2));
+      p.over(i, a);
+    });
+  }
 
   // hills rolling away, mist in the hollows, rims catching moonlight
   const hill = (top: Curve, dark: string, lit: string, rim: number) => {
@@ -1165,14 +1303,17 @@ function moon(p: Paint) {
     });
   };
   hill(curve((X) => 590 - 90 * fbm(n2, X * 0.0018, 2.5, 4)), "#26306c", "#4250a0", 0.5);
-  mist(p, n, 580, 700, hex("#8a96d8"), 0.3);
+  // (live: mist in the hollows drifts, channels 1 and 3)
+  if (p.live) p.hide(1);
+  else mist(p, n, 580, 700, hex("#8a96d8"), 0.3);
   land(p, woodline(122, 690, 60, [12, 24]), (_x, _y, d) => {
     mix(hex("#161d4c"), hex("#26306a"), clamp(0.6 - smooth(0, 40, d) * 0.4));
     toward(hex("#8a96d8"), 0.15);
     return 1;
   }, 760);
   hill(curve((X) => 760 - 150 * Math.exp(-(((X - 1350) / 380) ** 2)) - 90 * Math.exp(-(((X - 150) / 300) ** 2)) + 20 * fbm(n2, X * 0.003, 5.5, 3)), "#141a48", "#34408a", 0.4);
-  mist(p, n2, 740, 860, hex("#7a86c8"), 0.18);
+  if (p.live) p.hide(3);
+  else mist(p, n2, 740, 860, hex("#7a86c8"), 0.18);
 
   // a lone tree on the right, crown silvered on the moon side
   const barkD = hex("#0a0d2a");
@@ -1181,6 +1322,9 @@ function moon(p: Paint) {
   limb(p, 1362, 520, 1270, 440, 12, 5, (u) => mix(barkD, barkL, 0.5 - u * 0.4));
   limb(p, 1370, 490, 1470, 420, 12, 5, (u) => mix(barkD, barkL, 0.5 - u * 0.4));
   limb(p, 1356, 470, 1340, 380, 10, 4, (u) => mix(barkD, barkL, 0.5 - u * 0.4));
+  // (live: the crown and the grass sway, channel 0)
+  p.tag(0, 8);
+  p.brush[0] = 1;
   cluster(p, n, 121, 1380, 400, 190, 110, 30, [40, 80], {
     dark: hex("#080b24"),
     mid: hex("#161c4c"),
@@ -1192,6 +1336,8 @@ function moon(p: Paint) {
     L: light(-0.8, -0.6, 0.4),
   });
 
+  p.brush[0] = 0;
+
   // the near meadow, grass blades against the mist
   const meadow = curve((X) => 870 + 20 * fbm(n, X * 0.004, 7.5, 3));
   land(p, meadow, (X, Y, d) => {
@@ -1199,6 +1345,7 @@ function moon(p: Paint) {
     return 1;
   });
   const gr = rng(133);
+  p.brush[0] = 0.7;
   for (let i = 0; i < 700; i++) {
     const x = gr() * W;
     if (Math.abs(x - 800) < 300 && gr() < 0.7) continue;
@@ -1216,7 +1363,7 @@ function moon(p: Paint) {
     glow(p, x, y, 10, hex("#b8ccff"), 0.35);
     ball(p, n, x, y, 3 + fr() * 2.5, { dark: hex("#8a9ad8"), mid: hex("#dfe6ff"), light: hex("#ffffff"), rough: 0.4, freq: 0.6, tex: 0 });
   }
-  vignette(p, 0.35);
+  vignette(p, VIGNETTE.moon);
 }
 
 function arcane(p: Paint) {
@@ -1338,11 +1485,14 @@ function arcane(p: Paint) {
     if ((Y - 830) % 30 < 1.2) scale(0.6);
     return 1;
   });
+  // (live: the shader's, its runes turning)
   const rune = hex("#b48cff");
-  p.each(200, 820, 1400, H, (X, Y, i) => {
-    const e = Math.hypot((X - 800) / 520, (Y - 910) / 70);
-    p.add(i, rune, (Math.exp(-(((e - 1) * 60) ** 2)) + 0.6 * Math.exp(-(((e - 0.84) * 70) ** 2))) * 0.45 + Math.exp(-((e / 0.9) ** 2)) * 0.05);
-  });
+  if (!p.live) {
+    p.each(200, 820, 1400, H, (X, Y, i) => {
+      const e = Math.hypot((X - 800) / 520, (Y - 910) / 70);
+      p.add(i, rune, (Math.exp(-(((e - 1) * 60) ** 2)) + 0.6 * Math.exp(-(((e - 0.84) * 70) ** 2))) * 0.45 + Math.exp(-((e / 0.9) ** 2)) * 0.05);
+    });
+  }
 
   // candles on the sills and floor
   const candle = (x: number, y: number, h: number) => {
@@ -1360,7 +1510,7 @@ function arcane(p: Paint) {
   candle(250, 830, 70);
   candle(1350, 830, 60);
 
-  vignette(p, 0.35);
+  vignette(p, VIGNETTE.arcane);
 }
 
 const PAINT: Record<Element, (p: Paint) => void> = { leaf, ember, tide, stone, sky: skyScene, frost, moon, arcane };
@@ -1378,4 +1528,66 @@ export function renderBackdrop(el: Element, w = W, h = H): Uint8ClampedArray<Arr
   const k = EXPOSURE[el];
   for (let i = 0; i < p.px.length; i++) p.px[i] *= k;
   return p.rgba();
+}
+
+/** What the living backdrop (living.ts) draws from: the painting without
+ *  its moving parts, the masks saying where those go, and an optional
+ *  layer. All w×h RGBA8. The layer is premultiplied color over the scene
+ *  ("over") or light added to it ("add", stored as sqrt(v / 4) so faint
+ *  glow keeps its precision and lava can run past white). */
+export interface LiveBackdrop {
+  w: number;
+  h: number;
+  base: Uint8ClampedArray<ArrayBuffer>;
+  mask: Uint8ClampedArray<ArrayBuffer>;
+  layer: Uint8ClampedArray<ArrayBuffer> | null;
+  layerMode: "over" | "add" | null;
+}
+
+export const backdropExposure = (el: Element) => EXPOSURE[el];
+
+/** Paint an element's backdrop for the living shader (see LiveBackdrop). */
+export function paintLive(el: Element, w = W, h = H): LiveBackdrop {
+  const p = new Paint(w, h, true);
+  PAINT[el](p);
+  const k = EXPOSURE[el];
+  for (let i = 0; i < p.px.length; i++) p.px[i] *= k;
+  const m = p.mask!;
+  for (let ch = 0; ch < 4; ch++) if (p.blur[ch]) blurChannel(m, w, h, ch, Math.round(p.blur[ch] * p.k));
+  const r = rng(98);
+  const mask = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < m.length; i++) mask[i] = m[i] * 255 + r();
+  let layer: Uint8ClampedArray<ArrayBuffer> | null = null;
+  if (p.layer) {
+    const L = p.layer;
+    layer = new Uint8ClampedArray(w * h * 4);
+    const add = p.layerMode === "add";
+    for (let i = 0; i < L.length; i++) {
+      const d = r();
+      if ((i & 3) === 3) layer[i] = L[i] * 255 + d;
+      else layer[i] = (add ? Math.sqrt((L[i] * k) / 4) : L[i] * k) * 255 + d;
+    }
+  }
+  return { w, h, base: p.rgba(), mask, layer, layerMode: p.layerMode };
+}
+
+/** Three box blurs, across then down: close to a gaussian of radius `r`. */
+function blurChannel(m: Float32Array, w: number, h: number, ch: number, r: number) {
+  if (r < 1) return;
+  const line = new Float32Array(Math.max(w, h));
+  const pass = (n: number, count: number, at: (line: number, i: number) => number) => {
+    for (let l = 0; l < count; l++) {
+      for (let rep = 0; rep < 3; rep++) {
+        for (let i = 0; i < n; i++) line[i] = m[at(l, i)];
+        let sum = 0;
+        for (let i = -r; i <= r; i++) sum += line[Math.min(n - 1, Math.max(0, i))];
+        for (let i = 0; i < n; i++) {
+          m[at(l, i)] = sum / (2 * r + 1);
+          sum += line[Math.min(n - 1, i + r + 1)] - line[Math.max(0, i - r)];
+        }
+      }
+    }
+  };
+  pass(w, h, (y, x) => (y * w + x) * 4 + ch);
+  pass(h, w, (x, y) => (y * w + x) * 4 + ch);
 }

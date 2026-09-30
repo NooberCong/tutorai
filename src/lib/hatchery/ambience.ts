@@ -1,9 +1,9 @@
-/** Ambience: the moving part of a reader backdrop. The painting
- *  (backdrops.ts) is still; this draws what drifts over it — pollen and
- *  falling leaves, embers, bubbles, snow under a shimmering aurora,
- *  fireflies, crystal glints, candle flicker — in the same 1600×1000 scene
- *  space, mapped the way the reader shows the painting: two halves, each
- *  pinned to its own edge and cropped to cover.
+/** Ambience: what drifts over a reader backdrop — pollen and falling
+ *  leaves, embers, bubbles, snow, meteors, fireflies, crystal glints,
+ *  candle flicker — in the same 1600×1000 scene space as the painting,
+ *  mapped the way the reader shows it: two halves, each pinned to its own
+ *  edge and cropped to cover. The painting's own big features move in
+ *  living.ts.
  *
  *  Everything moves slowly and continuously (time-based, eased by sums of
  *  sines, no jumps), so it reads as calm. It runs in a worker on an
@@ -319,36 +319,6 @@ function shafts(ox: number, oy: number, dir: number, spread: number, n: number, 
   };
 }
 
-/** Waves of brightness rippling along the aurora's curtains. */
-function aurora(y0: number, y1: number, strength: number): Layer {
-  let grad: CanvasGradient | null = null;
-  return {
-    update() {},
-    draw(c, t, x0, x1) {
-      if (!grad) {
-        grad = c.createLinearGradient(0, y0, 0, y1);
-        grad.addColorStop(0, "rgba(154,106,255,0)");
-        grad.addColorStop(0.45, "rgba(90,200,220,0.6)");
-        grad.addColorStop(0.85, "rgba(72,255,168,1)");
-        grad.addColorStop(1, "rgba(72,255,168,0)");
-      }
-      c.globalCompositeOperation = "lighter";
-      c.fillStyle = grad;
-      const step = 6;
-      for (let x = Math.max(0, Math.floor(x0 / step) * step); x < Math.min(W, x1); x += step) {
-        const wave = Math.sin(x * 0.011 - t * 0.35 + 2.2 * Math.sin(x * 0.0037 + t * 0.09));
-        const k = Math.max(0, wave) ** 2 * (0.6 + 0.4 * Math.sin(x * 0.05 + t * 0.6));
-        if (k < 0.02) continue;
-        const lift = 30 * Math.sin(x * 0.004 + t * 0.12);
-        c.globalAlpha = strength * k;
-        c.fillRect(x, y0 + lift, step, y1 - y0);
-      }
-      c.globalAlpha = 1;
-      c.globalCompositeOperation = "source-over";
-    },
-  };
-}
-
 /** Now and then, a meteor streaks across the upper sky. */
 function meteors(area: Area, every: [number, number], seed: number): Layer {
   const r = rng(seed);
@@ -485,7 +455,6 @@ const LAYERS: Record<Element, () => Layer[]> = {
     birds(15),
   ],
   frost: () => [
-    aurora(120, 360, 0.16),
     meteors([200, 20, 1400, 200], [20, 40], 16),
     motes({ n: 170, area: [0, -20, W, 1000], v: [6, 26], spread: [5, 8], wander: 10, size: [0.8, 3.2], colors: ["#ffffff", "#e8f0ff"], alpha: [0.45, 0.95], core: true, depth: true, seed: 17 }),
   ],
