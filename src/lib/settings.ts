@@ -49,6 +49,8 @@ export interface Settings {
   /** Show the pet and egg in the reader's corner. When hidden, reading still
    *  warms eggs and grows pets. */
   hatcheryInReader: boolean;
+  /** Paint the companion's habitat, dimmed, behind the reader's pages. */
+  hatcheryBackdrop: boolean;
 }
 
 export const SETTINGS_DEFAULTS: Settings = {
@@ -71,6 +73,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   dictDisabled: [],
   hatchery: true,
   hatcheryInReader: true,
+  hatcheryBackdrop: true,
 };
 
 let settings: Settings = { ...SETTINGS_DEFAULTS };

@@ -162,6 +162,9 @@ An optional hatchery that rewards actual reading:
   aurora pines, a moonlit meadow or a night library. Snow, embers, bubbles
   or fireflies drift through each one. Discovering a creature of an element
   unlocks its habitat, and you can move your companion to any unlocked one.
+- **Your habitat behind the page.** The space beside the reader's pages
+  shows your companion's habitat, painted wide and dimmed so it sets a mood
+  without pulling your eye off the text. It can be turned off in the hatchery.
 - **Out of the way when you want it to be.** Hide the pet from the reader and
   keep hatching, or turn reading pets off entirely. Off means off: no
   tracking, no tab. Your collection is kept for when you turn it back on.
@@ -187,6 +190,11 @@ An optional hatchery that rewards actual reading:
   <img src="docs/screenshots/habitats.png" alt="The incubator with an Arcane egg on a glowing rune circle in a night library, and the companion, a rabbit in a wizard hat and glasses, standing in a sunlit forest glade" width="100%" />
   <img src="docs/screenshots/pets-habitats.png" alt="Your pets, each in its habitat: a hound on ember crags, a narwhal in kelp shallows, a raven and a mooncat in a moonlit meadow, a unicorn in a night library" width="100%" />
   <sub><i>Each element has its own habitat. Pets stand in theirs, or in any you've unlocked.</i></sub>
+</p>
+<p align="center">
+  <img src="docs/screenshots/reader-habitat-frost.png" alt="The reader with a gradient descent chapter open; beside the page, snowy pines under an aurora, dimmed" width="49%" />
+  <img src="docs/screenshots/reader-habitat-glade.png" alt="The same page with a sunlit forest glade beside it, dimmed" width="49%" />
+  <sub><i>Your companion's habitat fills the space beside the page, dimmed toward the text.</i></sub>
 </p>
 
 ---
@@ -263,7 +271,8 @@ src/                      React frontend
                           pixel-art rasterizer, the 80 species
                           (art guide in ART.md), accessories and
                           their per-species fits (fit/), habitat
-                          scenes (scenes.ts)
+                          scenes (scenes.ts) and the wide reader
+                          backdrops (backdrops.ts)
   components/hatchery/    hatchery screen, hatch reveal, reader companion
 src-tauri/src/
   claude.rs               headless CLI runner: spawn, NDJSON→event
@@ -280,6 +289,9 @@ scripts/
                           for fitting them (`node scripts/wardrobe-sheet.ts`)
   scene-sheet.ts          renders every habitat with creatures standing in
                           it (`node scripts/scene-sheet.ts`)
+  backdrop-sheet.ts       renders the reader backdrops, optionally dimmed
+                          as the reader shows them
+                          (`node scripts/backdrop-sheet.ts`)
 ```
 
 ### Design

@@ -1045,6 +1045,45 @@ textarea::placeholder {
   scrollbar-gutter: stable;
   background: var(--well);
 }
+/* The companion's habitat behind the pages (components/hatchery/backdrop.ts).
+   Two halves, each pinned to its own edge, so the gutters beside the pages
+   show the painting's edges (where its scenery is) however narrow they get.
+   Dimmed hardest toward the middle, where the eye is reading. */
+.reader-host.has-backdrop {
+  isolation: isolate;
+  background: var(--well);
+}
+.reader-host.has-backdrop .reader {
+  background: transparent;
+}
+.reader-host.has-backdrop::before,
+.reader-host.has-backdrop::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  z-index: -1;
+  pointer-events: none;
+  animation: backdrop-in 0.6s ease-out;
+}
+.reader-host.has-backdrop::before {
+  left: 0;
+  background:
+    linear-gradient(90deg, rgba(5, 8, 7, 0.45), rgba(5, 8, 7, 0.85)),
+    var(--reader-backdrop) left center / cover no-repeat;
+}
+.reader-host.has-backdrop::after {
+  right: 0;
+  background:
+    linear-gradient(270deg, rgba(5, 8, 7, 0.45), rgba(5, 8, 7, 0.85)),
+    var(--reader-backdrop) right center / cover no-repeat;
+}
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
 .reader-pages {
   position: relative;
   display: flex;

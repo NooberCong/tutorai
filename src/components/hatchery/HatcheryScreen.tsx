@@ -45,6 +45,7 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
   const [hatching, setHatching] = useState(false);
   const [detail, setDetail] = useState<Species | null>(null);
   const inReader = useSetting("hatcheryInReader");
+  const backdrop = useSetting("hatcheryBackdrop");
   const now = new Date();
   const pet = companion(s);
   const egg = s.incubator;
@@ -256,6 +257,17 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
           <span>
             Show my pet in the reader
             <small>When hidden, reading still warms eggs and grows pets.</small>
+          </span>
+        </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={backdrop}
+            onChange={(e) => saveSetting("hatcheryBackdrop", e.target.checked)}
+          />
+          <span>
+            Habitat behind the pages
+            <small>Your companion's home, dimmed, beside what you're reading.</small>
           </span>
         </label>
         <button

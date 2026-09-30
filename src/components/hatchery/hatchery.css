@@ -306,6 +306,7 @@
 /* Preferences sit quietly under everything, not as another card. */
 .hatchery section.hatchery-prefs {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 24px;

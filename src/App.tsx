@@ -18,6 +18,7 @@ import { SearchBar } from "./components/SearchBar";
 import { SelectionPopover } from "./components/SelectionPopover";
 import { Undo } from "./components/Icons";
 import { ReaderCompanion } from "./components/hatchery/ReaderCompanion";
+import { useReaderBackdrop } from "./components/hatchery/backdrop";
 import { AnnotationsProvider, useAnnotations } from "./lib/annotations";
 import { InsightsProvider, useInsights } from "./lib/insights";
 import { SearchProvider } from "./lib/search";
@@ -370,6 +371,7 @@ function DocScreen(props: {
   const [sidebarOpen, setSidebarOpen] = useState(() => getSetting("sidebarOpen"));
   const [panelOpen, setPanelOpen] = useState(() => getSetting("panelOpen"));
   const hatcheryOn = useSetting("hatchery");
+  const backdrop = useReaderBackdrop(hatcheryOn);
 
   // Remember panel visibility across restarts (covers every way they change,
   // including panel requests force-opening the tutor).
@@ -476,7 +478,11 @@ function DocScreen(props: {
             onDoubleClick={resetResize("sidebar")}
           />
         </div>
-        <div className="reader-host" ref={readerHostRef}>
+        <div
+          className={`reader-host ${backdrop ? "has-backdrop" : ""}`}
+          ref={readerHostRef}
+          style={backdrop ? ({ "--reader-backdrop": `url(${backdrop})` } as CSSProperties) : undefined}
+        >
           <Reader
             scale={scale}
             initialPage={props.initialPage}

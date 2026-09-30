@@ -166,3 +166,18 @@ edges, then grades the whole scene (`GRADE`: lightness squeezed into a dim
 middle range, color muted) so any creature — even a white one on snow —
 stands out. The UI adds a dark one-pixel rim around the creature.
 Motes (embers, snow, bubbles) are CSS-animated in the UI from `MOTES`.
+
+## Reader backdrops
+
+`backdrops.ts` paints each habitat wide (a 1600×1000 scene space, rendered
+at any size) for the space beside the reader's pages. It is not pixel art:
+it is a small per-pixel painter. Terrain comes from fractal noise, lit by
+its slope (`faceLight`) or a bump map. Foliage, clouds and rock are
+noise-edged lit spheres (`ball`/`cluster`), and distance fades into the sky
+through haze and mist. Light is additive (`glow`, `rays`, lava, aurora).
+Keep the scenery at the left and right edges; the middle is under the
+pages. The reader shows each half pinned to its own edge and dims it
+(styles.css), and `EXPOSURE` evens out bright and dark habitats. Review with
+`node scripts/backdrop-sheet.ts <dir> [element] [--dim] [--w=1200]`. In the
+app it renders in a worker (`components/hatchery/backdrop.worker.ts`) once
+per element per session.
