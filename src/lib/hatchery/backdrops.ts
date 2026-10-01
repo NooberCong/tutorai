@@ -1366,6 +1366,209 @@ function moon(p: Paint) {
   vignette(p, VIGNETTE.moon);
 }
 
+/** The night library's fireplaces: the fire's centre x (living.ts and
+ *  ambience.ts draw at the same spots). */
+export const FIRES = [100, 1500];
+const MANTEL = 574;
+export const FIRE_BASE = 800;
+
+/** How hot the fire is at (dx, up) from its base, 0…1-ish: a tapering body
+ *  frayed into tongues. Still paintings only; living.ts draws the moving one. */
+function flameHeat(n: Noise, dx: number, up: number): number {
+  const qx = dx / 62;
+  const qy = up / 130;
+  if (qy < -0.1 || qy > 1.5 || Math.abs(qx) > 1.4) return 0;
+  const sway = qx + 0.25 * n(qy * 1.5, 3.3) * qy;
+  const tongues = fbm(n, qx * 3, qy * 2.2 + 4.1, 3);
+  return clamp((1 - qy * 0.8 - Math.abs(sway) ** 1.5 * 1.3 + tongues * 0.65 * (0.35 + qy)) * 1.5 - 0.2) * smooth(-0.1, 0.05, qy);
+}
+
+/** Red → orange → yellow → white by heat. */
+function flameColor(h: number): C {
+  return [
+    smooth(0, 0.35, h) * 1.0,
+    smooth(0, 0.35, h) * 0.42 + smooth(0.35, 0.7, h) * 0.38,
+    smooth(0, 0.35, h) * 0.1 + smooth(0.35, 0.7, h) * 0.12 + smooth(0.7, 1, h) * 0.4,
+  ];
+}
+
+/** A stone fireplace filling a shelf's width below the mantel, its opening
+ *  arched, logs on the grate; `inner` is the side facing the room. */
+function fireplace(p: Paint, n: Noise, x0: number, x1: number, cx: number, innerLeft: boolean) {
+  const warm = hex("#ff9a48");
+  const r = 62;
+  const archY = 702;
+  const bot = 815;
+  const opening = (X: number, Y: number, grow: number) =>
+    Y < bot + grow && Math.abs(X - cx) < r + grow && (Y > archY || Math.hypot(X - cx, Y - archY) < r + grow);
+  // the surround: smaller, warmer stones than the wall
+  p.each(x0, MANTEL, x1, bot + 1, (X, Y, i) => {
+    const row = Math.floor((Y - MANTEL) / 28);
+    const off = row % 2 ? 23 : 0;
+    const bx = (X - x0 + off) % 46;
+    const by = (Y - MANTEL) % 28;
+    const mortar = Math.min(bx, 46 - bx, by, 28 - by);
+    const h = Math.sin(row * 12.9898 + Math.floor((X - x0 + off) / 46) * 78.233) * 43758.5453;
+    mix(hex("#221820"), hex("#4a3a44"), clamp(0.4 + (h - Math.floor(h)) * 0.3 + fbm(n, X * 0.05, Y * 0.05, 3) * 0.35));
+    scale(0.6 + 0.4 * smooth(0, 2.5, mortar));
+    p.over(i, 1);
+  });
+  // the arch's voussoirs, then the firebox: soot, faint back bricks
+  p.each(cx - r - 16, archY - r - 16, cx + r + 16, bot, (X, Y, i) => {
+    if (opening(X, Y, 0)) {
+      const back = Math.abs(X - cx) < r - 14 && Y > archY - r + 20;
+      mix(hex("#0c0608"), hex("#2a1612"), clamp((Y - (archY - r)) / (bot - archY + r)) * (back ? 1 : 0.6));
+      if (back && ((Y - 640) % 18 < 1.5 || (X - cx + Math.floor((Y - 640) / 18) * 13) % 26 < 1.5)) scale(0.6);
+      p.brush[0] = 1;
+      p.over(i, 1);
+      p.brush[0] = 0;
+    } else if (opening(X, Y, 14)) {
+      const a = Math.atan2(Y - archY, X - cx);
+      const joint = Y < archY && Math.abs(((a / Math.PI) * 9) % 1) < 0.06;
+      mix(hex("#2e2230"), hex("#584652"), clamp(0.55 + fbm(n, X * 0.06, Y * 0.06, 3) * 0.3));
+      if (joint) scale(0.6);
+      p.over(i, 1);
+    }
+  });
+  // the fire, for the still painting
+  if (!p.live) {
+    p.each(cx - r, archY - r, cx + r, bot, (X, Y, i) => {
+      const h = flameHeat(n, X - cx, FIRE_BASE - Y);
+      if (h > 0) p.add(i, flameColor(h), 1.3);
+    });
+  }
+  // coals, and two logs on the grate, cracks glowing
+  p.each(cx - r + 6, 805, cx + r - 6, bot, (X, Y, i) => {
+    const c = clamp(0.5 + fbm(n, X * 0.12, Y * 0.3, 3) * 1.2);
+    mix(hex("#1a0a06"), hex("#3a1408"), c);
+    p.brush[1] = c * c;
+    if (!p.live) p.add(i, hex("#ff5a18"), c * c * 0.9);
+    p.over(i, smooth(bot, 809, Y) * 0.6 + 0.4);
+    p.brush[1] = 0;
+  });
+  const log = (xa: number, ya: number, xb: number, yb: number, rad: number) =>
+    limb(p, xa, ya, xb, yb, rad, rad * 0.9, (u, t) => {
+      const crack = smooth(0.86, 0.97, 1 - Math.abs(n(t * 7 + xa, u * 1.6)));
+      const under = smooth(-0.2, 0.9, u);
+      mix(hex("#140a06"), hex("#4a2c1a"), clamp(0.45 - u * 0.35 + n(t * 20, u * 3) * 0.15));
+      if (!p.live) toward(hex("#ff7a28"), crack * under * 0.8);
+      p.brush[1] = crack * under;
+    });
+  log(cx - 50, 800, cx + 44, 790, 10);
+  log(cx - 34, 784, cx + 52, 802, 9);
+  p.brush[1] = 0;
+  // the mantel, overhanging toward the room
+  const m0 = innerLeft ? x0 - 14 : x0;
+  const m1 = innerLeft ? x1 : x1 + 14;
+  p.each(m0, MANTEL - 6, m1, MANTEL + 22, (X, Y, i) => {
+    mix(hex("#2a1820"), hex("#7a4e3a"), clamp(0.5 + n(X * 0.01, Y * 0.3) * 0.25 - (Y - MANTEL) / 40 + (Y < MANTEL - 2 ? 0.25 : 0)));
+    p.over(i, 1);
+  });
+  // the hearth slab in front
+  p.each(innerLeft ? x0 - 16 : x0, bot, innerLeft ? x1 : x1 + 16, bot + 28, (X, Y, i) => {
+    mix(hex("#2a2028"), hex("#5a4a52"), clamp(0.55 - (Y - bot) / 50 + fbm(n, X * 0.04, Y * 0.1, 2) * 0.3));
+    p.over(i, 1);
+  });
+  // its warmth on everything near (the moving part is living.ts's)
+  glow(p, cx, 760, 120, warm, p.live ? 0.24 : 0.3);
+}
+
+interface Book {
+  c: C;
+  style: "leather" | "cloth" | "paper" | "pages";
+  seed: number;
+}
+const BOOK_NOISE = perlin(17);
+
+/** A book, bw thick and bh tall, standing on its bottom-left corner (bx,
+ *  by) and turned by `th` (positive leans right; -π/2 lays it on its side,
+ *  spine out). Spines are rounded and textured; leather ones have raised
+ *  bands and a title label, cloth ones gilt rules and a gilt title, paper
+ *  ones a printed label. "pages" shows a lying book's page edges instead. */
+function book(p: Paint, bx: number, by: number, th: number, bw: number, bh: number, b: Book) {
+  const n = BOOK_NOISE;
+  const cs = Math.cos(th);
+  const sn = Math.sin(th);
+  // corners: across is (cs, sn), up is (sn, -cs)
+  const xs = [bx, bx + bw * cs, bx + bh * sn, bx + bw * cs + bh * sn];
+  const ys = [by, by + bw * sn, by - bh * cs, by + bw * sn - bh * cs];
+  const k = p.k;
+  const dark = times(b.c, 0.3);
+  const lit = blend(b.c, [1, 0.95, 0.85], 0.28);
+  const gilt = hex("#d8b468");
+  const sd = b.seed;
+  const thick = bw > 22;
+  // leather: four raised bands between head and tail
+  const bands = [0.16, 0.36, 0.56, 0.76].map((f) => bh * f);
+  p.each(Math.min(...xs) - 1, Math.min(...ys) - 1, Math.max(...xs) + 1, Math.max(...ys) + 1, (X, Y, i) => {
+    const dx = X - bx;
+    const dy = Y - by;
+    const u = dx * cs + dy * sn;
+    const h = dx * sn - dy * cs;
+    // the head's corners a little rounded
+    const rc = 2.2;
+    const v = bh - h; // from the head down
+    const cu = Math.min(u, bw - u);
+    let edge = Math.min(cu, h, v);
+    if (v < rc && cu < rc) edge = Math.min(edge, rc - Math.hypot(rc - cu, rc - v));
+    const cov = clamp(edge * k + 0.5);
+    if (cov <= 0) return;
+    const a = (u / bw) * 2 - 1;
+    if (b.style === "pages") {
+      // the page block between two thin boards
+      if (cu < 1.8) ramp(0.5 + n(v * 0.05 + sd, u) * 0.3, dark, b.c, lit);
+      else mix(hex("#a89878"), hex("#e0d4b4"), clamp(0.6 - Math.abs(a) * 0.3 + n(u * 1.6 + sd, v * 0.02) * 0.25));
+      if (Math.min(v, bh - v) < 1.2) scale(0.75);
+    } else {
+      // a rounded spine: lit from the room, darker round the sides
+      ramp(0.38 - a * 0.4 + 0.38 * (1 - a * a) - 0.12, dark, b.c, lit);
+      // grain or weave, and wear at the head and tail
+      const tex = b.style === "leather" ? fbm(n, u * 0.35 + sd, v * 0.35, 2) * 0.12 : n(u * 1.4 + sd, v * 1.4) * 0.05;
+      scale(1 + tex - 0.18 * smooth(1.6, 0, Math.min(v, bh - v)));
+      if (b.style === "leather") {
+        for (const bandY of bands) {
+          const d = v - bandY;
+          if (Math.abs(d) < 2.4) scale(d < 0 ? 1.25 : 0.7);
+        }
+        // a dark label with a gilt border and the title
+        if (v > bands[0] + 3 && v < bands[1] - 3 && Math.abs(a) < 0.78) {
+          const inLabel = Math.abs(a) < 0.7 && v > bands[0] + 4 && v < bands[1] - 4;
+          if (!inLabel) toward(gilt, 0.6);
+          else {
+            ramp(0.35 - a * 0.3 + 0.3 * (1 - a * a), [0.05, 0.03, 0.03], times(b.c, 0.45), times(b.c, 0.7));
+            const mid = (bands[0] + bands[1]) / 2;
+            if (Math.abs(v - mid) < (thick ? 1.4 : 5) && Math.abs(a) < (thick ? 0.5 : 0.18)) toward(gilt, 0.7);
+          }
+        }
+        if (Math.abs(v - (bands[2] + bands[3]) / 2) < 1 && Math.abs(a) < 0.3) toward(gilt, 0.55);
+      } else if (b.style === "cloth") {
+        // gilt rules at head and tail
+        for (const rv of [5, 8, bh - 8, bh - 5]) if (Math.abs(v - rv) < 0.8) toward(gilt, 0.6);
+        // the title: a broken line of gilt down a thin spine, a few short
+        // lines across a thick one
+        const t0 = bh * 0.2;
+        const t1 = bh * (0.42 + (sd % 0.2));
+        if (v > t0 && v < t1) {
+          if (thick) {
+            const line = (v - t0) % 6;
+            if (line < 1.6 && Math.abs(a) < 0.35 + 0.2 * n(Math.floor((v - t0) / 6) + sd, 1.5)) toward(gilt, 0.65);
+          } else if (Math.abs(a) < 0.14 && n(v * 0.35 + sd, 0.5) > -0.25) toward(gilt, 0.6);
+        }
+      } else {
+        // a paper label, the title in small dark print
+        const l0 = bh * 0.14;
+        const l1 = l0 + Math.min(26, bh * 0.25);
+        if (v > l0 && v < l1 && Math.abs(a) < 0.72) {
+          mix(hex("#8a7a60"), hex("#c4b494"), clamp(0.7 - a * 0.3));
+          const line = (v - l0 - 5) % 5;
+          if (v > l0 + 4 && v < l1 - 4 && line < 1.3 && Math.abs(a) < (thick ? 0.45 : 0.2)) scale(0.45);
+        }
+      }
+    }
+    p.over(i, cov);
+  });
+}
+
 function arcane(p: Paint) {
   const n = perlin(15);
   const n2 = perlin(16);
@@ -1430,9 +1633,7 @@ function arcane(p: Paint) {
   win(390, true);
   win(1210, false);
 
-  // bookshelves at the edges
-  p.tag(0);
-  p.tag(1);
+  // bookshelves at the edges, over the fireplaces
   const wood = (X: number, Y: number, dark: string, lit: string) => {
     mix(hex(dark), hex(lit), clamp(0.45 + (n(X * 0.01, Y * 0.2) * 0.5 + n(X * 0.03, Y * 0.5) * 0.3) * 0.5));
   };
@@ -1443,34 +1644,72 @@ function arcane(p: Paint) {
       scale(0.5);
       p.over(i, 1);
     });
-    const palette = ["#7a3448", "#344a7a", "#4e6a38", "#8a6230", "#4c3a7c", "#94503a", "#2c5e5e", "#6a2a2a"].map(hex);
-    for (let y = 30; y < H - 40; y += 136) {
+    const palette = ["#7a3448", "#344a7a", "#4e6a38", "#8a6230", "#4c3a7c", "#94503a", "#2c5e5e", "#6a2a2a", "#3a3040", "#6a5a3a"].map(hex);
+    const pick = (): Book => {
+      const base = palette[Math.floor(r() * palette.length)];
+      // faded, darkened, or a little worn: no two quite alike
+      const c = blend(times(base, 0.75 + r() * 0.4), [0.45, 0.4, 0.38], r() * r() * 0.5);
+      const kind = r();
+      return { c, style: kind < 0.42 ? "leather" : kind < 0.84 ? "cloth" : "paper", seed: r() * 1000 };
+    };
+    const end = x1 - 18;
+    for (let y = 30; y + 136 <= MANTEL; y += 136) {
+      const floor = y + 122;
       let x = x0 + 18;
-      // (live: each book's number along its shelf in 0, 1/32…31/32, and its
-      // gilt bands in 1, so the shader can wake single books)
-      let book = 0;
-      while (x < x1 - 30) {
-        p.brush[0] = (book++ % 31 + 1) / 32;
-        const bw = 14 + r() * 18;
-        const bh = 84 + r() * 34;
-        const c = palette[Math.floor(r() * palette.length)];
-        const dark = times(c, 0.35);
-        const lit = times(c, 1.4);
-        const bx = x;
-        const top = y + 122 - bh;
-        const b1 = top + 12;
-        const b2 = top + bh * 0.72;
-        p.each(bx, top, bx + bw, y + 122, (X, Y, i) => {
-          const u = ((X - bx) / bw) * 2 - 1;
-          ramp(0.4 - u * 0.45 + 0.35 * (1 - u * u) - 0.1, dark, c, lit);
-          const gilt = Math.abs(Y - b1) < 2 || Math.abs(Y - b2) < 2;
-          if (gilt) toward(hex("#e8c070"), 0.55);
-          p.brush[1] = gilt ? 1 : 0;
-          p.over(i, 1);
-        });
-        x += bw + 1 + (r() < 0.1 ? 22 : 0);
+      let prev = { right: x, h: 120 };
+      while (x < end - 10) {
+        // now and then a few books lying in a stack
+        if (r() < 0.16 && end - x > 70) {
+          const len = Math.min(end - x - 2, 64 + r() * 34);
+          let top = floor;
+          const count = 2 + Math.floor(r() * 3);
+          for (let k = 0; k < count && top > y + 40; k++) {
+            const th = 10 + r() * 12;
+            const ln = len * (0.82 + r() * 0.18);
+            const lx = x + r() * (len - ln);
+            // lying flat, spine out: a quarter turn, standing on what was
+            // its bottom-left corner
+            const bk = pick();
+            if (r() < 0.4) bk.style = "pages";
+            book(p, lx + ln, top, -Math.PI / 2, th, ln, bk);
+            top -= th;
+          }
+          prev = { right: x + len, h: floor - top };
+          x += len + 2 + r() * 4;
+          continue;
+        }
+        // a run of upright books, none quite straight
+        const run = 3 + Math.floor(r() * 6);
+        for (let k = 0; k < run && x < end - 9; k++) {
+          const bw = Math.min(end - x, 9 + r() * r() * 26);
+          const bh = 72 + r() * 44;
+          const tilt = (r() - 0.5) * 0.035;
+          book(p, x, floor, tilt, bw, bh, pick());
+          prev = { right: x + bw, h: bh };
+          x += bw + 0.6 + (r() < 0.06 ? 3 : 0);
+        }
+        // one leaning back against the run
+        if (r() < 0.45 && end - x > 26) {
+          const th = -(0.1 + r() * 0.3);
+          const bw = 11 + r() * 14;
+          const bh = 76 + r() * 38;
+          const contact = Math.min(prev.h, bh) * 0.94;
+          const bx = prev.right + contact * Math.sin(-th) + 0.5;
+          if (bx + bw * Math.cos(th) < end) {
+            book(p, bx, floor, th, bw, bh, pick());
+            x = bx + bw * Math.cos(th) + 1.5 + r() * 5;
+            prev = { right: x, h: bh * Math.cos(th) };
+            continue;
+          }
+        }
+        x += r() < 0.2 ? 2 + r() * 6 : 0;
       }
-      p.brush[0] = p.brush[1] = 0;
+      // the compartment's shadow under the board above
+      p.each(x0, y, x1, floor, (_X, Y, i) => {
+        p.get(i);
+        scale(0.62 + 0.38 * smooth(y, y + 46, Y));
+        p.over(i, 1);
+      });
       p.each(x0, y + 122, x1, y + 136, (X, Y, i) => {
         wood(X, Y, "#2a1820", "#6a4034");
         scale(1 - (Y - y - 122) / 30);
@@ -1503,7 +1742,15 @@ function arcane(p: Paint) {
     });
   }
 
-  // candles on the sills and floor
+  // a fireplace in each bottom corner, under the shelves. (live: the
+  // shader draws the fire and its light; the firebox is tagged in 0, the
+  // glowing log cracks and coals in 1)
+  p.tag(0);
+  p.tag(1);
+  fireplace(p, n, -20, 210, FIRES[0], false);
+  fireplace(p, n, 1390, 1620, FIRES[1], true);
+
+  // candles on the sills
   const candle = (x: number, y: number, h: number) => {
     glow(p, x, y - h - 12, 80, warm, 0.4);
     strand(p, y - h, y, () => x, () => 7, (_x, _y, u) => {
@@ -1516,8 +1763,6 @@ function arcane(p: Paint) {
   candle(290, 612, 40);
   candle(318, 612, 26);
   candle(1290, 612, 34);
-  candle(250, 830, 70);
-  candle(1350, 830, 60);
 
   vignette(p, VIGNETTE.arcane);
 }

@@ -11,6 +11,7 @@
  *  main thread. */
 
 import type { Element } from "./kit.ts";
+import { FIRES } from "./backdrops.ts";
 
 const W = 1600;
 const H = 1000;
@@ -467,8 +468,11 @@ const LAYERS: Record<Element, () => Layer[]> = {
     pulse(290, 560, 70, "#ffb65a", 0.16, 0.06, 1, true, 21),
     pulse(318, 574, 55, "#ffb65a", 0.14, 0.05, 1, true, 22),
     pulse(1290, 566, 65, "#ffb65a", 0.16, 0.06, 1, true, 23),
-    pulse(250, 748, 80, "#ffb65a", 0.16, 0.06, 1, true, 24),
-    pulse(1350, 758, 75, "#ffb65a", 0.16, 0.06, 1, true, 25),
+    // the fireplaces: a slow glow, and sparks lifting off the logs
+    ...FIRES.flatMap((x, k) => [
+      pulse(x, 740, 150, "#ff9a48", 0.07, 0.03, 5, false, 24 + k),
+      motes({ n: 7, area: [x - 40, 650, x + 40, 800], v: [0, -26], spread: [6, 8], wander: 10, size: [0.8, 1.8], colors: ["#ffb060", "#ffd890"], alpha: [0.5, 0.9], twinkle: 0.9, core: true, seed: 40 + k }),
+    ]),
     motes({ n: 60, area: [0, 90, W, 880], v: [1, -8], spread: [4, 5], wander: 9, size: [1.2, 3], colors: ["#d8b8ff", "#a8e0ff", "#ffe0a8"], alpha: [0.45, 0.95], twinkle: 4, core: true, seed: 26 }),
   ],
 };
