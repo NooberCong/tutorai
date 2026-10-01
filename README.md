@@ -167,7 +167,7 @@ An optional hatchery that rewards actual reading:
   shows your companion's habitat, painted wide and dimmed so it sets a mood
   without pulling your eye off the text. It lives, slowly: the aurora's
   curtains ripple and surge over the pines, kelp sways in the swell under a
-  moving surface, clouds billow, lava creeps downhill, crowns and grass stir,
+  moving surface while fish cruise through it, clouds billow, lava creeps downhill, crowns and grass stir,
   mist drifts through the hollows, and in the night library a fire burns
   in the hearth under each bookcase, its light wavering over the shelves
   and the floorboards. Snow, embers, bubbles and fireflies drift

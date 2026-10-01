@@ -979,10 +979,10 @@ function tide(p: Paint) {
   coral(80, 940, "#d070b8", 3);
   coral(1540, 930, "#f07a8e", 4);
 
-  // a school of fish in the distance (bubbles, specks and the like move:
-  // ambience.ts)
+  // a school of fish in the distance (live: ambience.ts's, swimming, with
+  // the bubbles and specks)
   const fr = rng(91);
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < (p.live ? 0 : 14); i++) {
     const x = 1130 + fr() * 330;
     const y = 280 + fr() * 180;
     const s = 0.7 + fr() * 0.5;

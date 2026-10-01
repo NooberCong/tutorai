@@ -1,6 +1,6 @@
 /** Ambience: what drifts over a reader backdrop — pollen and falling
- *  leaves, embers, bubbles, snow, meteors, fireflies, crystal glints,
- *  candle flicker — in the same 1600×1000 scene space as the painting,
+ *  leaves, embers, bubbles, fish, snow, meteors, fireflies, crystal
+ *  glints, candle flicker — in the same 1600×1000 scene space as the painting,
  *  mapped the way the reader shows it: two halves, each pinned to its own
  *  edge and cropped to cover. The painting's own big features move in
  *  living.ts.
@@ -225,6 +225,335 @@ function bubbles(n: number, area: Area, seed: number): Layer {
   };
 }
 
+interface Species {
+  /** Half the body's height, as a fraction of its half-length. */
+  h: number;
+  /** How pointed the snout is: 1 blunt … 0.2 sharp. */
+  snout: number;
+  tail: "fork" | "round" | "lyre";
+  back: string;
+  mid: string;
+  belly: string;
+  fin: string;
+  /** The tail, when it differs from the fins. */
+  tailFin?: string;
+  /** Fin edges, eye ring. */
+  edge: string;
+  iris: string;
+  /** Markings over the body, drawn clipped to it. */
+  mark?: (c: Ctx, s: number, h: number) => void;
+}
+
+const SPECIES: Record<string, Species> = {
+  // white bands edged in black
+  clown: {
+    h: 0.46, snout: 0.75, tail: "round", back: "#d8500a", mid: "#ff7a1a", belly: "#ffb46a", fin: "#ff8a2a", edge: "#1a0a06", iris: "#ffb040",
+    mark(c, s, h) {
+      c.lineWidth = 0.07 * s;
+      c.strokeStyle = "#1a0a06";
+      c.fillStyle = "#fffaf0";
+      for (const [x, w] of [[0.42, 0.16], [-0.08, 0.2], [-0.66, 0.1]]) {
+        c.beginPath();
+        c.ellipse(x * s, 0, w * s, h * 1.1, 0, 0, TAU);
+        c.fill();
+        c.stroke();
+      }
+    },
+  },
+  // the palette mark sweeping from eye to tail, a yellow tail
+  blueTang: {
+    h: 0.58, snout: 0.6, tail: "fork", back: "#1c3c9c", mid: "#2e62d8", belly: "#6aa4f4", fin: "#2850c0", tailFin: "#ffd030", edge: "#0a0a1a", iris: "#f0f0ff",
+    mark(c, s, h) {
+      c.fillStyle = "#0a0c1e";
+      c.beginPath();
+      c.moveTo(0.62 * s, -0.25 * h);
+      c.bezierCurveTo(0.2 * s, -0.9 * h, -0.5 * s, -0.7 * h, -0.85 * s, -0.1 * h);
+      c.bezierCurveTo(-0.5 * s, -0.25 * h, -0.2 * s, 0.2 * h, -0.5 * s, 0.35 * h);
+      c.bezierCurveTo(-0.1 * s, 0.25 * h, 0.1 * s, -0.4 * h, 0.62 * s, -0.25 * h);
+      c.fill();
+    },
+  },
+  // a tall disc with a pointed snout
+  yellowTang: {
+    h: 0.72, snout: 0.25, tail: "round", back: "#e0a800", mid: "#ffd21a", belly: "#fff07a", fin: "#ffc810", edge: "#b08000", iris: "#2a2a2a",
+    mark(c, s, h) {
+      c.fillStyle = "rgba(255,255,255,0.8)";
+      c.beginPath();
+      c.ellipse(-0.6 * s, 0.05 * h, 0.06 * s, 0.03 * s, -0.3, 0, TAU);
+      c.fill();
+    },
+  },
+  // slender and pink, an orange streak below the eye, a lyre tail
+  anthias: {
+    h: 0.4, snout: 0.5, tail: "lyre", back: "#d8407a", mid: "#ff6a9a", belly: "#ffc0d4", fin: "#ff7aa6", edge: "#c02a60", iris: "#ffd060",
+    mark(c, s, h) {
+      c.strokeStyle = "#ffb03a";
+      c.lineWidth = 0.06 * s;
+      c.beginPath();
+      c.moveTo(0.62 * s, 0.05 * h);
+      c.quadraticCurveTo(0.45 * s, 0.4 * h, 0.15 * s, 0.55 * h);
+      c.stroke();
+    },
+  },
+  chromis: {
+    h: 0.48, snout: 0.6, tail: "fork", back: "#2a8a8e", mid: "#5ad0c8", belly: "#d0fff2", fin: "#6ad8d0", edge: "#1a6a6e", iris: "#e0fff8",
+  },
+  // the school: silvery sardines with a blue back
+  sardine: {
+    h: 0.3, snout: 0.45, tail: "fork", back: "#2a5a7a", mid: "#8ab4c8", belly: "#e8f4f8", fin: "#9ac0d0", edge: "#2a5a7a", iris: "#101820",
+    mark(c, s, h) {
+      c.strokeStyle = "rgba(220,240,255,0.55)";
+      c.lineWidth = 0.08 * s;
+      c.beginPath();
+      c.moveTo(0.5 * s, -0.1 * h);
+      c.lineTo(-0.75 * s, -0.05 * h);
+      c.stroke();
+    },
+  },
+};
+
+interface Fish {
+  x: number;
+  y: number;
+  /** Heading, -1 or 1, and facing, which follows it smoothly: a turn. */
+  dir: number;
+  face: number;
+  speed: number;
+  size: number;
+  sp: Species;
+  alpha: number;
+  ph: number;
+  /** The stretch it patrols, and its cruising depth. */
+  lo: number;
+  hi: number;
+  depth: number;
+  /** Its gradients, made once per canvas (they're in its own coordinates). */
+  g?: { c: Ctx; body: CanvasGradient; shade: CanvasGradient };
+}
+
+function bodyPath(c: Ctx, s: number, h: number, snout: number) {
+  c.beginPath();
+  c.moveTo(s, 0.08 * h);
+  c.bezierCurveTo(s, -h * snout, 0.4 * s, -h, -0.15 * s, -h * 0.88);
+  c.quadraticCurveTo(-0.6 * s, -h * 0.55, -0.84 * s, -h * 0.2);
+  c.lineTo(-0.84 * s, h * 0.2);
+  c.quadraticCurveTo(-0.6 * s, h * 0.55, -0.15 * s, h * 0.88);
+  c.bezierCurveTo(0.4 * s, h, s, h * snout, s, 0.08 * h);
+  c.closePath();
+}
+
+/** A fin as a filled shape with a few rays running through it. */
+function fin(c: Ctx, f: Fish, outline: () => void, rays: [number, number, number, number][], color = f.sp.fin) {
+  outline();
+  c.fillStyle = color;
+  c.fill();
+  c.save();
+  c.clip();
+  c.strokeStyle = f.sp.edge;
+  c.globalAlpha *= 0.35;
+  c.lineWidth = Math.max(0.5, f.size * 0.03);
+  c.beginPath();
+  for (const [x0, y0, x1, y1] of rays) {
+    c.moveTo(x0, y0);
+    c.lineTo(x1, y1);
+  }
+  c.stroke();
+  c.restore();
+  // a darker rim
+  outline();
+  c.strokeStyle = f.sp.edge;
+  c.globalAlpha *= 0.3;
+  c.lineWidth = Math.max(0.5, f.size * 0.025);
+  c.stroke();
+  c.globalAlpha /= 0.3;
+}
+
+/** A fish facing right at the origin, its tail beating by `beat`. */
+function drawFish(c: Ctx, f: Fish, beat: number) {
+  const s = f.size;
+  const sp = f.sp;
+  const h = sp.h * s;
+  if (f.g?.c !== c) {
+    const body = c.createLinearGradient(0, -h, 0, h);
+    body.addColorStop(0, sp.back);
+    body.addColorStop(0.45, sp.mid);
+    body.addColorStop(1, sp.belly);
+    // rounder toward the head, in shade toward the tail
+    const shade = c.createLinearGradient(s, 0, -0.84 * s, 0);
+    shade.addColorStop(0, "rgba(255,255,255,0.12)");
+    shade.addColorStop(0.45, "rgba(0,0,0,0)");
+    shade.addColorStop(1, "rgba(0,10,30,0.3)");
+    f.g = { c, body, shade };
+  }
+  const a = c.globalAlpha;
+  // fins behind the body: dorsal, anal, then the tail
+  c.globalAlpha = a * 0.85;
+  const dh = sp.tail === "lyre" ? 0.55 : 0.4;
+  fin(c, f, () => {
+    c.beginPath();
+    c.moveTo(0.38 * s, -0.86 * h);
+    c.quadraticCurveTo(0.1 * s, -h - dh * s * 1.2, -0.62 * s, -0.5 * h - 0.12 * s);
+    c.lineTo(-0.66 * s, -0.4 * h);
+    c.closePath();
+  }, [0.25, 0.05, -0.15, -0.35, -0.55].map((x) => [x * s, -0.6 * h, (x - 0.2) * s, -h - dh * s * 2]) as [number, number, number, number][]);
+  fin(c, f, () => {
+    c.beginPath();
+    c.moveTo(-0.05 * s, 0.85 * h);
+    c.quadraticCurveTo(-0.3 * s, h + 0.32 * s, -0.66 * s, 0.4 * h + 0.06 * s);
+    c.lineTo(-0.66 * s, 0.35 * h);
+    c.closePath();
+  }, [-0.15, -0.35, -0.55].map((x) => [x * s, 0.6 * h, (x - 0.15) * s, h + 0.5 * s]) as [number, number, number, number][]);
+  c.save();
+  c.translate(-0.8 * s, 0);
+  c.rotate(Math.sin(beat) * 0.36);
+  const tl = 0.6 * s;
+  const ts = Math.max(h * 1.05, 0.42 * s);
+  const r0 = 0.2 * h;
+  fin(c, f, () => {
+    c.beginPath();
+    c.moveTo(0.06 * s, -r0);
+    if (sp.tail === "round") {
+      c.quadraticCurveTo(-0.3 * tl, -ts, -tl, -0.7 * ts);
+      c.quadraticCurveTo(-1.2 * tl, 0, -tl, 0.7 * ts);
+      c.quadraticCurveTo(-0.3 * tl, ts, 0.06 * s, r0);
+    } else {
+      const deep = sp.tail === "lyre" ? 0.4 : 0.6;
+      const reach = sp.tail === "lyre" ? 1.3 : 1;
+      c.quadraticCurveTo(-0.35 * tl, -0.4 * ts, -tl * reach, -ts * reach);
+      c.quadraticCurveTo(-0.75 * tl, -0.3 * ts, -deep * tl, 0);
+      c.quadraticCurveTo(-0.75 * tl, 0.3 * ts, -tl * reach, ts * reach);
+      c.quadraticCurveTo(-0.35 * tl, 0.4 * ts, 0.06 * s, r0);
+    }
+    c.closePath();
+  }, [-0.8, -0.4, 0, 0.4, 0.8].map((k) => [0, k * r0, -tl * 1.4, k * ts * 1.4]) as [number, number, number, number][], sp.tailFin);
+  c.restore();
+  // the body, its markings, shading toward the tail
+  c.globalAlpha = a;
+  bodyPath(c, s, h, sp.snout);
+  c.fillStyle = f.g.body;
+  c.fill();
+  if (sp.mark) {
+    c.save();
+    c.clip();
+    sp.mark(c, s, h);
+    c.restore();
+    bodyPath(c, s, h, sp.snout);
+  }
+  c.fillStyle = f.g.shade;
+  c.fill();
+  // a soft highlight along the back
+  c.fillStyle = "rgba(255,255,255,0.16)";
+  c.beginPath();
+  c.ellipse(0.12 * s, -0.42 * h, 0.55 * s, 0.14 * h, -0.04, 0, TAU);
+  c.fill();
+  // gill
+  c.strokeStyle = "rgba(0,0,0,0.25)";
+  c.lineWidth = Math.max(0.5, s * 0.035);
+  c.beginPath();
+  c.arc(0.78 * s, 0.05 * h, 0.36 * s, Math.PI * 0.72, Math.PI * 1.22);
+  c.stroke();
+  // eye: ring, iris, pupil, a glint
+  const ex = 0.66 * s;
+  const ey = -0.18 * h;
+  const er = Math.max(1, 0.1 * s);
+  c.fillStyle = sp.edge;
+  c.beginPath();
+  c.arc(ex, ey, er * 1.15, 0, TAU);
+  c.fill();
+  c.fillStyle = sp.iris;
+  c.beginPath();
+  c.arc(ex, ey, er, 0, TAU);
+  c.fill();
+  c.fillStyle = "#06080c";
+  c.beginPath();
+  c.arc(ex + er * 0.12, ey, er * 0.6, 0, TAU);
+  c.fill();
+  c.fillStyle = "rgba(255,255,255,0.9)";
+  c.beginPath();
+  c.arc(ex + er * 0.35, ey - er * 0.35, er * 0.25, 0, TAU);
+  c.fill();
+  // the side fin, paddling
+  c.globalAlpha = a * 0.55;
+  c.save();
+  c.translate(0.4 * s, 0.25 * h);
+  c.rotate(0.5 + Math.sin(beat * 0.7) * 0.35);
+  fin(c, f, () => {
+    c.beginPath();
+    c.moveTo(0, -0.05 * s);
+    c.quadraticCurveTo(-0.16 * s, -0.13 * s, -0.3 * s, 0);
+    c.quadraticCurveTo(-0.16 * s, 0.08 * s, 0, 0.05 * s);
+    c.closePath();
+  }, [[0, 0, -0.32 * s, -0.02 * s], [0, 0, -0.28 * s, 0.05 * s]]);
+  c.restore();
+  c.globalAlpha = a;
+}
+
+function steer(f: Fish, dt: number, t: number) {
+  f.x += f.dir * f.speed * (0.8 + 0.2 * Math.sin(t * 0.4 + f.ph)) * Math.abs(f.face) * dt + f.dir * f.speed * 0.15 * dt;
+  if ((f.dir > 0 && f.x > f.hi) || (f.dir < 0 && f.x < f.lo)) f.dir = -f.dir;
+  f.face += (f.dir - f.face) * Math.min(1, dt * 1.6);
+}
+
+function place(c: Ctx, f: Fish, t: number, x: number, y: number) {
+  c.save();
+  c.translate(x, y);
+  // nose up or down a little as it rises and sinks
+  c.rotate(Math.cos(t * 0.5 + f.ph) * 0.12 * Math.sign(f.face));
+  c.scale(f.face, 1);
+  c.globalAlpha = f.alpha;
+  drawFish(c, f, t * (2.2 + f.speed * 0.06) + f.ph);
+  c.restore();
+}
+
+/** Reef fish cruising back and forth by the kelp and coral, each over its
+ *  own stretch, turning at the ends; and a school out in the blue, drifting
+ *  across the whole scene together. */
+function fishes(seed: number): Layer {
+  const r = rng(seed);
+  const kinds = [SPECIES.clown, SPECIES.blueTang, SPECIES.yellowTang, SPECIES.anthias, SPECIES.chromis];
+  const reef: Fish[] = [];
+  // a few on each side, where the margins show
+  for (const [lo, hi] of [[-40, 520], [1080, 1640]] as const) {
+    for (let i = 0; i < 4; i++) {
+      const sp = kinds[(reef.length + (lo > 0 ? 2 : 0)) % kinds.length];
+      const dir = r() < 0.5 ? -1 : 1;
+      reef.push({
+        x: lo + r() * (hi - lo), y: 0, dir, face: dir, speed: 14 + r() * 16, size: 17 + r() * 12, sp,
+        alpha: 0.95, ph: r() * TAU, lo, hi, depth: 380 + r() * 460,
+      });
+    }
+  }
+  const school: Fish[] = Array.from({ length: 16 }, () => ({
+    x: (r() - 0.5) * 240, y: (r() - 0.5) * 110, dir: -1, face: -1, speed: 0, size: 9 + r() * 4,
+    sp: SPECIES.sardine, alpha: 0.6, ph: r() * TAU, lo: 0, hi: 0, depth: 0,
+  }));
+  const lead = { x: 1300, dir: -1, face: -1, speed: 16, ph: r() * TAU, lo: -200, hi: 1800 } as Fish;
+  return {
+    update(dt, t) {
+      for (const f of reef) steer(f, dt, t);
+      steer(lead, dt, t);
+    },
+    draw(c, t, x0, x1) {
+      // the school, far off: small, faint, moving as one with each fish
+      // weaving a little in its place
+      const sy = 340 + Math.sin(t * 0.07 + lead.ph) * 60;
+      for (const f of school) {
+        f.face = lead.face;
+        const x = lead.x + f.x * (0.8 + 0.2 * Math.sin(t * 0.3 + f.ph)) + Math.sin(t * 0.9 + f.ph) * 4;
+        const y = sy + f.y + Math.sin(t * 0.7 + f.ph * 2) * 5;
+        if (x + 20 < x0 || x - 20 > x1) continue;
+        place(c, f, t, x, y);
+      }
+      for (const f of reef) {
+        const y = f.depth + Math.sin(t * 0.5 + f.ph) * 10 + Math.sin(t * 0.13 + f.ph * 3) * 18;
+        if (f.x + 30 < x0 || f.x - 30 > x1) continue;
+        place(c, f, t, f.x, y);
+      }
+      c.globalAlpha = 1;
+    },
+  };
+}
+
 /** A light that breathes slowly (lava, crystals, the moon's halo), or
  *  flickers (candles). */
 function pulse(x: number, y: number, radius: number, color: string, base: number, amp: number, period: number, flicker = false, seed = 1): Layer {
@@ -440,6 +769,7 @@ const LAYERS: Record<Element, () => Layer[]> = {
   tide: () => [
     shafts(800, -420, Math.PI / 2, 0.5, 9, 1450, "#d8fff8", 0.06, 4),
     motes({ n: 90, area: [0, 100, W, 920], v: [2, 5], spread: [3, 3], wander: 5, size: [0.8, 2], colors: ["#d8f4ff"], alpha: [0.25, 0.55], seed: 5 }),
+    fishes(41),
     bubbles(36, [0, 110, W, 930], 6),
   ],
   stone: () => [
