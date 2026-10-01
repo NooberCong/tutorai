@@ -274,10 +274,17 @@ vec3 scene(vec2 P) {
     // firelight on the room: brighter and dimmer with the fire, and
     // shifting a little as the flames lean
     vec2 d = (P - vec2(cx + 14.0 * N(vec2(t * 0.3, i)), 740.0)) / vec2(330.0, 260.0);
-    // and over the floor and the rug in front
+    // and over the floor in front
     vec2 fd = (P - vec2(cx, 850.0)) / vec2(250.0, 110.0);
     float near = max(exp(-dot(d, d)), exp(-dot(fd, fd)));
     col *= 1.0 + vec3(0.9, 0.5, 0.2) * near * (b - 0.9) * 2.4;
+    // the fire mirrored in the polished boards in front, rippling with the
+    // grain and the flames
+    if (P.y > 843.0) {
+      float shine = exp(-pow((P.x - cx) / 55.0, 2.0)) * exp(-(P.y - 843.0) / 55.0);
+      float ripple = 0.55 + 0.45 * smoothstep(-0.4, 0.6, N(vec2(P.x * 0.06, P.y * 0.03 - t * 0.5)));
+      col += vec3(1.0, 0.54, 0.22) * shine * ripple * b * 0.5 * L;
+    }
     vec4 m = mask(P);
     if (m.r > 0.0) {
       float h = flame(P, cx, i);

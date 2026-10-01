@@ -170,7 +170,7 @@ An optional hatchery that rewards actual reading:
   moving surface, clouds billow, lava creeps downhill, crowns and grass stir,
   mist drifts through the hollows, and in the night library a fire burns
   in the hearth under each bookcase, its light wavering over the shelves
-  and the rug. Snow, embers, bubbles and fireflies drift
+  and the floorboards. Snow, embers, bubbles and fireflies drift
   through it all. It's drawn on the GPU in a worker, off the reader's
   thread, and only beside the pages. It stops when the reader is out of
   sight and respects "reduce motion". The motion
