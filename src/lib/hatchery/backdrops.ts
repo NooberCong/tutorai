@@ -1371,6 +1371,8 @@ function moon(p: Paint) {
 export const FIRES = [100, 1500];
 const MANTEL = 574;
 export const FIRE_BASE = 800;
+/** Where the hearth rugs lie. */
+const RUG_Y = 900;
 
 /** How hot the fire is at (dx, up) from its base, 0…1-ish: a tapering body
  *  frayed into tongues. Still paintings only; living.ts draws the moving one. */
@@ -1469,8 +1471,44 @@ function fireplace(p: Paint, n: Noise, x0: number, x1: number, cx: number, inner
     mix(hex("#2a2028"), hex("#5a4a52"), clamp(0.55 - (Y - bot) / 50 + fbm(n, X * 0.04, Y * 0.1, 2) * 0.3));
     p.over(i, 1);
   });
-  // its warmth on everything near (the moving part is living.ts's)
+  // a braided rug in front of it, a little toward the room
+  const rx = 118;
+  const ry = 34;
+  const gx = cx + (innerLeft ? -12 : 12);
+  const gy = RUG_Y;
+  const strands = ["#7a2e2a", "#b07a3a", "#2e5a5a", "#c8b490", "#5a2a40", "#8a4a2a"].map(hex);
+  const rings = 7;
+  p.each(gx - rx - 4, gy - ry - 4, gx + rx + 4, gy + ry + 10, (X, Y, i) => {
+    const e = Math.hypot((X - gx) / rx, (Y - gy) / ry);
+    // its shadow on the floor, mostly along the near edge
+    if (e >= 1) {
+      const sh = Math.hypot((X - gx) / rx, (Y - gy - 3) / ry);
+      if (sh < 1.06) {
+        p.get(i);
+        scale(1 - 0.4 * smooth(1.06, 1, sh));
+        p.over(i, 1);
+      }
+      return;
+    }
+    const f = e * rings;
+    const ring = Math.floor(f);
+    const w = f - ring;
+    // each ring a braid: plaits slanting one way then the other, rounded
+    const ang = Math.atan2((Y - gy) / ry, (X - gx) / rx);
+    const plait = ((ang / (Math.PI * 2)) * (12 + ring * 10) + (w < 0.5 ? w : 1 - w) * 0.9) % 1;
+    const c = strands[ring % strands.length];
+    mix(times(c, 0.45), c, clamp(1 - Math.abs(w * 2 - 1) ** 2));
+    scale(0.78 + 0.22 * Math.abs(Math.sin(plait * Math.PI)));
+    scale(0.92 + fbm(n, X * 0.08, Y * 0.2, 2) * 0.12);
+    p.over(i, clamp((1 - e) * ry * p.k + 0.5));
+  });
+  // its warmth on everything near, and spreading over the floor (the
+  // moving part is living.ts's)
   glow(p, cx, 760, 120, warm, p.live ? 0.24 : 0.3);
+  p.each(cx - 330, bot, cx + 330, H, (X, Y, i) => {
+    const d = ((X - cx) / 240) ** 2 + ((Y - bot - 30) / 110) ** 2;
+    if (d < 9) p.add(i, warm, 0.16 * Math.exp(-d));
+  });
 }
 
 interface Book {

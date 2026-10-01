@@ -274,7 +274,9 @@ vec3 scene(vec2 P) {
     // firelight on the room: brighter and dimmer with the fire, and
     // shifting a little as the flames lean
     vec2 d = (P - vec2(cx + 14.0 * N(vec2(t * 0.3, i)), 740.0)) / vec2(330.0, 260.0);
-    float near = exp(-dot(d, d));
+    // and over the floor and the rug in front
+    vec2 fd = (P - vec2(cx, 850.0)) / vec2(250.0, 110.0);
+    float near = max(exp(-dot(d, d)), exp(-dot(fd, fd)));
     col *= 1.0 + vec3(0.9, 0.5, 0.2) * near * (b - 0.9) * 2.4;
     vec4 m = mask(P);
     if (m.r > 0.0) {
