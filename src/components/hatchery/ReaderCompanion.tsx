@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GameEvent, HatcheryState } from "../../lib/hatchery/game";
 import { ACCESSORY } from "../../lib/hatchery/accessories";
-import { FIND_EVERY_MIN, companion, eggReady, growth, speciesById, stageOf } from "../../lib/hatchery/game";
+import { FIND_EVERY_MIN, companion, eggReady, growth, keptSmall, speciesById, stageOf } from "../../lib/hatchery/game";
 import { flushHatchery, onHatcheryEvent, useHatchery, useReaderActive } from "../../lib/hatchery/store";
 import { useReadingTracker } from "../../lib/hatchery/tracker";
 import { useInsights } from "../../lib/insights";
@@ -24,6 +24,7 @@ import { anchorFracs } from "../../lib/anchor";
 import { saveSetting, useSetting } from "../../lib/settings";
 import { HatchModal } from "./HatchModal";
 import { Meter } from "./Meter";
+import { StagePicker } from "./StagePicker";
 import { ELEMENT_LABEL, STAGE_LABEL, TIER_LABEL, minutes } from "./labels";
 import { PetSprite, PixelImg, crackOf, eggUrl } from "./sprites";
 import "./hatchery.css";
@@ -146,7 +147,7 @@ function Den(props: { onOpenHatchery: () => void }) {
         let at = pageEl.offsetTop + (q.y ?? 0.5) * pageEl.offsetHeight;
         // near the view, the text layer knows where the quote really is
         if (Math.abs(at - line) < 2 * view) {
-          const frac = anchorFracs(pageEl, [q.anchor])[0];
+          const frac = anchorFracs(pageEl, [q.anchor], "end")[0];
           if (frac !== undefined) at = pageEl.offsetTop + frac * pageEl.offsetHeight;
         }
         // the last page can't scroll its end past the line; seeing it counts
@@ -231,7 +232,9 @@ function Den(props: { onOpenHatchery: () => void }) {
                   {pet.name ? ` · ${sp.stages[stage]}` : ""}
                 </span>
               </div>
-              {grow ? (
+              {keptSmall(pet) ? (
+                <div className="den-note">Kept small — not growing</div>
+              ) : grow ? (
                 <Meter
                   value={grow.done}
                   max={grow.span}
@@ -240,6 +243,7 @@ function Den(props: { onOpenHatchery: () => void }) {
               ) : (
                 <div className="den-note">Fully grown</div>
               )}
+              <StagePicker pet={pet} />
             </div>
           )}
           {egg && (

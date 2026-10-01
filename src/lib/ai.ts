@@ -12,6 +12,7 @@ import type {
   Scope,
 } from "./types";
 import { chapterFileName, figureFileName, wholeDocChapter } from "./pdf";
+import { squashText } from "./anchor";
 
 /** Chapters to read for a scope, with their file names. */
 function scopeFiles(meta: DocMeta, scope: Scope): { chapter: Chapter; file: string }[] {
@@ -448,12 +449,22 @@ export function parseQuip(
   const line = q.text.trim().replace(/^["“]|["”]$/g, "");
   if (!line || line.length > 160) return null;
   // A page behind the reader would never be said; pull it up to where they are.
-  const page = Math.min(
+  let page = Math.min(
     Math.max(fromPage, typeof q.page === "number" ? Math.round(q.page) : fromPage),
     span.endPage,
   );
   const anchor = typeof q.anchor === "string" && q.anchor.trim() ? q.anchor.trim() : undefined;
-  const y = anchorY(anchor, pageTexts.find((p) => p.page === page)?.text ?? "");
+  // The model's page number can be off (printed vs physical numbering); the
+  // quote itself says where it is — the nearest page from the reader on.
+  const quote = anchor ? squashText(anchor) : "";
+  const found = quote
+    ? pageTexts
+        .filter((p) => p.page >= fromPage && squashText(p.text).includes(quote))
+        .sort((a, b) => Math.abs(a.page - page) - Math.abs(b.page - page))[0]
+    : undefined;
+  if (found) page = found.page;
+  // Unplaceable, it waits for the page's end: late beats spoiling the joke.
+  const y = anchorY(anchor, pageTexts.find((p) => p.page === page)?.text ?? "", 0.95);
   return { id: crypto.randomUUID(), page, text: line, anchor, y, said: false };
 }
 
@@ -461,15 +472,15 @@ export function parseQuip(
  *  height: char offset in the extracted text, mapped linearly. PageInsights
  *  refines this against the rendered pdf.js text layer (real glyph geometry)
  *  whenever the page is on screen; this value is the fallback until then. */
-function anchorY(anchor: string | undefined, pageText: string): number {
-  const squash = (s: string) => s.replace(/\s+/g, " ").toLowerCase();
-  const text = squash(pageText);
-  if (anchor && text.length > 40) {
-    const i = text.indexOf(squash(anchor));
+function anchorY(anchor: string | undefined, pageText: string, missing = 0.5): number {
+  const text = squashText(pageText);
+  const quote = anchor ? squashText(anchor) : "";
+  if (quote && text.length > 40) {
+    const i = text.indexOf(quote);
     // Text occupies roughly the middle ~80% of a page between its margins.
-    if (i >= 0) return 0.1 + (i / text.length) * 0.78;
+    if (i >= 0) return 0.1 + ((i + quote.length) / text.length) * 0.78;
   }
-  return 0.5;
+  return missing;
 }
 
 export function parseChapters(text: string, maxPage: number): { title: string; startPage: number }[] {

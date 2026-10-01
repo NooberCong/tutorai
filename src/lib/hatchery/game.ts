@@ -4,7 +4,8 @@
  *  focused and the user actually interacting (see tracker.ts). It does three
  *  things at once:
  *    - warms the egg in the incubator until it can hatch;
- *    - grows the companion pet (hatchling → juvenile → adult);
+ *    - grows the companion pet (hatchling → juvenile → adult), unless the
+ *      user keeps it at a smaller stage;
  *    - fills a "find" meter that turns up a new egg every FIND_EVERY_MIN.
  *  Finishing a chapter or a whole book also turns up an egg, with better
  *  odds on rare tiers and shinies.
@@ -78,6 +79,9 @@ export interface Pet {
   wear?: Wear;
   /** The habitat it's shown in, when not its own element's. */
   home?: Element;
+  /** Kept at this smaller stage than it has grown to. It doesn't grow
+   *  while kept small. */
+  shown?: Stage;
 }
 
 export interface DexEntry {
@@ -229,11 +233,31 @@ export function growNeedMs(sp: Species): [number, number] {
   return [GROW_MIN[0] * f * 60_000, GROW_MIN[1] * f * 60_000];
 }
 
-export function stageOf(pet: Pet): Stage {
+/** The stage it has grown to. */
+export function grownStage(pet: Pet): Stage {
   const sp = speciesById(pet.species);
   if (!sp) return 0;
   const [j, a] = growNeedMs(sp);
   return pet.xp >= a ? 2 : pet.xp >= j ? 1 : 0;
+}
+
+/** The stage it's shown at: as grown, or smaller when kept small. */
+export function stageOf(pet: Pet): Stage {
+  const grown = grownStage(pet);
+  return pet.shown !== undefined && pet.shown < grown ? pet.shown : grown;
+}
+
+/** Kept smaller than it has grown, so not growing. */
+export function keptSmall(pet: Pet): boolean {
+  return stageOf(pet) < grownStage(pet);
+}
+
+/** Show a pet at any stage it has reached; its own stage lets it grow again. */
+export function showStage(s: HatcheryState, petId: string, stage: Stage): void {
+  const pet = s.pets.find((p) => p.id === petId);
+  if (!pet) return;
+  if (stage < grownStage(pet)) pet.shown = stage;
+  else delete pet.shown;
 }
 
 /** Progress toward the next stage, or null once fully grown. */
@@ -359,10 +383,10 @@ export function tick(
   }
 
   const pet = companion(s);
-  if (pet) {
-    const before = stageOf(pet);
+  if (pet && !keptSmall(pet)) {
+    const before = grownStage(pet);
     pet.xp += ms;
-    const after = stageOf(pet);
+    const after = grownStage(pet);
     if (after > before) {
       events.push({ kind: "grew", pet, stage: after });
       const d = s.dex[pet.species];
@@ -395,8 +419,8 @@ export function noteHabit(s: HatcheryState, habit: Habit): GameEvent[] {
   return [{ kind: "habit", habit }, ...checkWardrobe(s, Date.now())];
 }
 
-/** A page the reader actually dwelled on. Rewards finished chapters and
- *  books once each. */
+/** A page the reader actually dwelled on. Rewards finished chapters (most
+ *  of the pages read, and the reader reached the end) and books, once each. */
 export function pageRead(
   s: HatcheryState,
   docId: string,
@@ -415,7 +439,11 @@ export function pageRead(
   const read = new Set(doc.pages);
   const where = { title: info.title, page };
   info.chapters.forEach((ch, i) => {
-    if (doc.chapters.includes(i) || page < ch.startPage || page > ch.endPage) return;
+    // Finished means reached the end: the next chapter's opening page (the
+    // current page flips at mid-screen, so dwelling on the chapter's last
+    // page means only half of it is read), or the book's last page.
+    const last = ch.endPage >= info.pages;
+    if (doc.chapters.includes(i) || page !== (last ? ch.endPage : ch.endPage + 1)) return;
     const len = ch.endPage - ch.startPage + 1;
     if (len < 3) return;
     let n = 0;

@@ -27,6 +27,7 @@ import {
   setCompanion,
   setHome,
   speciesById,
+  keptSmall,
   stageOf,
 } from "../../lib/hatchery/game";
 import { flushHatchery, mutate, useHatchery } from "../../lib/hatchery/store";
@@ -34,6 +35,7 @@ import { saveSetting, useSetting } from "../../lib/settings";
 import { EggHelp } from "./EggHelp";
 import { HatchModal } from "./HatchModal";
 import { Meter } from "./Meter";
+import { StagePicker } from "./StagePicker";
 import { ELEMENT_LABEL, STAGE_LABEL, TIER_LABEL, minutes } from "./labels";
 import { Habitat, PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, itemUrl, petUrl, sceneUrl, speciesUrl } from "./sprites";
 import "./hatchery.css";
@@ -467,7 +469,9 @@ function CompanionDetail(props: { pet: Pet }) {
           <span className={`tier-text tier-${sp.tier}`}>{TIER_LABEL[sp.tier]}</span>
           {pet.name && <> · {sp.stages[st]}</>}
         </p>
-        {grow ? (
+        {keptSmall(pet) ? (
+          <p className="fine">Kept small — it won't grow until you let it.</p>
+        ) : grow ? (
           <Meter
             value={grow.done}
             max={grow.span}
@@ -476,6 +480,7 @@ function CompanionDetail(props: { pet: Pet }) {
         ) : (
           <p className="fine">Fully grown.</p>
         )}
+        <StagePicker pet={pet} />
         {pet.hatchedIn && (
           <p className="fine">
             Hatched on p.{pet.hatchedIn.page} of <i>{pet.hatchedIn.title}</i>

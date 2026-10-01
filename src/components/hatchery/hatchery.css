@@ -1312,3 +1312,30 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Choosing the size a grown pet is shown at. */
+.stage-picker {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--ink3);
+  align-self: flex-start;
+}
+.stage-picker button {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.stage-picker button:hover {
+  color: var(--text);
+}
+.stage-picker button.on {
+  background: color-mix(in srgb, var(--tier, var(--accent)) 22%, transparent);
+  color: var(--tier, var(--accent));
+}
