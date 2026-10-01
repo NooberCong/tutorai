@@ -192,14 +192,14 @@ where an effect behind the scenery shows (the aurora behind the mountains).
 A "tag" channel follows `p.brush`, so it says how much a pixel belongs to
 something that moves (a crown that sways), or where an effect goes (the
 library's fireboxes and glowing log cracks); a sway field is blurred, since
-it has to reach a little past the thing that sways. Kelp and lava
-light go to a separate layer (`beginLayer`), moved or animated over the
+it has to reach a little past the thing that sways. Kelp, the moonlit
+oak and the meadow's near grass, and lava light go to a separate layer (`beginLayer`), moved or animated over the
 rest. Each scene's comments name its channels, and its shader in `living.ts`
 reads them. Motion there is slow, continuous and time-based. Review the
 masks and layer with `backdrop-sheet.ts --live`.
 
 `ambience.ts` is what drifts over the painting: pollen and falling leaves,
-embers, bubbles, snow, fireflies, meteors, crystal glints, candle flicker
+embers, bubbles, fish, snow, fireflies, shooting stars, crystal glints, candle flicker
 and cloud wisps, in the same scene space and mapped the same two-halves
 way. Particles that move are left out of the painting (only stars and
 flowers stay baked in), so nothing looks frozen.

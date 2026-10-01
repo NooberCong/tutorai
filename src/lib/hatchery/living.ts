@@ -1,7 +1,8 @@
 /** The living backdrop: the habitat painting redrawn every frame by a
  *  WebGL shader, so its big features move. Aurora curtains ripple and
  *  surge, kelp sways in the swell under a moving surface, clouds billow,
- *  lava creeps, crowns and grass stir in the wind, mist drifts through
+ *  lava creeps, crowns and grass stir in the wind, the moonlit oak bends
+ *  in the gusts, mist drifts through
  *  the hollows, fires burn in the library's fireplaces, and the runes on
  *  the study floor turn.
  *
@@ -213,8 +214,10 @@ vec3 scene(vec2 P) {
   return mix(col, rgb(90.0, 120.0, 164.0) * L, mist(P, 560.0, 700.0, 0.35, 0.008) * m.g);
 }`,
   // thin clouds drift across the moon and stars twinkle where the sky
-  // shows (2); mist stirs
-  // in the hollows (1, 3); the crown and the grass sway (0)
+  // shows (2); mist stirs in the hollows (1, 3); the far pines and the
+  // meadow grass sway (0); the oak and the tall grass in the corners
+  // (layer) bend in gusts rolling in from the left, the oak from its
+  // trunk, its leaves fluttering
   moon: `
 vec3 scene(vec2 P) {
   float sway = 0.6 * sin(t * 0.5 + P.x * 0.01 + P.y * 0.008) + 0.6 * N(vec2(P.x * 0.004 - t * 0.06, P.y * 0.005));
@@ -229,7 +232,25 @@ vec3 scene(vec2 P) {
     col = mix(col, cc * L, a * m.b);
   }
   col = mix(col, rgb(138.0, 150.0, 216.0) * L, mist(P, 580.0, 700.0, 0.3, 0.006) * m.g);
-  return mix(col, rgb(122.0, 134.0, 200.0) * L, mist(P, 740.0, 860.0, 0.18, 0.01) * m.a);
+  col = mix(col, rgb(122.0, 134.0, 200.0) * L, mist(P, 740.0, 860.0, 0.18, 0.01) * m.a);
+  vec2 d = vec2(0.0);
+  float rustle = 0.0;
+  if (P.y > 790.0) {
+    float h = pow(clamp((1008.0 - P.y) / 200.0, 0.0, 1.0), 1.6);
+    float gust = 0.5 + 0.5 * smoothstep(-0.6, 0.6, sin(t * 0.21 - P.x * 0.0025 + 1.5 * sin(t * 0.07)));
+    float s = 0.6 * sin(t * 0.95 - P.x * 0.011) + 0.5 * N(vec2(P.x * 0.004 - t * 0.16, 3.0));
+    d.x = h * (2.0 + gust * (6.0 + 6.0 * s));
+  } else if (P.x > 1000.0) {
+    float h = pow(clamp((666.0 - P.y) / 420.0, 0.0, 1.0), 1.5);
+    float gust = 0.5 + 0.5 * smoothstep(-0.6, 0.6, sin(t * 0.21 - 3.4 + 1.5 * sin(t * 0.07)));
+    float s = 0.6 * sin(t * 0.55 + 0.5 * sin(t * 0.23)) + 0.4 * N(vec2(t * 0.12, 7.0));
+    d.x = h * (2.0 + gust * (5.0 + 7.0 * s));
+    d.y = abs(d.x) * 0.08;
+    d += h * (0.6 + gust) * vec2(N(vec2(P.x * 0.03 + t * 0.5, P.y * 0.03)), N2(vec2(P.x * 0.03, P.y * 0.03 - t * 0.45)));
+    rustle = h * N2(vec2(P.x * 0.05 + t * 0.7, P.y * 0.05 - t * 0.3)) * (0.6 + gust * 0.6);
+  }
+  vec4 k = layer(P - d);
+  return col * (1.0 - k.a) + k.rgb * (1.0 + 0.16 * rustle);
 }`,
   // a fire burns in each fireplace (its firebox in 0, the glowing log
   // cracks and coals in 1), its light wavering over the room; the candles

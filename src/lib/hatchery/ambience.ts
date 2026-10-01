@@ -86,6 +86,8 @@ interface MoteOpts {
   alpha: [number, number];
   /** Twinkle period in seconds (0 = steady). */
   twinkle?: number;
+  /** Twinkle as a firefly does: a soft glow, then dark for a while. */
+  blink?: boolean;
   core?: boolean;
   /** Bigger motes move faster (depth); snow, embers. */
   depth?: boolean;
@@ -134,7 +136,8 @@ function motes(o: MoteOpts): Layer {
         // fade near the top and bottom of the area, where motes wrap
         const edge = Math.min(p.y - ay0, ay1 - p.y) / 60;
         let a = p.a * Math.min(1, edge);
-        if (o.twinkle) a *= 0.55 + 0.45 * Math.sin((t * TAU) / o.twinkle + p.ph);
+        if (o.blink && o.twinkle) a *= Math.max(0, Math.sin((t * TAU) / (o.twinkle * (0.8 + p.f)) + p.ph)) ** 3;
+        else if (o.twinkle) a *= 0.55 + 0.45 * Math.sin((t * TAU) / o.twinkle + p.ph);
         if (a <= 0.01) continue;
         c.globalAlpha = a;
         c.drawImage(p.img, p.x - s, p.y - s, s * 2, s * 2);
@@ -649,42 +652,92 @@ function shafts(ox: number, oy: number, dir: number, spread: number, n: number, 
   };
 }
 
-/** Now and then, a meteor streaks across the upper sky. */
-function meteors(area: Area, every: [number, number], seed: number): Layer {
+interface Meteor {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  life: number;
+  size: number;
+}
+
+/** Now and then a shooting star: it starts in one of the `areas` (the
+ *  sky's visible margins) heading toward the middle and a little down
+ *  (or as the area says: its heading, ±1, and steepest angle),
+ *  brightens, streaks with a tapering trail and a glowing head, and burns
+ *  out. Sometimes a second follows close behind. `behind` is a disc it
+ *  passes behind (the moon). */
+function meteors(areas: (Area | [...Area, number, number])[], every: [number, number], seed: number, behind?: [number, number, number]): Layer {
   const r = rng(seed);
-  let next = every[0] * 0.5 + r() * every[1] * 0.5;
-  let m: { x: number; y: number; vx: number; vy: number; age: number } | null = null;
+  let next = every[0] * 0.4 + r() * every[0] * 0.6;
+  let ms: Meteor[] = [];
   let clock = 0;
+  const head = sprite("#e8eeff", true);
+  const launch = (delay = 0) => {
+    const [x0, y0, x1, y1, heading, steep = 0.45] = areas[Math.floor(r() * areas.length)];
+    const x = x0 + r() * (x1 - x0);
+    const dir = heading ?? (x < W / 2 ? 1 : -1);
+    const ang = steep * (0.33 + r() * 0.67);
+    const speed = 520 + r() * 300;
+    ms.push({ x, y: y0 + r() * (y1 - y0), vx: Math.cos(ang) * speed * dir, vy: Math.abs(Math.sin(ang)) * speed, age: -delay, life: 0.8 + r() * 0.7, size: 0.8 + r() * 0.5 });
+  };
   return {
     update(dt) {
       clock += dt;
-      if (!m && clock > next) {
-        const [x0, y0, x1, y1] = area;
-        m = { x: x0 + r() * (x1 - x0), y: y0 + r() * (y1 - y0), vx: -(500 + r() * 300) * (r() < 0.5 ? -1 : 1), vy: 180 + r() * 120, age: 0 };
+      if (clock > next) {
+        launch();
+        if (r() < 0.2) launch(0.35 + r() * 0.5);
         next = clock + every[0] + r() * (every[1] - every[0]);
       }
-      if (m) {
-        m.x += m.vx * dt;
-        m.y += m.vy * dt;
+      for (const m of ms) {
         m.age += dt;
-        if (m.age > 1.1) m = null;
+        if (m.age > 0) {
+          m.x += m.vx * dt;
+          m.y += m.vy * dt;
+        }
       }
+      ms = ms.filter((m) => m.age < m.life);
     },
-    draw(c) {
-      if (!m) return;
-      const k = Math.sin((m.age / 1.1) * Math.PI);
-      const tx = m.x - m.vx * 0.18;
-      const ty = m.y - m.vy * 0.18;
-      const g = c.createLinearGradient(tx, ty, m.x, m.y);
-      g.addColorStop(0, "rgba(255,255,255,0)");
-      g.addColorStop(1, `rgba(255,255,255,${0.9 * k})`);
-      c.strokeStyle = g;
-      c.lineWidth = 1.6;
+    draw(c, _t, x0, x1) {
+      if (!ms.length) return;
+      c.save();
+      if (behind) {
+        c.beginPath();
+        c.rect(x0 - 50, -50, x1 - x0 + 100, H + 100);
+        c.arc(behind[0], behind[1], behind[2], 0, TAU);
+        c.clip("evenodd");
+      }
+      c.globalCompositeOperation = "lighter";
       c.lineCap = "round";
-      c.beginPath();
-      c.moveTo(tx, ty);
-      c.lineTo(m.x, m.y);
-      c.stroke();
+      for (const m of ms) {
+        if (m.age <= 0) continue;
+        const f = m.age / m.life;
+        // flares up fast, fades slowly
+        const k = Math.min(1, f * 5, 2.2 * (1 - f) ** 1.2);
+        const tail = Math.min(m.age, 0.28);
+        const tx = m.x - m.vx * tail;
+        const ty = m.y - m.vy * tail;
+        if (Math.max(m.x, tx) < x0 - 40 || Math.min(m.x, tx) > x1 + 40) continue;
+        // a wide faint trail, then a thin bright core, both tapering away
+        for (const [w, a] of [[7, 0.22], [3, 0.5], [1.4, 1]]) {
+          const g = c.createLinearGradient(tx, ty, m.x, m.y);
+          g.addColorStop(0, "rgba(160,180,255,0)");
+          g.addColorStop(0.7, `rgba(200,214,255,${a * k * 0.5})`);
+          g.addColorStop(1, `rgba(255,255,255,${a * k})`);
+          c.strokeStyle = g;
+          c.lineWidth = w * m.size;
+          c.beginPath();
+          c.moveTo(tx, ty);
+          c.lineTo(m.x, m.y);
+          c.stroke();
+        }
+        const s = 16 * m.size;
+        c.globalAlpha = Math.min(1, k);
+        c.drawImage(head, m.x - s, m.y - s, s * 2, s * 2);
+        c.globalAlpha = 1;
+      }
+      c.restore();
     },
   };
 }
@@ -786,13 +839,18 @@ const LAYERS: Record<Element, () => Layer[]> = {
     birds(15),
   ],
   frost: () => [
-    meteors([200, 20, 1400, 200], [20, 40], 16),
+    meteors([[120, 20, 560, 220], [1040, 20, 1480, 220]], [20, 40], 16),
     motes({ n: 170, area: [0, -20, W, 1000], v: [6, 26], spread: [5, 8], wander: 10, size: [0.8, 3.2], colors: ["#ffffff", "#e8f0ff"], alpha: [0.45, 0.95], core: true, depth: true, seed: 17 }),
   ],
   moon: () => [
     pulse(330, 220, 190, "#b8c4ff", 0.06, 0.04, 12, false, 18),
-    meteors([600, 20, 1500, 220], [18, 36], 19),
-    motes({ n: 34, area: [0, 470, W, 930], v: [0, -2], spread: [6, 5], wander: 14, size: [2.2, 3.8], colors: ["#e8ff9a", "#f4ffc0"], alpha: [0.6, 1], twinkle: 3.2, core: true, seed: 20 }),
+    // (on the right they run outward, above the oak)
+    meteors([[30, 20, 420, 120], [1190, 15, 1300, 60, 1, 0.16]], [9, 20], 19, [330, 220, 80]),
+    // fireflies over the grass, and dandelion seeds and a leaf or two
+    // from the oak riding the breeze
+    motes({ n: 44, area: [0, 640, W, 990], v: [0, -2], spread: [6, 5], wander: 14, size: [2.2, 3.8], colors: ["#e8ff9a", "#f4ffc0"], alpha: [0.7, 1], twinkle: 2.6, blink: true, core: true, seed: 20 }),
+    motes({ n: 14, area: [-40, 560, W + 40, 960], v: [11, -3], spread: [4, 3], wander: 9, size: [1, 1.7], colors: ["#e4eaff"], alpha: [0.35, 0.65], core: true, seed: 27 }),
+    leaves(3, [[1220, 240, 1560, 440]], ["#3a4690", "#4a58a8", "#2e3878"], 28),
   ],
   arcane: () => [
     pulse(290, 560, 70, "#ffb65a", 0.16, 0.06, 1, true, 21),

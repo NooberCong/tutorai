@@ -1281,6 +1281,26 @@ function moon(p: Paint) {
   });
   glow(p, mx, my, 90, hex("#fff8e8"), 0.08);
 
+  // the Milky Way: a dusty river of faint stars slanting down the sky,
+  // split by dark lanes and washed out near the moon
+  const spine = (X: number) => 80 + (W - X) * 0.3 + 40 * n2(X * 0.0018, 3.3);
+  const river = (X: number, Y: number) => {
+    const s = (Y - spine(X)) * 0.96;
+    const wash = 1 - Math.exp(-(((X - mx) ** 2 + (Y - my) ** 2) / 240 ** 2));
+    const g = Math.exp(-((s / 105) ** 2)) * wash;
+    return g < 0.01 ? 0 : g * (0.55 + 0.45 * smooth(-0.3, 0.5, fbm(n, X * 0.004, Y * 0.009, 4)));
+  };
+  p.each(0, 0, W, 640, (X, Y, i) => {
+    const d = river(X, Y);
+    if (d < 0.01) return;
+    const s = (Y - spine(X)) * 0.96;
+    const lane = smooth(0.05, 0.4, fbm(n2, X * 0.005 + 9, Y * 0.014, 4)) * Math.exp(-((s / 45) ** 2));
+    const core = Math.exp(-((s / 40) ** 2));
+    p.add(i, blend(hex("#7a88d8"), hex("#e8d8f0"), core), 0.3 * d * (1 - lane * 0.85));
+  });
+  const sr = rng(141);
+  motes(p, 142, 2600, [0, 0, W, 640], [0.35, 1], [hex("#ffffff"), hex("#dfe6ff"), hex("#fff0dc")], 0.7, (X, Y) => sr() < river(X, Y));
+
   // thin clouds drifting past, silvered near the moon (live: the
   // shader's, where channel 2 shows the sky)
   if (p.live) p.hide(2);
@@ -1311,32 +1331,130 @@ function moon(p: Paint) {
     toward(hex("#8a96d8"), 0.15);
     return 1;
   }, 760);
+  // a few pines on the hill to the left, rooted behind its brow (live:
+  // they sway a little, channel 0, as does the meadow grass)
+  p.tag(0, 8);
+  for (const [x, h] of [[70, 96], [118, 70], [168, 118], [222, 64]]) {
+    const base = 700;
+    pine(p, n, x, base, h, hex("#090c2a"), hex("#2a3474"), undefined, { c: hex("#5a66b0"), a: 0.12 }, 0.6);
+  }
+
   hill(curve((X) => 760 - 150 * Math.exp(-(((X - 1350) / 380) ** 2)) - 90 * Math.exp(-(((X - 150) / 300) ** 2)) + 20 * fbm(n2, X * 0.003, 5.5, 3)), "#141a48", "#34408a", 0.4);
   if (p.live) p.hide(3);
   else mist(p, n2, 740, 860, hex("#7a86c8"), 0.18);
 
-  // a lone tree on the right, crown silvered on the moon side
-  const barkD = hex("#0a0d2a");
-  const barkL = hex("#262e66");
-  trunk(p, n, 1380, 660, 430, 66, 24, -30, barkD, barkL);
-  limb(p, 1362, 520, 1270, 440, 12, 5, (u) => mix(barkD, barkL, 0.5 - u * 0.4));
-  limb(p, 1370, 490, 1470, 420, 12, 5, (u) => mix(barkD, barkL, 0.5 - u * 0.4));
-  limb(p, 1356, 470, 1340, 380, 10, 4, (u) => mix(barkD, barkL, 0.5 - u * 0.4));
-  // (live: the crown and the grass sway, channel 0)
-  p.tag(0, 8);
-  p.brush[0] = 1;
-  cluster(p, n, 121, 1380, 400, 190, 110, 30, [40, 80], {
-    dark: hex("#080b24"),
-    mid: hex("#161c4c"),
-    light: hex("#4a58a8"),
-    rough: 0.22,
-    freq: 0.05,
-    tex: 0.22,
-    texFreq: 0.08,
-    L: light(-0.8, -0.6, 0.4),
+  // a broad old oak on the right, its crown silvered on the moon side
+  // (live: a layer the shader sways, the trunk firm and the crown giving
+  // to the wind)
+  p.beginLayer("over");
+  const barkD = hex("#070a24");
+  const barkL = hex("#2e3672");
+  const tr = rng(127);
+  type Seg = [number, number, number, number, number, number];
+  const segs: Seg[] = [];
+  const tips: [number, number, number][] = [];
+  // boughs fork two or three ways, thinning, and reach up and out
+  const bough = (x: number, y: number, ang: number, len: number, r: number, depth: number) => {
+    const x2 = x + Math.cos(ang) * len;
+    const y2 = y + Math.sin(ang) * len;
+    const kx = (x + x2) / 2 + (tr() - 0.5) * len * 0.32;
+    const ky = (y + y2) / 2 + (tr() - 0.5) * len * 0.32;
+    segs.push([x, y, kx, ky, r, r * 0.86], [kx, ky, x2, y2, r * 0.86, r * 0.72]);
+    if (depth === 0) {
+      tips.push([x2, y2, len]);
+      return;
+    }
+    if (depth < 3) tips.push([kx, ky, len * 0.8]);
+    const k = tr() < 0.35 ? 3 : 2;
+    for (let j = 0; j < k; j++) {
+      let a = ang + (j - (k - 1) / 2) * (0.55 + tr() * 0.3) + (tr() - 0.5) * 0.3;
+      a = Math.max(-Math.PI + 0.3, Math.min(-0.3, a));
+      bough(x2, y2, a, len * (0.58 + tr() * 0.28), r * 0.64, depth - 1);
+    }
+  };
+  const tx = 1380;
+  const ty = 666;
+  // the lower limbs (their roots hidden by the trunk), then the three it
+  // forks into at the top
+  bough(1372, 552, -2.8, 128, 11, 3);
+  bough(1384, 566, -0.32, 120, 10, 3);
+  const lower = segs.length;
+  bough(1362, 500, -2.2, 130, 17, 3);
+  bough(1370, 492, -1.5, 116, 16, 3);
+  bough(1380, 500, -0.8, 140, 16, 3);
+  // the crown: a cloud of small leaves round each twig's end, lit from
+  // the moon's side, the far ones dimmer, over a dark mass that keeps it
+  // from looking threadbare
+  const leafD = hex("#04061a");
+  const leafM = hex("#141c50");
+  const leafL = hex("#5262b0");
+  type Leaf = [number, number, number, number, number];
+  const back: Leaf[] = [];
+  const front: Leaf[] = [];
+  for (const [x, y, len] of tips) {
+    const R = 20 + len * 0.17 + tr() * 10;
+    const cx = x + (tr() - 0.5) * 8;
+    const cy = y - R * 0.35;
+    ball(p, n, cx + 4, cy + 3, R * 0.72, { dark: leafD, mid: times(leafM, 0.6), light: times(leafM, 0.8), rough: 0.35, freq: 0.06, tex: 0.2, flat: 0.6 });
+    const count = Math.round(R * 3.6);
+    for (let j = 0; j < count; j++) {
+      // gaussian-ish spread, flattened a little
+      const a = tr() * Math.PI * 2;
+      const d = Math.sqrt(-2 * Math.log(1 - tr() * 0.95)) * 0.45;
+      const lx = Math.cos(a) * d;
+      const ly = Math.sin(a) * d * 0.8;
+      const lit = clamp(0.42 - (lx * 0.8 + ly * 0.6) * 0.55 + (tr() - 0.5) * 0.3 - d * 0.1);
+      const leaf: Leaf = [cx + lx * R, cy + ly * R, 1.8 + tr() * 1.8, tr() * Math.PI, lit];
+      (tr() < 0.45 ? back : front).push(leaf);
+    }
+  }
+  const drawLeaf = ([x, y, r, rot, l]: Leaf, dim: number) => {
+    const cs = Math.cos(rot);
+    const sn = Math.sin(rot);
+    ramp(l, leafD, times(leafM, dim), times(leafL, dim));
+    const c = [T[0], T[1], T[2]] as C;
+    p.each(x - r - 1, y - r - 1, x + r + 1, y + r + 1, (X, Y, i) => {
+      const u = ((X - x) * cs + (Y - y) * sn) / r;
+      const v = ((Y - y) * cs - (X - x) * sn) / (r * 0.55);
+      const d = Math.sqrt(u * u + v * v);
+      const cov = clamp((1 - d) * r * 0.55 * p.k + 0.5);
+      if (cov <= 0) return;
+      set(c);
+      scale(1 + 0.18 * u);
+      p.over(i, cov);
+    });
+  };
+  for (const leaf of back) drawLeaf(leaf, 0.65);
+  // the trunk and the boughs, round and barked, lit from the moon's side
+  // whichever way they run
+  const bark = (x1: number, y1: number, x2: number, y2: number) => {
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    // the side u > 0 faces (y2 - y1, x1 - x2), against the light (-0.8, -0.6)
+    const face = ((y2 - y1) * -0.8 + (x1 - x2) * -0.6) / len;
+    return (u: number, t: number) => {
+      const lit = u * face * 0.7 + Math.sqrt(1 - u * u) * 0.25;
+      mix(barkD, barkL, clamp(0.3 + lit * 0.55 + n(u * 2.2 + x1, t * len * 0.12) * 0.12));
+    };
+  };
+  segs.forEach(([x1, y1, x2, y2, r1, r2], k) => {
+    if (k === lower) trunk(p, n, tx, ty, 490, 80, 38, -18, barkD, barkL);
+    limb(p, x1, y1, x2, y2, r1, r2, bark(x1, y1, x2, y2));
   });
-
-  p.brush[0] = 0;
+  // rooted in a low mound, grass tufted round the foot
+  p.each(tx - 90, ty - 20, tx + 90, ty + 16, (X, Y, i) => {
+    const e = ((X - tx) / 84) ** 2 + ((Y - ty - 4) / 14) ** 2;
+    if (e >= 1) return;
+    mix(hex("#161c4e"), hex("#323e88"), clamp(0.5 - (X - tx) / 200 + n(X * 0.1, Y * 0.2) * 0.15));
+    p.over(i, clamp((1 - e) * 1.6));
+  });
+  for (let j = 0; j < 60; j++) {
+    const x = tx - 80 + tr() * 160;
+    const y = ty - 8 + 20 * ((x - tx) / 84) ** 2 + tr() * 6;
+    const h = 5 + tr() * 12;
+    limb(p, x, y, x + (tr() - 0.5) * h * 0.8, y - h, 1.3, 0.3, (u) => mix(hex("#0e1238"), hex("#3e4a96"), clamp(0.35 - u * 0.3)));
+  }
+  for (const leaf of front) drawLeaf(leaf, 1);
+  p.endLayer();
 
   // the near meadow, grass blades against the mist
   const meadow = curve((X) => 870 + 20 * fbm(n, X * 0.004, 7.5, 3));
@@ -1346,23 +1464,95 @@ function moon(p: Paint) {
   });
   const gr = rng(133);
   p.brush[0] = 0.7;
-  for (let i = 0; i < 700; i++) {
+  for (let i = 0; i < 900; i++) {
     const x = gr() * W;
     if (Math.abs(x - 800) < 300 && gr() < 0.7) continue;
-    const y = meadow(x) + 4;
+    const y = meadow(x) + 4 + gr() * 30;
     const h = 14 + gr() * gr() * 50;
     const lean = (gr() - 0.5) * h * 0.8;
     limb(p, x, y, x + lean, y - h, 1.8, 0.4, (u) => mix(hex("#0c1034"), hex("#3a4690"), clamp(0.3 - u * 0.3)));
   }
 
-  // moonflowers (the fireflies move: ambience.ts)
+  // moonflowers: five pale petals round a bright eye, glowing softly (the
+  // fireflies move: ambience.ts)
   const fr = rng(131);
-  for (let i = 0; i < 60; i++) {
+  p.brush[0] = 0.5;
+  for (let i = 0; i < 46; i++) {
     const x = i % 2 ? 1600 - fr() * 520 : fr() * 520;
-    const y = 860 + fr() * 120;
-    glow(p, x, y, 10, hex("#b8ccff"), 0.35);
-    ball(p, n, x, y, 3 + fr() * 2.5, { dark: hex("#8a9ad8"), mid: hex("#dfe6ff"), light: hex("#ffffff"), rough: 0.4, freq: 0.6, tex: 0 });
+    const y = 872 + fr() * 100;
+    const R = 4.5 + fr() * 3.5;
+    const rot = fr() * Math.PI;
+    const tilt = 0.55 + fr() * 0.35;
+    limb(p, x, y + R * 0.4, x + (fr() - 0.5) * 6, y + R + 16, 0.9, 0.7, () => set(hex("#1a2258")));
+    glow(p, x, y, R * 1.6, hex("#9aacff"), 0.22);
+    p.each(x - R - 1, y - R - 1, x + R + 1, y + R + 1, (X, Y, j) => {
+      const dx = X - x;
+      const dy = (Y - y) / tilt;
+      const d = Math.hypot(dx, dy) / R;
+      const a = Math.atan2(dy, dx);
+      const petal = 0.55 + 0.45 * Math.abs(Math.cos(2.5 * (a - rot)));
+      const cov = clamp((petal - d) * R * p.k + 0.5);
+      if (cov <= 0) return;
+      mix(hex("#8a9ce8"), hex("#f4f6ff"), clamp(1 - d * 0.8 + (dy < 0 ? 0.1 : -0.1)));
+      if (d < 0.22) mix(hex("#fff4c0"), hex("#ffffff"), 1 - d / 0.22);
+      p.over(j, cov);
+    });
   }
+
+  // tall grass and dandelion clocks close by in the corners, dark against
+  // the meadow, their edges catching the moon (live: on the layer, swaying)
+  p.brush[0] = 0;
+  p.beginLayer("over");
+  const gD = hex("#04061a");
+  const gL = hex("#2c387c");
+  const stalk = (x: number, root: number, h: number, lean: number, w: number) =>
+    strand(p, root - h, root, (v) => x + lean * (1 - v) ** 2, (v) => w * (0.12 + 0.88 * v ** 0.6), (_X, _Y, u, v) => {
+      mix(gD, gL, clamp(0.18 - u * 0.3 + (1 - v) * 0.22));
+      if (u < -0.55) toward(hex("#8a9ae0"), 0.35 * (1 - v));
+      return 1;
+    });
+  const fg = rng(151);
+  for (const side of [0, 1]) {
+    for (let i = 0; i < 150; i++) {
+      const e = fg() ** 1.7;
+      const x = side ? W + 20 - e * 560 : -20 + e * 560;
+      const h = (40 + fg() * fg() * 150) * (1 - e * 0.6);
+      const lean = (fg() - 0.5) * h * 0.5 + (side ? -1 : 1) * h * 0.12;
+      stalk(x, 952 + fg() * 60, h, lean, 2.2 + fg() * 2.6);
+    }
+    // dandelion clocks on long stalks
+    for (let i = 0; i < 4; i++) {
+      const x = side ? W - 40 - fg() * 380 : 40 + fg() * 380;
+      const root = 1000;
+      const h = 120 + fg() * 90;
+      const lean = (fg() - 0.5) * 40;
+      const hx = x + lean;
+      const hy = root - h;
+      strand(p, hy, root, (v) => x + lean * (1 - v) ** 2, () => 1.1, (_X, _Y, u) => {
+        mix(gD, gL, clamp(0.3 - u * 0.3));
+        return 1;
+      });
+      const R = 11 + fg() * 4;
+      const spin = fg() * 6;
+      glow(p, hx, hy, R * 0.9, hex("#aab8ff"), 0.12);
+      p.each(hx - R - 2, hy - R - 2, hx + R + 2, hy + R + 2, (X, Y, j) => {
+        const dx = X - hx;
+        const dy = Y - hy;
+        const d = Math.hypot(dx, dy) / R;
+        if (d > 1.12) return;
+        const a = Math.atan2(dy, dx) * 9 + spin;
+        // fine filaments radiating, each ending in a tuft
+        const spoke = Math.pow(Math.abs(Math.cos(a)), 40) * smooth(0.15, 0.4, d) * (1 - smooth(0.92, 1.0, d));
+        const tuft = Math.pow(Math.abs(Math.cos(a)), 6) * Math.exp(-(((d - 1) / 0.09) ** 2));
+        const seed = 1 - smooth(0.1, 0.2, d);
+        const v = Math.min(1, spoke * 0.55 + tuft * 0.8 + seed * 0.9 + 0.12 * (1 - smooth(0.3, 1, d)));
+        if (v <= 0.01) return;
+        set(seed > 0.5 ? hex("#3a4280") : hex("#dfe6ff"));
+        p.over(j, v);
+      });
+    }
+  }
+  p.endLayer();
   vignette(p, VIGNETTE.moon);
 }
 
