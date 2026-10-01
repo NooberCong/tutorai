@@ -57,7 +57,7 @@ function describe(e: GameEvent): string | null {
       return "The egg is ready — click it to hatch!";
     case "grew": {
       const sp = speciesById(e.pet.species);
-      return sp ? `${e.pet.name ?? sp.stages[e.stage - 1]} grew into a ${sp.stages[e.stage]}!` : null;
+      return sp ? `${sp.stages[e.stage - 1]} grew into a ${sp.stages[e.stage]}!` : null;
     }
     case "chapter-done":
       return e.title ? `Chapter finished: ${e.title}` : "Chapter finished!";
@@ -66,7 +66,7 @@ function describe(e: GameEvent): string | null {
     case "accessory": {
       const a = ACCESSORY[e.id];
       const sp = e.pet && speciesById(e.pet.species);
-      const who = e.pet && sp ? (e.pet.name ?? sp.stages[stageOf(e.pet)]) : "You";
+      const who = e.pet && sp ? sp.stages[stageOf(e.pet)] : "You";
       const worn = e.pet?.wear?.[a.slot] === e.id;
       return `${who} earned ${a.name.toLowerCase()}!${worn ? "" : " It's in the wardrobe."}`;
     }
@@ -123,7 +123,7 @@ function Den(props: { onOpenHatchery: () => void }) {
   const pet = companion(s);
   const sp = pet ? speciesById(pet.species) : undefined;
   const stage = pet ? stageOf(pet) : 0;
-  const petName = pet && sp ? (pet.name ?? sp.stages[stage]) : "";
+  const petName = pet && sp ? sp.stages[stage] : "";
 
   // The pet's aside, said just after you've read the spot it's about: when
   // that spot, first seen below the reading line, scrolls up past it. The
@@ -227,10 +227,7 @@ function Den(props: { onOpenHatchery: () => void }) {
             <div className={`den-row tier-${sp.tier}`}>
               <div className="den-title">
                 <b>{petName}</b>
-                <span>
-                  {STAGE_LABEL[stage]}
-                  {pet.name ? ` · ${sp.stages[stage]}` : ""}
-                </span>
+                <span>{STAGE_LABEL[stage]}</span>
               </div>
               {keptSmall(pet) ? (
                 <div className="den-note">Kept small — not growing</div>

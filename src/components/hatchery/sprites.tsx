@@ -213,7 +213,6 @@ export function PetSprite(props: {
     return () => window.clearTimeout(t);
   }, [asleep]);
   const pose: Pose = asleep ? "sleep" : blink ? "blink" : "idle";
-  const name = speciesById(pet.species)?.name ?? pet.species;
   const { src, dressed } = petUrl(pet.species, stageOf(pet), pose, pet.shiny, pet.wear);
   return (
     <PixelImg
@@ -221,7 +220,7 @@ export function PetSprite(props: {
       dressed={dressed}
       scale={scale}
       className={`${props.className ?? ""} ${asleep ? "asleep" : "awake"}`}
-      alt={pet.name ?? name}
+      alt={speciesById(pet.species)?.stages[stageOf(pet)] ?? pet.species}
     />
   );
 }

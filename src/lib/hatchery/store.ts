@@ -101,8 +101,8 @@ export function talkingPet(): PetPersona | null {
   const worn = Object.values(pet.wear ?? {}).map((id) => ACCESSORY[id].name.toLowerCase());
   const wearing = worn.length ? `, wearing ${worn.join(" and ")}` : "";
   return {
-    name: pet.name ?? sp.stages[stage],
-    kind: `${age} ${sp.element}-element creature${pet.name ? ` (a ${sp.stages[stage]})` : ""}${future}${wearing}`,
+    name: sp.stages[stage],
+    kind: `${age} ${sp.element}-element creature${future}${wearing}`,
     about: sp.lore,
   };
 }

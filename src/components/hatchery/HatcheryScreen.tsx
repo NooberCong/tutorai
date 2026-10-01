@@ -15,6 +15,7 @@ import {
   NEST_MAX,
   accessoryProgress,
   attractions,
+  canShine,
   companion,
   dress,
   dayKey,
@@ -23,7 +24,6 @@ import {
   habitats,
   homeOf,
   incubate,
-  renamePet,
   setCompanion,
   setHome,
   speciesById,
@@ -37,7 +37,7 @@ import { HatchModal } from "./HatchModal";
 import { Meter } from "./Meter";
 import { StagePicker } from "./StagePicker";
 import { ELEMENT_LABEL, STAGE_LABEL, TIER_LABEL, minutes } from "./labels";
-import { Habitat, PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, itemUrl, petUrl, sceneUrl, speciesUrl } from "./sprites";
+import { Habitat, PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, itemUrl, sceneUrl, speciesUrl } from "./sprites";
 import "./hatchery.css";
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -55,7 +55,7 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
   const ready = eggReady(s);
 
   const discovered = Object.keys(s.dex).length;
-  const shinies = s.pets.filter((p) => p.shiny).length;
+  const shinies = s.pets.filter(canShine).length;
 
   const week: { label: string; ms: number; today: boolean }[] = [];
   for (let i = 6; i >= 0; i--) {
@@ -83,10 +83,11 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
                 </Habitat>
               </button>
               <div className="incubator-meta">
-                <h3>
-                  {ELEMENT_LABEL[egg.element]} egg{" "}
-                  <span className={`tier-badge tier-${egg.tier}`}>{TIER_LABEL[egg.tier]}</span>
-                </h3>
+                <h3>{ELEMENT_LABEL[egg.element]} egg</h3>
+                <p className="sub">
+                  Egg · {ELEMENT_LABEL[egg.element]} ·{" "}
+                  <span className={`tier-text tier-${egg.tier}`}>{TIER_LABEL[egg.tier]}</span>
+                </p>
                 {ready ? (
                   <button className="btn primary hatch-btn" onClick={() => setHatching(true)}>
                     Hatch it
@@ -125,9 +126,6 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
         </section>
       </div>
 
-      <Wardrobe s={s} pet={pet} />
-      <Habitats s={s} pet={pet} />
-
       <section className="nest">
         <div className="section-head">
           <h2>Nest</h2>
@@ -156,6 +154,9 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
           <p className="empty-note">Eggs you find wait here. Click one to move it into the incubator.</p>
         )}
       </section>
+
+      <Wardrobe s={s} pet={pet} />
+      <Habitats s={s} pet={pet} />
 
       <div className="hatchery-split">
         <section className="week">
@@ -238,10 +239,11 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
                   <Habitat element={homeOf(p)} scale={2}>
                     <SpeciesImg id={p.species} stage={st} shiny={p.shiny} wear={p.wear} scale={2} />
                   </Habitat>
-                  <b>{p.name ?? sp?.stages[st] ?? p.species}</b>
+                  <b>{sp?.stages[st] ?? p.species}</b>
                   <span>
                     {p.shiny ? "✦ " : ""}
                     {p.id === s.companionId ? "reading with you" : STAGE_LABEL[st]}
+                    {(s.dex[p.species]?.count ?? 1) > 1 && ` · ×${s.dex[p.species].count}`}
                   </span>
                 </button>
               );
@@ -313,7 +315,7 @@ function Wardrobe(props: { s: HatcheryState; pet: Pet | null }) {
   const { s, pet } = props;
   const progress = accessoryProgress(s);
   const earned = ACCESSORIES.filter((a) => s.wardrobe[a.id]).length;
-  const petName = (p: Pet) => p.name ?? speciesById(p.species)?.stages[stageOf(p)] ?? "your pet";
+  const petName = (p: Pet) => speciesById(p.species)?.stages[stageOf(p)] ?? "your pet";
   return (
     <section className="wardrobe">
       <div className="section-head">
@@ -428,46 +430,25 @@ function Stat(props: { value: string; label: string }) {
 function CompanionDetail(props: { pet: Pet }) {
   const { pet } = props;
   const sp = speciesById(pet.species);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(pet.name ?? "");
-  useEffect(() => setName(pet.name ?? ""), [pet.id, pet.name]);
+  const s = useHatchery();
   if (!sp) return null;
   const st = stageOf(pet);
   const grow = growth(pet);
-  const save = () => {
-    mutate((s) => renamePet(s, pet.id, name), true);
-    setEditing(false);
-  };
+  const hatched = s.dex[pet.species]?.count ?? 1;
   return (
     <div className="companion-detail">
       <Habitat element={homeOf(pet)} scale={5} live className="companion-stage">
         <PetSprite pet={pet} scale={5} className="bob" />
       </Habitat>
       <div className="companion-meta">
-        {editing ? (
-          <input
-            className="rename"
-            value={name}
-            autoFocus
-            maxLength={24}
-            placeholder={sp.stages[st]}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={save}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") save();
-              if (e.key === "Escape") setEditing(false);
-            }}
-          />
-        ) : (
-          <h3 onClick={() => setEditing(true)} title="Rename">
-            {pet.name ?? sp.stages[st]}
-            {pet.shiny && <span className="shiny-star" title="Shiny">✦</span>}
-          </h3>
-        )}
+        <h3>
+          {sp.stages[st]}
+          {pet.shiny && <span className="shiny-star" title="Shiny">✦</span>}
+        </h3>
         <p className="sub">
           {STAGE_LABEL[st]} · {ELEMENT_LABEL[sp.element]} ·{" "}
           <span className={`tier-text tier-${sp.tier}`}>{TIER_LABEL[sp.tier]}</span>
-          {pet.name && <> · {sp.stages[st]}</>}
+          {hatched > 1 && <> · {hatched} hatched</>}
         </p>
         {keptSmall(pet) ? (
           <p className="fine">Kept small — it won't grow until you let it.</p>
@@ -539,7 +520,6 @@ function SpeciesDetail(props: { species: Species; onClose: () => void }) {
   const s = useHatchery();
   const sp = props.species;
   const d = s.dex[sp.id];
-  const mine = s.pets.filter((p) => p.species === sp.id);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
     window.addEventListener("keydown", onKey);
@@ -570,24 +550,9 @@ function SpeciesDetail(props: { species: Species; onClose: () => void }) {
         <p className="detail-lore">{d ? sp.lore : `“${sp.hint}”`}</p>
         {d && (
           <p className="fine">
-            {d.count} hatched{d.shiny ? ` · ${d.shiny} shiny` : ""} · first on{" "}
+            {d.count} {d.count === 1 ? "egg" : "eggs"} hatched{d.shiny ? ` · ${d.shiny} shiny` : ""} · first on{" "}
             {new Date(d.first).toLocaleDateString()}
           </p>
-        )}
-        {mine.length > 0 && (
-          <div className="detail-pets">
-            {mine.map((p) => (
-              <button
-                key={p.id}
-                className={`pet-cell ${p.id === s.companionId ? "current" : ""}`}
-                onClick={() => mutate((st) => setCompanion(st, p.id), true)}
-              >
-                <PixelImg {...petUrl(p.species, stageOf(p), "idle", p.shiny, p.wear)} scale={2} />
-                <b>{p.name ?? sp.stages[stageOf(p)]}</b>
-                <span>{p.id === s.companionId ? "companion" : "read together"}</span>
-              </button>
-            ))}
-          </div>
         )}
         <button className="btn wide" onClick={props.onClose}>
           Close

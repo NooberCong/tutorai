@@ -244,11 +244,21 @@
 .incubator-egg:disabled {
   cursor: default;
 }
-.incubator-meta {
+/* The two hero cards share one rhythm — title, subtitle, meter, notes —
+ *  top-aligned with the picture, so their lines sit level side by side. */
+.incubator-meta,
+.companion-meta {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 14px;
+}
+.incubator-meta .sub,
+.companion-meta .sub {
+  font-size: 12.5px;
+  color: var(--dim);
 }
 .incubator-meta h3,
 .companion-meta h3 {
@@ -268,7 +278,7 @@
 
 .companion-detail {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   flex-wrap: wrap;
   gap: 18px;
   flex: 1;
@@ -277,31 +287,7 @@
   --bob: -5px;
 }
 .companion-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  min-width: 0;
   flex: 1;
-}
-.companion-meta h3 {
-  cursor: text;
-}
-.companion-meta .sub {
-  font-size: 12.5px;
-  color: var(--dim);
-}
-.rename,
-.hatch-name {
-  font: inherit;
-  font-family: var(--serif);
-  font-size: 20px;
-  color: var(--text);
-  background: var(--ink2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  padding: 3px 9px;
-  outline: none;
-  width: 100%;
 }
 /* Preferences sit quietly under everything, not as another card. */
 .hatchery section.hatchery-prefs {
@@ -569,11 +555,6 @@
   margin: 0;
 }
 .pet-grid,
-.detail-pets {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  gap: 8px;
-}
 .pet-cell.current {
   border-color: rgba(242, 193, 78, 0.5);
   box-shadow: 0 0 0 1px rgba(242, 193, 78, 0.18);
@@ -704,10 +685,6 @@
   color: var(--dim);
   line-height: 1.45;
 }
-.hatch-name {
-  font-size: 16px;
-  text-align: center;
-}
 .hatch-actions {
   display: flex;
   gap: 8px;
@@ -752,9 +729,6 @@
   font-family: var(--mono);
   font-size: 10px;
   color: var(--faint);
-}
-.species-detail .detail-pets {
-  width: 100%;
 }
 
 /* ── the den: companion + egg in the reader's corner ── */
@@ -1149,10 +1123,6 @@
 .wardrobe-icon img {
   margin-top: -18px;
 }
-/* Room above your pets for hats (dressed sprites overflow upward). */
-.detail-pets .pet-cell {
-  padding-top: 24px;
-}
 /* Your pets stand in their habitats, which have room for hats. */
 .pet-grid {
   grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
@@ -1313,29 +1283,45 @@
   }
 }
 
-/* Choosing the size a grown pet is shown at. */
+/* Choosing the size a grown pet is shown at: one small sprite per stage. */
 .stage-picker {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 7px;
-  background: var(--ink3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-self: flex-start;
 }
+.stage-picker > div {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--ink3);
+}
 .stage-picker button {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  padding: 3px 8px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 2px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--faint);
   cursor: pointer;
+  opacity: 0.55;
 }
 .stage-picker button:hover {
-  color: var(--text);
+  opacity: 0.9;
 }
 .stage-picker button.on {
+  opacity: 1;
   background: color-mix(in srgb, var(--tier, var(--accent)) 22%, transparent);
-  color: var(--tier, var(--accent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tier, var(--accent)) 45%, transparent);
+}
+.stage-picker button.shiny i {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1;
+  color: #ffd76a;
 }

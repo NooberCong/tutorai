@@ -146,7 +146,11 @@ An optional hatchery that rewards actual reading:
 - **80 creatures to collect.** There are 10 per element across 8 elements
   (leaf, ember, tide, stone, sky, frost, moon, arcane). Each has four tiers
   from common to legendary, three growth stages, and a rare shiny variant.
-  All of them are pixel art drawn by code (`src/lib/hatchery/`).
+  All of them are pixel art drawn by code (`src/lib/hatchery/`). You keep
+  one of each: hatching a species you already have helps that pet grow,
+  and hatching its shiny lets you switch it to the shiny colours. A grown
+  pet can also be shown at an earlier, smaller stage (it doesn't grow
+  meanwhile).
 - **A companion in the corner.** Your chosen pet sits by the page. It sleeps
   when you stop reading, hops when you come back, and cheers finished
   chapters and study habits (highlighting, quizzing, lookups). With the

@@ -65,12 +65,16 @@ export interface Egg {
   foundIn?: Where;
 }
 
+/** One per species: hatching a species again grows the one you have. */
 export interface Pet {
   id: string;
   species: string;
+  /** Shown in its shiny colours. */
   shiny: boolean;
-  name?: string;
-  /** Active reading ms spent as companion. */
+  /** A shiny of this species has hatched, so it can be shown shiny. Absent
+   *  on older saves, where `shiny` alone says so. */
+  hasShiny?: boolean;
+  /** Active reading ms spent as companion, plus repeat-hatch boosts. */
   xp: number;
   hatchedAt: number;
   foundIn?: Where;
@@ -86,6 +90,7 @@ export interface Pet {
 
 export interface DexEntry {
   first: number;
+  /** Eggs of this species hatched, repeats included. */
   count: number;
   shiny: number;
   /** Highest stage any pet of this species has reached. */
@@ -186,12 +191,34 @@ export function migrate(raw: unknown, now = Date.now()): HatcheryState {
   return {
     ...base,
     ...s,
+    ...onePerSpecies(s.pets ?? [], s.companionId ?? null),
     habits: { ...base.habits, ...(s.habits ?? {}) },
     earn: { ...base.earn, ...(s.earn ?? {}) },
     // Saves from before sittings kept real time and per-page dwell.
     session: s.session && "dwell" in s.session ? s.session : base.session,
     v: 1,
   };
+}
+
+/** Saves from when a species could be hatched many times: fold each
+ *  species' pets into one — the companion (else the most grown) keeps its
+ *  look, the others' growth adds up, and any shiny makes it shiny. */
+function onePerSpecies(pets: Pet[], companionId: string | null): { pets: Pet[]; companionId: string | null } {
+  const bySpecies = new Map<string, Pet[]>();
+  for (const p of pets) bySpecies.set(p.species, [...(bySpecies.get(p.species) ?? []), p]);
+  let companion = companionId;
+  const out: Pet[] = [];
+  for (const group of bySpecies.values()) {
+    const keep = { ...(group.find((p) => p.id === companionId) ?? [...group].sort((a, b) => b.xp - a.xp)[0]) };
+    const sp = speciesById(keep.species);
+    const xp = group.reduce((n, p) => n + p.xp, 0);
+    keep.xp = sp ? Math.min(xp, growNeedMs(sp)[1]) : xp;
+    keep.hasShiny = group.some((p) => p.shiny || p.hasShiny);
+    delete (keep as { name?: string }).name;
+    if (group.some((p) => p.id === companionId)) companion = keep.id;
+    out.push(keep);
+  }
+  return { pets: out, companionId: companion };
 }
 
 // ── helpers ──
@@ -482,15 +509,30 @@ export function eggReady(s: HatcheryState): boolean {
   return !!s.incubator && s.incubator.warmth >= s.incubator.need;
 }
 
+/** What a hatch did: a new pet, or a boost to the one you have of that
+ *  species — `boost` ms of growth (0 when already grown), and `shinyNow`
+ *  when the repeat was its first shiny (unlocked and put on). */
+export interface Hatched {
+  pet: Pet;
+  isNew: boolean;
+  boost: number;
+  shinyNow: boolean;
+}
+
+/** Hatching a species you already have grows that pet by this share of
+ *  the reading it takes to become an adult. */
+const REPEAT_BOOST = 1 / 6;
+
 /** Hatch the incubator's egg. The species comes from the egg's element and
- *  tier; arcane commons lean on which study habit dominates. The next nest
- *  egg moves into the incubator. */
+ *  tier; arcane commons lean on which study habit dominates. A species you
+ *  already have boosts that pet's growth instead of adding another. The
+ *  next nest egg moves into the incubator. */
 export function hatch(
   s: HatcheryState,
   now: Date,
   where?: Where,
   rng: Rng = Math.random,
-): { pet: Pet; isNew: boolean } | null {
+): Hatched | null {
   const egg = s.incubator;
   if (!egg || egg.warmth < egg.need) return null;
   let pool = SPECIES.filter((sp) => sp.element === egg.element && sp.tier === egg.tier);
@@ -507,24 +549,51 @@ export function hatch(
     sp = pool.find((p) => p.id === lean) ?? sp;
   }
   const shinyOdds = egg.source === "chapter" || egg.source === "book" ? 1 / 8 : 1 / 16;
+  const shiny = rng() < shinyOdds;
+  const d = (s.dex[sp.id] ??= { first: now.getTime(), count: 0, shiny: 0, best: 0 });
+  d.count += 1;
+  if (shiny) d.shiny += 1;
+  s.hatchedTotal += 1;
+  s.incubator = s.nest.shift() ?? null;
+
+  const had = s.pets.find((p) => p.species === sp.id);
+  if (had) {
+    const adult = growNeedMs(sp)[1];
+    const boost = Math.max(0, Math.min(adult * REPEAT_BOOST, adult - had.xp));
+    had.xp += boost;
+    const grown = grownStage(had);
+    if (grown > d.best) d.best = grown;
+    const shinyNow = shiny && !canShine(had);
+    if (shinyNow) had.shiny = had.hasShiny = true;
+    return { pet: had, isNew: false, boost, shinyNow };
+  }
   const pet: Pet = {
     id: uid(),
     species: sp.id,
-    shiny: rng() < shinyOdds,
+    shiny,
+    hasShiny: shiny,
     xp: 0,
     hatchedAt: now.getTime(),
     foundIn: egg.foundIn,
     hatchedIn: where,
   };
-  const isNew = !s.dex[sp.id];
-  const d = (s.dex[sp.id] ??= { first: pet.hatchedAt, count: 0, shiny: 0, best: 0 });
-  d.count += 1;
-  if (pet.shiny) d.shiny += 1;
   s.pets.push(pet);
-  s.hatchedTotal += 1;
   if (!s.companionId) s.companionId = pet.id;
-  s.incubator = s.nest.shift() ?? null;
-  return { pet, isNew };
+  return { pet, isNew: true, boost: 0, shinyNow: false };
+}
+
+/** A shiny of its species has hatched. */
+export function canShine(pet: Pet): boolean {
+  return !!(pet.hasShiny || pet.shiny);
+}
+
+/** Switch a pet between its usual and shiny colours, once it has a shiny. */
+export function setShiny(s: HatcheryState, petId: string, on: boolean): void {
+  const pet = s.pets.find((p) => p.id === petId);
+  if (pet && canShine(pet)) {
+    pet.hasShiny = true;
+    pet.shiny = on;
+  }
 }
 
 export function setCompanion(s: HatcheryState, petId: string): void {
@@ -553,11 +622,6 @@ export function setHome(s: HatcheryState, petId: string, el: Element): void {
   const own = pet && speciesById(pet.species)?.element;
   if (!pet || (el !== own && !habitats(s).has(el))) return;
   pet.home = el === own ? undefined : el;
-}
-
-export function renamePet(s: HatcheryState, petId: string, name: string): void {
-  const pet = s.pets.find((p) => p.id === petId);
-  if (pet) pet.name = name.trim().slice(0, 24) || undefined;
 }
 
 // ── accessories ──
