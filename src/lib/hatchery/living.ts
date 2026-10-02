@@ -97,7 +97,8 @@ void main() {
 /** Each scene's `vec3 scene(vec2 P)`. Mask channels are as the painter
  *  sets them for that scene (backdrops.ts). */
 const SCENES: Record<Element, string> = {
-  // crowns, bushes and flowers stir (0); sun-dapples drift on the meadow (3)
+  // crowns, bushes and flowers stir (0); sun-dapples drift on the meadow
+  // (3). The sway is mirrored by gladeSway() below: keep them in step.
   leaf: `
 vec3 scene(vec2 P) {
   vec4 m0 = mask(P);
@@ -385,6 +386,35 @@ function noiseTexture(): Uint8Array {
   }
   noiseData = out;
   return out;
+}
+
+/** The shader's N(p) on the CPU: channel 0 of the noise texture, sampled
+ *  as the GPU does (bilinear, repeating). */
+function noiseAt(x: number, y: number): number {
+  const d = noiseTexture();
+  // p / 32 across a 512-texel tile, from texel centres
+  const u = x * 16 - 0.5;
+  const v = y * 16 - 0.5;
+  const ix = Math.floor(u);
+  const iy = Math.floor(v);
+  const fx = u - ix;
+  const fy = v - iy;
+  const at = (i: number, j: number) => d[((j & 511) * 512 + (i & 511)) * 4];
+  const top = at(ix, iy) + (at(ix + 1, iy) - at(ix, iy)) * fx;
+  const bot = at(ix, iy + 1) + (at(ix + 1, iy + 1) - at(ix, iy + 1)) * fx;
+  return ((top + (bot - top) * fy) / 255) * 2 - 1;
+}
+
+/** How far the glade's breeze has moved what's painted at (x, y), for
+ *  something of sway weight `m` (the painter's mask channel 0) at time t:
+ *  the leaf scene's displacement, so creatures resting on its plants
+ *  (wildlife.ts) move with them. */
+export function gladeSway(x: number, y: number, t: number, m: number): [number, number] {
+  const gust = 0.65 + 0.35 * Math.sin(t * 0.11 + 2 * Math.sin(t * 0.05));
+  const sway = (0.6 * Math.sin(t * 0.8 + x * 0.012 + y * 0.01) + 0.8 * noiseAt(x * 0.004 - t * 0.09, y * 0.004 + t * 0.02)) * gust;
+  // the shader shows the painting at P + d, so what's painted at B is seen
+  // at B - d
+  return [-m * 5 * sway, -m * 1.6 * Math.sin(t * 1.1 + y * 0.03 + x * 0.02)];
 }
 
 export interface Living {

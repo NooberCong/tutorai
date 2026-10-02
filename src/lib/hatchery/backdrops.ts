@@ -29,7 +29,7 @@ const H = BACKDROP_H;
 type C = [number, number, number];
 type Noise = (x: number, y: number) => number;
 
-function rng(seed: number) {
+export function rng(seed: number) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -701,6 +701,32 @@ function woodline(seed: number, base: number, amp: number, size: [number, number
 
 // ── scenes ──
 
+/** How strongly the glade's undergrowth — bushes and wildflowers — and
+ *  its grassy foreground sway in living.ts (their weight in mask channel 0). */
+export const UNDERGROWTH_SWAY = 0.5;
+export const GROUND_SWAY = 0.25;
+
+let groundNoise: Noise | null = null;
+/** The glade's ground along its grassy foreground, at x: where the grass
+ *  grows from, under its tips — and where its songbirds hop (wildlife.ts). */
+export function gladeGround(x: number): number {
+  groundNoise ??= perlin(2);
+  return 915 + 18 * fbm(groundNoise, x * 0.004, 9.5, 3);
+}
+
+/** The glade's wildflowers, in the undergrowth either side: where the
+ *  painter puts them, and where its butterflies settle (wildlife.ts).
+ *  `petal` indexes the painter's petal colours. */
+export const GLADE_FLOWERS: readonly { x: number; y: number; r: number; petal: number }[] = (() => {
+  const r = rng(31);
+  return Array.from({ length: 70 }, (_, i) => {
+    const x = i % 2 ? 1600 - r() * 520 : r() * 520;
+    const y = 830 + r() * 150;
+    const petal = Math.floor(r() * 4);
+    return { x, y, petal, r: 3 + r() * 3.5 };
+  });
+})();
+
 function leaf(p: Paint) {
   const n = perlin(1);
   const n2 = perlin(2);
@@ -763,24 +789,21 @@ function leaf(p: Paint) {
 
   // undergrowth, then the dark foreground lip with grass tips
   const bush = { ...foliage, light: hex("#86b85a") };
-  p.brush[0] = 0.5;
+  p.brush[0] = UNDERGROWTH_SWAY;
   cluster(p, n, 24, 170, 870, 280, 60, 26, [40, 80], bush, 0.5);
   cluster(p, n, 25, 1440, 860, 280, 60, 26, [40, 80], bush, 0.5);
-  p.brush[0] = 0.25;
-  land(p, curve((X) => 915 + 18 * fbm(n2, X * 0.004, 9.5, 3) - 12 * Math.abs(n(X * 0.3, 2.2))), (X, Y, d) => {
+  p.brush[0] = GROUND_SWAY;
+  land(p, curve((X) => gladeGround(X) - 12 * Math.abs(n(X * 0.3, 2.2))), (X, Y, d) => {
     mix(hex("#1f3a1c"), hex("#3f6e30"), clamp(0.5 + fbm(n, X * 0.2, Y * 0.03, 3) * 0.8 - smooth(0, 40, d) * 0.4));
     return 1;
   });
 
   // wildflowers in the undergrowth, pollen drifting in the light
-  const fr = rng(31);
   const petals = ["#fff6e0", "#ffd86b", "#f3a6c8", "#c9b6ff"].map(hex);
-  p.brush[0] = 0.5;
-  for (let i = 0; i < 70; i++) {
-    const x = i % 2 ? 1600 - fr() * 520 : fr() * 520;
-    const y = 830 + fr() * 150;
-    const c = petals[Math.floor(fr() * petals.length)];
-    ball(p, n, x, y, 3 + fr() * 3.5, { dark: times(c, 0.6), mid: c, light: hex("#ffffff"), rough: 0.3, freq: 0.5, tex: 0 });
+  p.brush[0] = UNDERGROWTH_SWAY;
+  for (const f of GLADE_FLOWERS) {
+    const c = petals[f.petal];
+    ball(p, n, f.x, f.y, f.r, { dark: times(c, 0.6), mid: c, light: hex("#ffffff"), rough: 0.3, freq: 0.5, tex: 0 });
   }
   vignette(p, VIGNETTE.leaf);
 }

@@ -199,10 +199,14 @@ reads them. Motion there is slow, continuous and time-based. Review the
 masks and layer with `backdrop-sheet.ts --live`.
 
 `ambience.ts` is what drifts over the painting: pollen and falling leaves,
-embers, bubbles, fish, snow, fireflies, shooting stars, crystal glints, candle flicker
-and cloud wisps, in the same scene space and mapped the same two-halves
-way. Particles that move are left out of the painting (only stars and
-flowers stay baked in), so nothing looks frozen.
+embers, bubbles, fish, snow, fireflies, shooting stars, crystal glints, candle
+flicker and cloud wisps, in the same scene space and mapped the same
+two-halves way. Particles that move are left out of the painting (only stars
+and flowers stay baked in), so nothing looks frozen. The glade's butterflies
+and songbirds live in `wildlife.ts`: they land on the painter's own flowers
+(`GLADE_FLOWERS`), bush tops and ground (`gladeGround`), and ride the
+plants' sway through `gladeSway` in `living.ts`, a CPU copy of the leaf
+shader's that must change with it.
 
 Both run in `ambience.worker.ts` on OffscreenCanvases: the main thread only
 forwards resizes, visibility and where the page column is. The painting

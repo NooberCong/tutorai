@@ -171,8 +171,10 @@ An optional hatchery that rewards actual reading:
   shows your companion's habitat, painted wide and dimmed so it sets a mood
   without pulling your eye off the text. It lives, slowly: the aurora's
   curtains ripple and surge over the pines, kelp sways in the swell under a
-  moving surface while fish cruise through it, clouds billow, lava creeps downhill, crowns and grass stir, the
-  moonlit oak bends in the gusts as shooting stars streak past,
+  moving surface while fish cruise through it, clouds billow, lava creeps
+  downhill, crowns and grass stir as butterflies settle on the glade's
+  wildflowers and a robin, blue tit or goldfinch drops in to perch and
+  hop about, the moonlit oak bends in the gusts as shooting stars streak past,
   mist drifts through the hollows, and in the night library a fire burns
   in the hearth under each bookcase, its light wavering over the shelves
   and the floorboards. Snow, embers, bubbles and fireflies drift

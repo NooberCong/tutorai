@@ -1,9 +1,9 @@
 /** Ambience: what drifts over a reader backdrop — pollen and falling
- *  leaves, embers, bubbles, fish, snow, meteors, fireflies, crystal
- *  glints, candle flicker — in the same 1600×1000 scene space as the painting,
- *  mapped the way the reader shows it: two halves, each pinned to its own
- *  edge and cropped to cover. The painting's own big features move in
- *  living.ts.
+ *  leaves, butterflies and songbirds (wildlife.ts), embers, bubbles, fish,
+ *  snow, meteors, fireflies, crystal glints, candle flicker — in the same
+ *  1600×1000 scene space as the painting, mapped the way the reader shows
+ *  it: two halves, each pinned to its own edge and cropped to cover. The
+ *  painting's own big features move in living.ts.
  *
  *  Everything moves slowly and continuously (time-based, eased by sums of
  *  sines, no jumps), so it reads as calm. It runs in a worker on an
@@ -12,6 +12,7 @@
 
 import type { Element } from "./kit.ts";
 import { FIRES } from "./backdrops.ts";
+import { butterflies, songbirds } from "./wildlife.ts";
 
 const W = 1600;
 const H = 1000;
@@ -19,7 +20,7 @@ const H = 1000;
 type Ctx = OffscreenCanvasRenderingContext2D;
 type Area = [x0: number, y0: number, x1: number, y1: number];
 
-interface Layer {
+export interface Layer {
   update(dt: number, t: number): void;
   /** Draw in scene space; [x0, x1] is the visible slice of the scene. */
   draw(c: Ctx, t: number, x0: number, x1: number): void;
@@ -812,6 +813,8 @@ const LAYERS: Record<Element, () => Layer[]> = {
   leaf: () => [
     shafts(700, -140, Math.PI / 2 + 0.05, 0.6, 7, 1100, "#fff5c8", 0.07, 1),
     motes({ n: 70, area: [0, 120, W, 880], v: [3, -5], spread: [4, 4], wander: 8, size: [1.5, 3.5], colors: ["#fff8d0", "#f0ffc0"], alpha: [0.4, 0.9], twinkle: 5, seed: 2 }),
+    songbirds(51),
+    butterflies(52),
     leaves(9, [[20, 60, 480, 260], [1120, 60, 1580, 240], [260, 300, 440, 380]], ["#6f9f48", "#8cb85a", "#a8c460", "#5a8a3e"], 3),
   ],
   ember: () => [
