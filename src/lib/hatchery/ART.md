@@ -206,7 +206,10 @@ and flowers stay baked in), so nothing looks frozen. The glade's butterflies
 and songbirds live in `wildlife.ts`: they land on the painter's own flowers
 (`GLADE_FLOWERS`), bush tops and ground (`gladeGround`), and ride the
 plants' sway through `gladeSway` in `living.ts`, a CPU copy of the leaf
-shader's that must change with it.
+shader's that must change with it. The cavern's glowworms, drips and bat
+live in `cave.ts`. Its drops fall on the `DRIPS` schedule from stalactites
+the painter hangs at those tips, and `living.ts` rings the pool where and
+when they land, so all three read the same constants.
 
 Both run in `ambience.worker.ts` on OffscreenCanvases: the main thread only
 forwards resizes, visibility and where the page column is. The painting

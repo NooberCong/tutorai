@@ -1045,101 +1045,300 @@ function tide(p: Paint) {
   vignette(p, VIGNETTE.tide);
 }
 
+/** The crystal cavern's pool: its surface line, and the drips that fall
+ *  into it from stalactite tips — each from `tip` down to where it lands at
+ *  (x, y), every `every` seconds, landing when (t + at) is a multiple of
+ *  it. Shared by the painter (the stalactites), ambience.ts (the falling
+ *  drops) and living.ts (the rings they make). */
+export const CAVE_WATER = 872;
+export interface Drip {
+  x: number;
+  tip: number;
+  y: number;
+  every: number;
+  at: number;
+}
+export const DRIPS: readonly Drip[] = [
+  { x: 176, tip: 318, y: 934, every: 7.3, at: 0.4 },
+  { x: 338, tip: 382, y: 903, every: 9.1, at: 5.2 },
+  { x: 1262, tip: 396, y: 917, every: 8.2, at: 2.9 },
+  { x: 1408, tip: 330, y: 948, every: 11.7, at: 7.5 },
+];
+/** Glowing mushrooms on the cavern's rocks: [x, y, size]. */
+export const CAVE_SHROOMS: readonly [number, number, number][] = [
+  [72, 846, 1],
+  [356, 866, 0.7],
+  [1218, 870, 0.75],
+  [1548, 838, 1],
+];
+/** Where light falls through a crack in the cavern's roof. */
+export const CAVE_CRACK: readonly [number, number] = [1388, 0];
+
 function stone(p: Paint) {
   const n = perlin(7);
   const n2 = perlin(8);
-  fill(p, (X, Y) => mix(hex("#3a3258"), hex("#0c0a14"), smooth(0, 1, Math.hypot((X - 800) / 900, (Y - 560) / 700))));
   const cyan = hex("#6fdcff");
   const violet = hex("#b48cff");
+  const worm = hex("#7ff0e6");
+  const pink = hex("#ff8fd6");
+  const day = hex("#dfe8ff");
+  const white = hex("#ffffff");
 
-  // the far wall
-  const wall = curve((X) => 600 - 220 * ridged(n, X * 0.002, 0.7, 5));
-  land(p, wall, (X, Y, d) => {
-    const b = faceLight(wall, X, d, 16, 2) - 0.5 + fbm(n2, X * 0.01, Y * 0.01, 3) * 0.4;
-    mix(hex("#221d36"), hex("#3e3660"), clamp(0.35 + b * 0.5));
-    toward(hex("#2c2748"), smooth(0, 200, d) * 0.5);
-    return 1;
-  });
+  // the dark, lit faintly from the far chamber
+  fill(p, (X, Y) => mix(hex("#3a3462"), hex("#0b0913"), smooth(0, 1, Math.hypot((X - 800) / 950, (Y - 520) / 620))));
 
-  // stalactites: spikes hanging from a rough ceiling, two layers
-  const spikes = (seed: number, base: number, len: number, width: [number, number], dir: 1 | -1) => {
-    const r = rng(seed);
-    const sn = perlin(seed);
-    const list: [number, number, number][] = [];
-    for (let x = -40; x < W + 40; x += width[0] * (0.5 + r() * 0.8)) list.push([x, len * (0.15 + r() ** 2 * 0.85), width[0] + r() * (width[1] - width[0])]);
-    return curve((X) => {
-      let y = base + 26 * fbm(sn, X * 0.004, 0.5, 3) * dir;
-      for (const [cx, l, w] of list) {
-        const t = 1 - Math.abs(X - cx) / w;
-        if (t > 0) y = dir > 0 ? Math.max(y, base + l * t ** 2.2) : Math.min(y, base - l * t ** 1.8);
-      }
-      return y;
-    });
+  const haze = hex("#3a3462");
+  /** Rock, dark → lit, with a fine grain and faint strata, hazed by
+   *  distance. */
+  const rocky = (X: number, Y: number, dark: C, lit: C, hz: number, f: number, base = 0.4) => {
+    const strata = Math.sin(Y * 0.09 + fbm(n, X * f, Y * f * 2, 3) * 4);
+    mix(dark, lit, clamp(base + bump(n, X, Y, f, f * 1.6, -1, -0.6, 2) * 0.2 + fbm(n2, X * 0.05, Y * 0.05, 2) * 0.12 + strata * 0.05));
+    toward(haze, hz);
   };
-  const hang = (edge: Curve, dark: string, lit: string, nn: Noise) =>
-    ceiling(p, edge, (X, Y, d) => {
-      const f = clamp(0.5 + ((edge(X + 4) - edge(X - 4)) / 8) * 0.8);
-      mix(hex(dark), hex(lit), clamp(f * 0.8 + fbm(nn, X * 0.02, Y * 0.01, 3) * 0.3 - smooth(0, 60, d) * 0.1));
+  const floor = (top: Curve, dark: string, lit: string, hz: number, f: number) => {
+    const [D, L] = [hex(dark), hex(lit)];
+    land(p, top, (X, Y, d) => {
+      // lit along its upper slopes
+      rocky(X, Y, D, L, hz, f, 0.62 - smooth(0, 120, d) * 0.3);
       return 1;
     });
-  hang(spikes(1, 90, 300, [30, 80], 1), "#1c1830", "#4a4270", n);
-  hang(spikes(2, 30, 220, [24, 60], 1), "#100d1a", "#302a4c", n2);
+  };
+  const roof = (bottom: Curve, dark: string, lit: string, hz: number, f: number) => {
+    const [D, L] = [hex(dark), hex(lit)];
+    ceiling(p, bottom, (X, Y, d) => {
+      rocky(X, Y, D, L, hz, f, 0.25 + smooth(30, 0, d) * 0.2);
+      return 1;
+    });
+  };
+  /** A stalactite hanging from (x, y) (dir 1), or a stalagmite rising from
+   *  it (-1): a rounded cone `len` long, `w` across at its root, lit from
+   *  the left, ringed faintly where it grew. */
+  const cone = (x: number, y: number, len: number, w: number, dir: 1 | -1, dark: string, lit: string, hz: number, lean = 0) => {
+    const [y0, y1] = dir > 0 ? [y - 6, y + len] : [y - len, y + 6];
+    const [D, L] = [hex(dark), hex(lit)];
+    strand(
+      p,
+      y0,
+      y1,
+      (v) => x + lean * (dir > 0 ? v : 1 - v) ** 2,
+      (v) => (w / 2) * Math.max(0, dir > 0 ? 1 - v : v) ** 0.8 * (1 + 0.06 * Math.sin(v * len * 0.25 + x)),
+      (X, Y, u) => {
+        mix(D, L, clamp((dir > 0 ? 0.5 : 0.62) - u * 0.42 + fbm(n2, X * 0.1, Y * 0.03, 2) * 0.2));
+        toward(haze, hz);
+        return 1;
+      },
+    );
+  };
+  /** A row of cones along y, about `gap` apart, lengths up to `len`. */
+  const cones = (seed: number, y: Curve, len: number, gap: number, dir: 1 | -1, dark: string, lit: string, hz: number) => {
+    const r = rng(seed);
+    for (let x = -20 + r() * gap; x < W + 20; x += gap * (0.5 + r())) {
+      const l = len * (0.18 + r() ** 1.8 * 0.82);
+      cone(x, y(x), l, Math.min(l * 0.3, 70) + 8 + r() * 10, dir, dark, lit, hz, (r() - 0.5) * 10);
+    }
+  };
+  const ridge = (y: number, rise: number, f: number, seed: number) => {
+    const rn = perlin(seed);
+    return curve((X) => y - rise * ridged(rn, X * f, 0.5, 4));
+  };
+  const underside = (y: number, drop: number, f: number, seed: number) => {
+    const rn = perlin(seed);
+    return curve((X) => y + drop * (0.5 + fbm(rn, X * f, 0.5, 3)));
+  };
 
-  // stalagmites and the floor
-  const mites = spikes(3, 830, 300, [30, 70], -1);
-  land(p, mites, (X, Y, d) => {
-    const f = 0.35 + (faceLight(mites, X, 0, 4, 0.8) - 0.35) * (1 - smooth(10, 160, d));
-    mix(hex("#15111f"), hex("#3e3658"), clamp(f * 0.75 + fbm(n, X * 0.02, Y * 0.01, 3) * 0.3 - smooth(0, 160, d) * 0.25));
-    return 1;
+  // depth: the far chamber, then a middle row of rock and columns, each
+  // nearer one darker, mist between them
+  const farFloor = ridge(600, 120, 0.0028, 21);
+  const farRoof = underside(120, 50, 0.003, 23);
+  floor(farFloor, "#2a2550", "#46407a", 0.45, 0.008);
+  cones(31, farFloor, 70, 60, -1, "#2a2550", "#46407a", 0.45);
+  roof(farRoof, "#28234a", "#3e3866", 0.5, 0.008);
+  cones(32, farRoof, 110, 40, 1, "#28234a", "#423c70", 0.5);
+  mist(p, n2, 480, 660, hex("#46407a"), 0.4);
+  const midFloor = ridge(790, 150, 0.0034, 22);
+  const midRoof = underside(70, 60, 0.004, 24);
+  floor(midFloor, "#14101e", "#3a3360", 0.14, 0.011);
+  cones(33, midFloor, 200, 110, -1, "#14101e", "#3a3360", 0.14);
+  roof(midRoof, "#14101e", "#342d58", 0.18, 0.011);
+  cones(34, midRoof, 200, 52, 1, "#14101e", "#3a3360", 0.18);
+  // columns where a stalactite met the rock below
+  for (const [x, w] of [[96, 34], [1522, 40]]) {
+    strand(p, 60, 780, (v) => x + 10 * Math.sin(v * 5 + x) + 8 * n(x, v * 4), (v) => w * (0.4 + 0.6 * (Math.abs(v - 0.55) * 2.1) ** 1.8) * (1 + 0.2 * fbm(n2, x, v * 8, 2)), (X, Y, u) => {
+      // flowstone: streaks running down it
+      mix(hex("#120e1c"), hex("#3a3360"), clamp(0.48 - u * 0.4 + fbm(n2, X * 0.07, Y * 0.005, 3) * 0.5));
+      toward(haze, 0.12);
+      return 1;
+    });
+  }
+  mist(p, n, 640, 800, haze, 0.3);
+
+  // the near roof: big stalactites, the drips' among them
+  const nearRoof = underside(26, 46, 0.005, 25);
+  roof(nearRoof, "#07050c", "#211b36", 0, 0.016);
+  cones(35, nearRoof, 230, 70, 1, "#07050c", "#2a2344", 0);
+  for (const d of DRIPS) cone(d.x, nearRoof(d.x), d.tip - nearRoof(d.x), 30 + (d.tip % 7) * 3, 1, "#07050c", "#2a2344", 0);
+  // the glowworms' light on the roof (they hang from it: ambience.ts)
+  for (const [x, y, r] of [[200, 60, 260], [1380, 70, 240], [620, 40, 200], [1010, 40, 200]]) glow(p, x, y, r, worm, 0.07);
+  // a crack in the roof, and daylight falling through it
+  const [kx, ky] = CAVE_CRACK;
+  p.each(kx - 60, ky - 10, kx + 60, ky + 40, (X, Y, i) => {
+    const d = Math.hypot((X - kx) / 26, (Y - ky - 4) / 12) - 0.35 * fbm(n2, X * 0.06, Y * 0.06, 3);
+    const cov = clamp((1 - d) * 16 * p.k * 0.5 + 0.5);
+    if (cov <= 0) return;
+    mix(day, white, smooth(0.9, 0.2, d));
+    p.over(i, cov);
   });
+  glow(p, kx, ky + 12, 46, day, 0.5);
+  rays(p, n2, kx, ky, Math.PI / 2 + 0.15, 0.09, 950, day, 0.12, 30);
 
-  // crystal clusters: faceted, glowing, lighting the rock around them
-  // (live: light slides across the faces, where channel 3 says)
+  // crystals: hexagonal prisms glowing from within, light sliding across
+  // their faces (live: where channel 3 says)
   p.tag(3);
-  const crystal = (x: number, y: number, h: number, a: number, lit: C, dark: C) => {
+  const crystal = (x: number, y: number, h: number, w: number, a: number, lit: C, dark: C, apex: number) => {
     p.brush[3] = 1;
-    const w = Math.min(h * 0.19, 38);
     const sx = Math.sin(a);
     const cy = -Math.cos(a);
-    p.each(x - h - w, y - h - w, x + h + w, y + h + w, (X, Y, i) => {
-      // local frame: v along the crystal, 0 base … 1 tip; u across
+    // the point starts where its facets would meet over a prism this wide
+    const vt = 1 - Math.min(0.32, (w * 1.5) / h);
+    // just the prism's own bounds: its base corners and its tip
+    const ex = Math.abs(cy) * w + 2;
+    const ey = Math.abs(sx) * w + 2;
+    const tx = x + sx * h;
+    const ty = y + cy * h;
+    p.each(Math.min(x, tx) - ex, Math.min(y, ty) - ey, Math.max(x, tx) + ex, Math.max(y, ty) + ey, (X, Y, i) => {
       const dx = X - x;
       const dy = Y - y;
       const v = (dx * sx + dy * cy) / h;
       const u = (dx * -cy + dy * sx) / w;
-      if (v < -0.02 || v > 1) return;
-      const lim = v < 0.78 ? 1 : (1 - v) / 0.22;
-      const cov = clamp((lim - Math.abs(u)) * w * p.k * 0.5 + 0.5) * clamp((v + 0.02) * h * p.k);
+      if (v < -0.06 || v > 1) return;
+      const k = v < vt ? 0 : (v - vt) / (1 - vt);
+      const lo = -1 + (apex + 1) * k;
+      const hi = 1 + (apex - 1) * k;
+      const e = Math.min(u - lo, hi - u);
+      const cov = clamp(e * w * p.k * 0.5 + 0.5) * clamp((v + 0.06) * h * p.k);
       if (cov <= 0) return;
-      const face = u < -0.35 ? 1 : u < 0.3 ? 0.62 : 0.3;
-      mix(dark, lit, clamp(face * (0.55 + v * 0.5) + 0.15 * n(X * 0.05, Y * 0.05)));
-      const edge = Math.min(Math.abs(u + 0.35), Math.abs(u - 0.3));
-      toward(hex("#ffffff"), Math.exp(-(((edge * w) / 1.2) ** 2)) * 0.45 * face);
+      // three faces seen, lit from the left; their ridges run up into the point
+      const r1 = -0.4 + (apex + 0.4) * k;
+      const r2 = 0.35 + (apex - 0.35) * k;
+      const face = u < r1 ? 1 : u < r2 ? 0.6 : 0.3;
+      const core = Math.exp(-(((u - apex * 0.3) * 1.6) ** 2)) * (0.3 + 0.7 * v);
+      const inc = fbm(n, v * h * 0.03 + x * 0.1, u * 1.6, 2);
+      mix(dark, lit, clamp(face * (0.28 + v * 0.42) + (k > 0 ? 0.2 * face : 0) + core * 0.3 + inc * 0.16 - smooth(0.14, 0, v) * 0.4));
+      const ridge = Math.min(Math.abs(u - r1), Math.abs(u - r2)) * w;
+      toward(white, Math.exp(-((ridge / 1.1) ** 2)) * 0.5 * face + Math.exp(-((e * w) ** 2)) * 0.18);
       p.over(i, cov * 0.94);
     });
     p.brush[3] = 0;
   };
-  const crop = (x: number, y: number, s: number, lit: string, dark: string, gl: C, seed: number) => {
-    const cr = rng(seed);
-    glow(p, x, y - 40 * s, 170 * s, gl, 0.55);
-    const k = 7;
-    const order = Array.from({ length: k }, (_, i) => i).sort((a, b) => Math.abs(b - 3) - Math.abs(a - 3));
-    for (const i of order) {
-      const t = i / (k - 1) - 0.5;
-      crystal(x + t * 150 * s, y + Math.abs(t) * 18 * s, (270 - Math.abs(t) * 320 + cr() * 60) * s, t * 1.15 + (cr() - 0.5) * 0.12, hex(lit), hex(dark));
+  /** A cluster growing from (x, y) along `axis` (0 = up): a fan of
+   *  crystals of every size, the biggest near the middle, and a crust of
+   *  small ones at their feet. */
+  const druse = (x: number, y: number, s: number, axis: number, count: number, lit: string, dark: string, gl: C, seed: number) => {
+    const r = rng(seed);
+    const L = hex(lit);
+    const D = hex(dark);
+    const ax = Math.sin(axis);
+    const ay = -Math.cos(axis);
+    glow(p, x + ax * 70 * s, y + ay * 70 * s, 160 * s, gl, 0.5);
+    const list = Array.from({ length: count }, (_, i) => {
+      const t = i / (count - 1) - 0.5 + (r() - 0.5) * 0.18;
+      const big = Math.max(0.12, 1 - Math.abs(t) * 1.6) * (0.55 + r() * 0.55);
+      const h = (60 + 250 * big) * s;
+      return {
+        x: x - ay * t * 130 * s,
+        y: y + ax * t * 130 * s + Math.abs(t) * 12 * s,
+        h,
+        w: Math.min(Math.max(h * 0.16, 7 * s), 34 * s) * (0.8 + r() * 0.35),
+        a: axis + t * 1.2 + (r() - 0.5) * 0.3,
+        apex: (r() - 0.5) * 0.9,
+        z: r() * 0.6 - Math.abs(t),
+      };
+    });
+    list.sort((a, b) => a.z - b.z);
+    for (const c of list) crystal(c.x, c.y, c.h, c.w, c.a, times(L, 0.75 + 0.25 * (c.z + 1)), D, c.apex);
+    for (let i = 0; i < 12; i++) {
+      const t = (r() - 0.5) * 1.6;
+      const h = (14 + r() * 34) * s;
+      crystal(x - ay * t * 120 * s, y + ax * t * 120 * s + 6 * s, h, Math.max(h * 0.24, 4), axis + t * 1.4 + (r() - 0.5) * 0.6, L, D, (r() - 0.5) * 0.8);
     }
-    glow(p, x, y - 60 * s, 70 * s, gl, 0.25);
+    glow(p, x + ax * 50 * s, y + ay * 50 * s, 60 * s, gl, 0.22);
   };
-  crop(210, 880, 1.05, "#c8f4ff", "#2a78b0", cyan, 1);
-  crop(1400, 870, 1.2, "#eadcff", "#5a2eb0", violet, 2);
-  crop(560, 860, 0.45, "#c8f4ff", "#2a78b0", cyan, 3);
-  crop(1100, 865, 0.5, "#eadcff", "#5a2eb0", violet, 4);
-  // a few crystals in the ceiling too
-  glow(p, 1480, 40, 120, cyan, 0.4);
-  crystal(1470, -10, 120, Math.PI - 0.25, hex("#c8f4ff"), hex("#2a78b0"));
-  crystal(1525, -20, 90, Math.PI + 0.2, hex("#c8f4ff"), hex("#2a78b0"));
-  glow(p, 130, 40, 110, violet, 0.4);
-  crystal(130, -15, 110, Math.PI + 0.25, hex("#eadcff"), hex("#5a2eb0"));
+  const rock: Ball = { dark: hex("#0e0b16"), mid: hex("#241e38"), light: hex("#4a4270"), rough: 0.22, freq: 0.014, tex: 0.25, texFreq: 0.05, L: light(-0.5, -0.8, 0.4) };
+
+  // out of the walls at the edges
+  druse(-10, 520, 0.55, 1.05, 7, "#a8ecff", "#16477e", cyan, 5);
+  druse(1612, 470, 0.6, -1.1, 7, "#d8c4ff", "#43208c", violet, 6);
+  // from the roof
+  druse(150, 40, 0.42, Math.PI + 0.15, 6, "#d8c4ff", "#43208c", violet, 7);
+  druse(1478, 46, 0.45, Math.PI - 0.2, 6, "#a8ecff", "#16477e", cyan, 8);
+
+  // the shore at the edges, rocks standing in the water, the big clusters
+  // on them
+  floor(curve((X) => 830 + 60 * smooth(70, 150, X) * smooth(1530, 1450, X) + 14 * fbm(n2, X * 0.01, 3, 3)), "#0e0b16", "#2e2848", 0, 0.014);
+  for (const [x, y, r] of [[262, 884, 64], [196, 892, 44], [338, 888, 30], [1440, 880, 70], [1296, 890, 40], [1222, 888, 30]] as const) ball(p, n, x, y, r, rock, 0.55);
+  druse(258, 858, 1, 0.12, 9, "#a8ecff", "#16477e", cyan, 1);
+  druse(1440, 852, 1.12, -0.1, 9, "#d8c4ff", "#43208c", violet, 2);
+  druse(1298, 870, 0.42, 0.25, 6, "#d8c4ff", "#43208c", violet, 3);
+  druse(560, 862, 0.45, 0.1, 6, "#a8ecff", "#16477e", cyan, 4);
+  druse(1080, 862, 0.5, -0.1, 6, "#d8c4ff", "#43208c", violet, 9);
+
+  // mushrooms glowing on the rocks
+  const shroom = (x: number, y: number, h: number, r: number, lean: number) => {
+    const cx = x + lean * h;
+    const cy = y - h;
+    limb(p, x, y, cx, cy, r * 0.2, r * 0.14, (u, t) => mix(hex("#3a2c4a"), hex("#e8d8f0"), clamp(0.55 - u * 0.35 + t * 0.2)));
+    p.each(cx - r - 2, cy - r, cx + r + 2, cy + r * 0.4, (X, Y, i) => {
+      const u = (X - cx) / r;
+      const v = (Y - cy) / (r * 0.62);
+      const dome = u * u + (v < 0 ? v * v : (v / 0.32) ** 2);
+      const cov = clamp((1 - dome) * r * p.k * 0.5 + 0.5);
+      if (cov <= 0) return;
+      if (v < 0) mix(hex("#7a2a6a"), hex("#ffc8ec"), clamp(0.75 - v * 0.2 - u * 0.35 + 0.15 * n(X * 0.3, Y * 0.3)));
+      // the gills beneath, glowing brightest
+      else mix(hex("#ff9ad8"), hex("#fff0fa"), clamp(0.5 + 0.4 * Math.sin(u * 14) * (1 - Math.abs(u))));
+      p.over(i, cov);
+    });
+    glow(p, cx, cy + r * 0.1, r * 1.6, pink, 0.35);
+  };
+  for (const [x, y, s] of CAVE_SHROOMS) {
+    const r = rng(x);
+    glow(p, x, y - 14 * s, 60 * s, pink, 0.12);
+    for (let i = 0; i < 4; i++) {
+      const h = (16 + r() * 34) * s;
+      shroom(x + (i - 1.5) * 20 * s + (r() - 0.5) * 8, y + r() * 5, h, (10 + r() * 10) * s * (h > 32 * s ? 1.2 : 1), (r() - 0.5) * 0.5);
+    }
+  }
+
+  // the pool: everything above mirrored in it, darker the deeper you look
+  // (live: tagged 1, rippled by the drips; reflected crystals stay in 3)
+  const m = p.mask;
+  p.tag(1);
+  p.brush[1] = 1;
+  const wl = CAVE_WATER * p.k;
+  const src = new Float32Array(p.px);
+  const dark = hex("#0a0e1c");
+  p.each(0, CAVE_WATER, W, H, (X, Y, i) => {
+    const y = Math.floor(i / 3 / p.w);
+    const sy = Math.max(0, Math.round(2 * wl - y - 1));
+    const sx = clamp(Math.round((X + 1.5 * n(X * 0.02, Y * 0.12)) * p.k - 0.5), 0, p.w - 1);
+    const j = (sy * p.w + sx) * 3;
+    const deep = smooth(CAVE_WATER, H, Y);
+    T[0] = src[j];
+    T[1] = src[j + 1];
+    T[2] = src[j + 2];
+    scale(0.72 - deep * 0.25);
+    toward(dark, deep * 0.3);
+    // a faint sheen, in long ripples
+    T[0] += 0.02 * smooth(-0.2, 0.6, fbm(n2, X * 0.004, Y * 0.09, 3));
+    T[1] += 0.025 * smooth(-0.2, 0.6, fbm(n2, X * 0.004, Y * 0.09, 3));
+    T[2] += 0.04 * smooth(-0.2, 0.6, fbm(n2, X * 0.004, Y * 0.09, 3));
+    if (m) p.brush[3] = m[(j / 3) * 4 + 3] * 0.5;
+    p.over(i, 1);
+  });
+  p.brush[1] = 0;
+  p.brush[3] = 0;
+  // where the daylight meets the water
+  glow(p, 1252, 902, 46, day, 0.18);
   vignette(p, VIGNETTE.stone);
 }
 

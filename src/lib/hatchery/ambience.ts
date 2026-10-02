@@ -1,6 +1,7 @@
 /** Ambience: what drifts over a reader backdrop — pollen and falling
  *  leaves, butterflies and songbirds (wildlife.ts), embers, bubbles, fish,
- *  snow, meteors, fireflies, crystal glints, candle flicker — in the same
+ *  snow, meteors, fireflies, crystal glints, glowworms and drips (cave.ts),
+ *  candle flicker — in the same
  *  1600×1000 scene space as the painting, mapped the way the reader shows
  *  it: two halves, each pinned to its own edge and cropped to cover. The
  *  painting's own big features move in living.ts.
@@ -11,7 +12,8 @@
  *  main thread. */
 
 import type { Element } from "./kit.ts";
-import { FIRES } from "./backdrops.ts";
+import { CAVE_CRACK, CAVE_SHROOMS, FIRES } from "./backdrops.ts";
+import { bat, beamDust, drips, glowworms } from "./cave.ts";
 import { butterflies, songbirds } from "./wildlife.ts";
 
 const W = 1600;
@@ -829,12 +831,23 @@ const LAYERS: Record<Element, () => Layer[]> = {
     bubbles(36, [0, 110, W, 930], 6),
   ],
   stone: () => [
-    pulse(210, 820, 190, "#6fdcff", 0.1, 0.08, 7, false, 7),
-    pulse(1400, 800, 210, "#b48cff", 0.1, 0.08, 8, false, 8),
-    pulse(560, 840, 90, "#6fdcff", 0.08, 0.06, 5, false, 9),
-    pulse(1100, 835, 100, "#b48cff", 0.08, 0.06, 6, false, 10),
-    glints([[80, 640, 340, 870], [1230, 600, 1580, 860], [500, 760, 620, 860], [1040, 750, 1160, 855], [1440, 0, 1560, 110], [90, 0, 170, 100]], 14, "#e8f8ff", 11),
-    motes({ n: 70, area: [0, 80, W, 880], v: [1, -2], spread: [3, 3], wander: 6, size: [0.8, 2.4], colors: ["#dff6ff", "#e8d8ff"], alpha: [0.35, 0.8], twinkle: 6, seed: 12 }),
+    // the crystals breathing, and light catching their faces
+    ...([[258, 760, 190, "#6fdcff"], [1440, 750, 210, "#b48cff"], [560, 830, 90, "#6fdcff"], [1080, 830, 100, "#b48cff"], [1300, 845, 70, "#b48cff"], [30, 490, 110, "#6fdcff"], [1580, 440, 120, "#b48cff"], [150, 80, 90, "#b48cff"], [1478, 90, 90, "#6fdcff"]] as const).map(([x, y, r, c], i) =>
+      pulse(x, y, r, c, 0.1, 0.07, 6 + i * 0.7, false, 7 + i),
+    ),
+    glints([[170, 620, 350, 860], [1330, 580, 1550, 850], [0, 440, 110, 560], [1500, 360, 1600, 520], [110, 40, 200, 140], [1430, 40, 1530, 140], [520, 780, 600, 860], [1040, 780, 1120, 860]], 16, "#e8f8ff", 11),
+    // the mushrooms glowing, and their spores drifting up
+    ...CAVE_SHROOMS.flatMap(([x, y, s], i) => [
+      pulse(x, y - 20 * s, 70 * s, "#ff8fd6", 0.08, 0.06, 5 + i, false, 30 + i),
+      motes({ n: 6, area: [x - 50, y - 120, x + 50, y - 10], v: [0, -5], spread: [3, 2], wander: 5, size: [0.8, 1.5], colors: ["#ffb8e6"], alpha: [0.4, 0.85], twinkle: 3, core: true, seed: 34 + i }),
+    ]),
+    // daylight through the crack in the roof, dust turning in it
+    shafts(CAVE_CRACK[0], CAVE_CRACK[1] - 10, Math.PI / 2 + 0.15, 0.05, 5, 950, "#dfe8ff", 0.04, 60),
+    beamDust(Math.PI / 2 + 0.15, 0.07, 880, 61),
+    motes({ n: 40, area: [0, 80, W, 860], v: [1, -2], spread: [3, 3], wander: 6, size: [0.8, 2.2], colors: ["#dff6ff", "#e8d8ff"], alpha: [0.3, 0.7], twinkle: 6, seed: 12 }),
+    glowworms(62),
+    drips(),
+    bat(63),
   ],
   sky: () => [
     pulse(1180, 610, 260, "#ffe2a8", 0.05, 0.04, 10, false, 13),

@@ -2,7 +2,7 @@
  *  WebGL shader, so its big features move. Aurora curtains ripple and
  *  surge, kelp sways in the swell under a moving surface, clouds billow,
  *  lava creeps, crowns and grass stir in the wind, the moonlit oak bends
- *  in the gusts, mist drifts through
+ *  in the gusts, drips ring the cavern's pool, mist drifts through
  *  the hollows, fires burn in the library's fireplaces, and the runes on
  *  the study floor turn.
  *
@@ -19,7 +19,7 @@
  *  cheap. It runs in the ambience worker, off the main thread. */
 
 import type { Element } from "./kit.ts";
-import { BACKDROP_H, BACKDROP_W, FIRES, FIRE_BASE, VIGNETTE, backdropExposure, type LiveBackdrop } from "./backdrops.ts";
+import { BACKDROP_H, BACKDROP_W, CAVE_WATER, DRIPS, FIRES, FIRE_BASE, VIGNETTE, backdropExposure, type LiveBackdrop } from "./backdrops.ts";
 
 const VERT = `#version 300 es
 void main() {
@@ -153,20 +153,51 @@ vec3 scene(vec2 P) {
   vec4 k = layer(vec2(P.x - sw, P.y));
   return col * (1.0 - k.a) + k.rgb;
 }`,
-  // light slides across the crystal faces (3); low mist drifts over the floor
+  // light slides across the crystal faces (3); the pool (1) swells slowly
+  // and rings spread where drops from the roof land (as ambience.ts lets
+  // them fall); low mist drifts over it
   stone: `
+const vec4 DRIP[${DRIPS.length}] = vec4[${DRIPS.length}](${DRIPS.map((d) => `vec4(${d.x.toFixed(1)}, ${d.y.toFixed(1)}, ${d.every.toFixed(2)}, ${d.at.toFixed(2)})`).join(", ")});
 vec3 scene(vec2 P) {
-  vec3 col = base(P);
-  float c = mask(P).a;
+  float w = mask(P).g;
+  vec2 Q = P;
+  float crest = 0.0;
+  if (w > 0.0) {
+    float deep = clamp((P.y - ${CAVE_WATER}.0) / 128.0, 0.0, 1.0);
+    vec2 d = vec2(N(vec2(P.x * 0.012 + t * 0.06, P.y * 0.08 - t * 0.1)), 0.4 * N2(vec2(P.x * 0.012 - t * 0.05, P.y * 0.08))) * (0.5 + deep);
+    for (int i = 0; i < ${DRIPS.length}; i++) {
+      // (x, y) where it lands, landing whenever t + at is a multiple of every
+      vec4 k = DRIP[i];
+      float age = mod(t + k.w, k.z);
+      if (age > 4.0) continue;
+      // seen from above at a slant: rings flattened into ellipses
+      vec2 q = vec2(P.x - k.x, (P.y - k.y) * 3.4);
+      float e = length(q);
+      float fade = pow(1.0 - age / 4.0, 2.0);
+      // a ring, and a fainter one following it
+      for (float j = 0.0; j < 2.0; j++) {
+        float x = e - 5.0 - max(0.0, age - j * 0.4) * 30.0;
+        float wave = exp(-x * x / 50.0) * sin(x * 0.6) * fade * (1.0 - j * 0.5);
+        d += q / max(e, 1.0) * vec2(1.0, 0.3) * wave * 2.5;
+        crest += max(0.0, wave);
+      }
+    }
+    Q += d * w;
+    if (mask(Q).g < 0.5) Q = P;
+  }
+  vec3 col = base(Q);
+  float c = mask(Q).a;
   if (c > 0.0) {
     float sweep = pow(max(0.0, sin((P.x * 0.8 - P.y * 0.55) * 0.011 - t * 0.3 + 1.5 * N(P * 0.004))), 14.0);
     float inner = 0.5 + 0.5 * N(vec2(P.x * 0.025, P.y * 0.02 - t * 0.04));
     col += col * c * (0.45 * sweep + 0.12 * inner);
   }
+  float L = lit(P);
+  col += rgb(190.0, 225.0, 255.0) * crest * 0.32 * w * L;
   float low = smoothstep(740.0, 900.0, P.y);
   if (low > 0.0) {
     float f = smoothstep(-0.25, 0.5, fbm(vec2(P.x * 0.0035 - t * 0.009, P.y * 0.014 + t * 0.002)));
-    col = mix(col, rgb(62.0, 54.0, 88.0) * lit(P), low * f * 0.15);
+    col = mix(col, rgb(62.0, 54.0, 88.0) * L, low * f * 0.15);
   }
   return col;
 }`,

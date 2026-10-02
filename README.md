@@ -175,6 +175,8 @@ An optional hatchery that rewards actual reading:
   downhill, crowns and grass stir as butterflies settle on the glade's
   wildflowers and a robin, blue tit or goldfinch drops in to perch and
   hop about, the moonlit oak bends in the gusts as shooting stars streak past,
+  glowworm threads glisten over the crystal cavern's pool as drops fall from
+  the stalactites and ring the water,
   mist drifts through the hollows, and in the night library a fire burns
   in the hearth under each bookcase, its light wavering over the shelves
   and the floorboards. Snow, embers, bubbles and fireflies drift
