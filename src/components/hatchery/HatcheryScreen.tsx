@@ -22,11 +22,14 @@ import {
   dayKey,
   eggReady,
   growth,
+  grownStage,
   habitats,
   homeOf,
   incubate,
   setCompanion,
   setHome,
+  setShiny,
+  showStage,
   speciesById,
   keptSmall,
   stageOf,
@@ -493,6 +496,11 @@ function SpeciesDetail(props: { species: Species; onClose: () => void }) {
   const d = s.dex[sp.id];
   const mine = s.pets.find((p) => p.species === sp.id);
   const reading = !!mine && mine.id === s.companionId;
+  // yours can be shown at any size it has grown through, and in shiny colours
+  const grown = mine ? grownStage(mine) : 0;
+  const shown = mine ? stageOf(mine) : 0;
+  const picks = !!mine && grown > 0;
+  const shine = !!mine && canShine(mine);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
     window.addEventListener("keydown", onKey);
@@ -506,20 +514,57 @@ function SpeciesDetail(props: { species: Species; onClose: () => void }) {
           <span className="element-tag">{ELEMENT_LABEL[sp.element]}</span>
         </div>
         <h2>{d ? sp.name : "Undiscovered"}</h2>
-        <div className="detail-stages">
+        <div className="detail-stages" role={picks ? "radiogroup" : undefined} aria-label={picks ? "Size" : undefined}>
           {([0, 1, 2] as Stage[]).map((st) => {
             const seen = d && d.best >= st;
-            return (
-              <figure key={st}>
-                <PixelImg src={speciesUrl(sp.id, st, "idle", false, !seen)} scale={4} />
-                <figcaption>
+            const art = (
+              <>
+                <PixelImg src={speciesUrl(sp.id, st, "idle", !!mine?.shiny, !seen)} scale={4} />
+                <span className="detail-cap">
                   <b>{seen ? sp.stages[st] : "???"}</b>
                   <span>{STAGE_LABEL[st]}</span>
-                </figcaption>
-              </figure>
+                </span>
+              </>
+            );
+            if (!mine || !picks || st > grown)
+              return (
+                <div key={st} className="detail-stage">
+                  {art}
+                </div>
+              );
+            return (
+              <button
+                key={st}
+                role="radio"
+                aria-checked={st === shown}
+                className={`detail-stage pick ${st === shown ? "on" : ""}`}
+                title={st === shown ? "Shown at this size" : st < grown ? "Keep it this small" : "Let it be its full size"}
+                onClick={() => mutate((x) => showStage(x, mine.id, st), true)}
+              >
+                {art}
+              </button>
             );
           })}
         </div>
+        {(picks || shine) && mine && (
+          <div className="detail-options">
+            {picks && (
+              <span className="fine">
+                {shown < grown ? "Kept small — it won't grow until you let it" : "Pick a size to show it at"}
+              </span>
+            )}
+            {shine && (
+              <button
+                role="switch"
+                aria-checked={mine.shiny}
+                className={`shiny-toggle ${mine.shiny ? "on" : ""}`}
+                onClick={() => mutate((x) => setShiny(x, mine.id, !mine.shiny), true)}
+              >
+                <i>✦</i> Shiny colours
+              </button>
+            )}
+          </div>
+        )}
         <p className="detail-lore">{d ? sp.lore : `“${sp.hint}”`}</p>
         {d && (
           <p className="fine">

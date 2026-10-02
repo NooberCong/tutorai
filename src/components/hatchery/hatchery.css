@@ -168,11 +168,13 @@
   letter-spacing: 0.08em;
   margin-bottom: 10px;
 }
-.hatchery .fine {
+.hatchery .fine,
+.species-detail .fine {
   font-size: 12px;
   color: var(--faint);
 }
-.hatchery .fine i {
+.hatchery .fine i,
+.species-detail .fine i {
   color: var(--dim);
 }
 .empty-note {
@@ -684,7 +686,9 @@
   margin-top: 4px;
 }
 .species-detail {
-  width: min(520px, 94vw);
+  width: min(580px, 94vw);
+  gap: 12px;
+  padding: 22px 26px 24px;
 }
 .detail-head {
   display: flex;
@@ -697,31 +701,90 @@
   color: var(--faint);
 }
 .detail-stages {
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  gap: 10px;
-  margin: 4px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
 }
-.detail-stages figure {
-  margin: 0;
+.detail-stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 10px 10px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: inherit;
+  font: inherit;
 }
-.detail-stages figcaption {
+/* stages of your own pet are its size picker */
+.detail-stage.pick {
+  cursor: pointer;
+  transition: background 130ms, border-color 130ms;
+}
+.detail-stage.pick:hover {
+  background: var(--ink2);
+  border-color: var(--line);
+}
+.detail-stage.on,
+.detail-stage.on:hover {
+  background: color-mix(in srgb, var(--tier) 10%, var(--ink2));
+  border-color: color-mix(in srgb, var(--tier) 45%, transparent);
+}
+.detail-cap {
   display: flex;
   flex-direction: column;
+  gap: 1px;
 }
-.detail-stages figcaption b {
+.detail-cap b {
   font-size: 12.5px;
   font-weight: 600;
 }
-.detail-stages figcaption span {
+.detail-cap span {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--faint);
+}
+.detail-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 6px;
+}
+.shiny-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--ink2);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 130ms, border-color 130ms, color 130ms;
+}
+.shiny-toggle i {
+  font-style: normal;
+  color: var(--faint);
+}
+.shiny-toggle:hover {
+  color: var(--text);
+}
+.shiny-toggle.on {
+  color: #ffd76a;
+  border-color: rgba(242, 193, 78, 0.45);
+  background: rgba(242, 193, 78, 0.1);
+}
+.shiny-toggle.on i {
+  color: #ffd76a;
+  text-shadow: 0 0 8px rgba(242, 193, 78, 0.7);
 }
 
 /* ── the den: companion + egg in the reader's corner ── */
