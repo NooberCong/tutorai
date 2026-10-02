@@ -1302,6 +1302,9 @@ function stone(p: Paint) {
   };
   for (const [x, y, s] of CAVE_SHROOMS) {
     const r = rng(x);
+    // each cluster on a rock of its own, in front of the crystals, its foot
+    // in the water
+    ball(p, n, x, y + 14 * s, 40 * s, rock, 0.5);
     glow(p, x, y - 14 * s, 60 * s, pink, 0.12);
     for (let i = 0; i < 4; i++) {
       const h = (16 + r() * 34) * s;
