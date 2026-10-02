@@ -1,6 +1,7 @@
 /** The hatchery: the incubator, your companion, the nest of found eggs, the
  *  week at a glance, field notes on what attracts which eggs, and the
- *  collection — every species, discovered or still a silhouette. */
+ *  collection — every species, discovered or still a silhouette; open one
+ *  you've hatched to have it read with you. */
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -215,42 +216,9 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
           </span>
         </div>
         {ELEMENTS.map((el) => (
-          <ElementRow key={el} element={el} dex={s.dex} onOpen={setDetail} />
+          <ElementRow key={el} element={el} dex={s.dex} reading={pet?.species} onOpen={setDetail} />
         ))}
       </section>
-
-      {s.pets.length > 0 && (
-        <section className="pets">
-          <div className="section-head">
-            <h2>Your pets</h2>
-            <span className="count">{s.pets.length} · pick who reads with you</span>
-          </div>
-          <div className="pet-grid">
-            {[...s.pets].reverse().map((p) => {
-              const sp = speciesById(p.species);
-              const st = stageOf(p);
-              return (
-                <button
-                  key={p.id}
-                  className={`pet-cell ${p.id === s.companionId ? "current" : ""}`}
-                  onClick={() => mutate((st2) => setCompanion(st2, p.id), true)}
-                  title={p.id === s.companionId ? "Your reading companion" : "Make companion"}
-                >
-                  <Habitat element={homeOf(p)} scale={2}>
-                    <SpeciesImg id={p.species} stage={st} shiny={p.shiny} wear={p.wear} scale={2} />
-                  </Habitat>
-                  <b>{sp?.stages[st] ?? p.species}</b>
-                  <span>
-                    {p.shiny ? "✦ " : ""}
-                    {p.id === s.companionId ? "reading with you" : STAGE_LABEL[st]}
-                    {(s.dex[p.species]?.count ?? 1) > 1 && ` · ×${s.dex[p.species].count}`}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
 
       <section className="hatchery-prefs">
         <label className="toggle-row">
@@ -475,6 +443,8 @@ function CompanionDetail(props: { pet: Pet }) {
 function ElementRow(props: {
   element: Element;
   dex: Record<string, { best: Stage; count: number; shiny: number }>;
+  /** The companion's species, marked in the row. */
+  reading?: string;
   onOpen: (s: Species) => void;
 }) {
   const list = SPECIES.filter((s) => s.element === props.element).sort(
@@ -497,12 +467,13 @@ function ElementRow(props: {
       <div className="species-row">
         {list.map((sp) => {
           const d = props.dex[sp.id];
+          const reading = sp.id === props.reading;
           return (
             <button
               key={sp.id}
-              className={`species-cell tier-${sp.tier} ${d ? "found" : "unknown"}`}
+              className={`species-cell tier-${sp.tier} ${d ? "found" : "unknown"} ${reading ? "current" : ""}`}
               onClick={() => props.onOpen(sp)}
-              title={d ? sp.name : sp.hint}
+              title={reading ? `${sp.name} · reading with you` : d ? sp.name : sp.hint}
             >
               <SpeciesImg id={sp.id} stage={d ? d.best : 0} hidden={!d} scale={3} />
               <b>{d ? sp.name : "???"}</b>
@@ -520,6 +491,8 @@ function SpeciesDetail(props: { species: Species; onClose: () => void }) {
   const s = useHatchery();
   const sp = props.species;
   const d = s.dex[sp.id];
+  const mine = s.pets.find((p) => p.species === sp.id);
+  const reading = !!mine && mine.id === s.companionId;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
     window.addEventListener("keydown", onKey);
@@ -554,9 +527,23 @@ function SpeciesDetail(props: { species: Species; onClose: () => void }) {
             {new Date(d.first).toLocaleDateString()}
           </p>
         )}
-        <button className="btn wide" onClick={props.onClose}>
-          Close
-        </button>
+        <div className="hatch-actions">
+          {mine && (
+            <button
+              className="btn primary"
+              disabled={reading}
+              onClick={() => {
+                mutate((st) => setCompanion(st, mine.id), true);
+                props.onClose();
+              }}
+            >
+              {reading ? "Reading with you" : "Read with me"}
+            </button>
+          )}
+          <button className="btn" onClick={props.onClose}>
+            Close
+          </button>
+        </div>
       </div>
     </div>,
     document.body,

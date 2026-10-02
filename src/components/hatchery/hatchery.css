@@ -503,8 +503,7 @@
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
 }
-.species-cell,
-.pet-cell {
+.species-cell {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -517,8 +516,7 @@
   transition: border-color 130ms, background 130ms;
   min-width: 0;
 }
-.species-cell:hover,
-.pet-cell:hover {
+.species-cell:hover {
   border-color: color-mix(in srgb, var(--tier, var(--t-common)) 45%, transparent);
   background: var(--ink3);
 }
@@ -527,8 +525,7 @@
     radial-gradient(70px 44px at 50% 72%, color-mix(in srgb, var(--tier) 12%, transparent), transparent),
     var(--ink2);
 }
-.species-cell b,
-.pet-cell b {
+.species-cell b {
   font-size: 12.5px;
   font-weight: 600;
   margin-top: 4px;
@@ -540,13 +537,9 @@
 .species-cell.unknown b {
   color: var(--faint);
 }
-.species-cell > span,
-.pet-cell > span {
+.species-cell > span {
   font-family: var(--mono);
   font-size: 10px;
-}
-.pet-cell > span {
-  color: var(--faint);
 }
 .species-cell .shiny-star {
   position: absolute;
@@ -554,8 +547,8 @@
   right: 8px;
   margin: 0;
 }
-.pet-grid,
-.pet-cell.current {
+/* the companion's species */
+.species-cell.current {
   border-color: rgba(242, 193, 78, 0.5);
   box-shadow: 0 0 0 1px rgba(242, 193, 78, 0.18);
 }
@@ -1122,17 +1115,6 @@
 }
 .wardrobe-icon img {
   margin-top: -18px;
-}
-/* Your pets stand in their habitats, which have room for hats. */
-.pet-grid {
-  grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
-}
-.pet-grid .pet-cell {
-  padding: 6px 6px 9px;
-}
-.pet-grid .habitat {
-  border-radius: 7px;
-  margin-bottom: 3px;
 }
 /* A hat rises above the pet's box; keep the bubble clear of it. */
 .den-pet.hatted {
