@@ -39,6 +39,9 @@ uniform float uDpr, uScale, uOy, uT, uExpo, uVig, uDim;
 out vec4 outColor;
 const vec2 S = vec2(${BACKDROP_W}.0, ${BACKDROP_H}.0);
 float t;
+/** How much of what scene() returned is its own light (lava), 0…1: the
+ *  reader dims that less, so it still glows beside the pages. */
+float glow;
 
 float N(vec2 p) { return texture(uNoise, p * (1.0 / 32.0)).r * 2.0 - 1.0; }
 float N2(vec2 p) { return texture(uNoise, p * (1.0 / 32.0)).g * 2.0 - 1.0; }
@@ -78,6 +81,7 @@ vec3 twinkle(vec3 col, vec2 P, float sky) {
 const TAIL = `
 void main() {
   t = uT;
+  glow = 0.0;
   vec2 c = vec2(gl_FragCoord.x, uSize.y * uDpr - gl_FragCoord.y) / uDpr;
   float half_ = uSize.x * 0.5;
   bool right = c.x >= half_;
@@ -89,7 +93,7 @@ void main() {
   if (m > 1.0) col /= m;
   // the reader's dimming: darkest toward the pages
   float k = right ? (uSize.x - c.x) / half_ : c.x / half_;
-  col = mix(col, vec3(5.0, 8.0, 7.0) / 255.0, mix(0.45, 0.85, k) * uDim);
+  col = mix(col, vec3(5.0, 8.0, 7.0) / 255.0, mix(0.45, 0.85, k) * uDim * (1.0 - 0.45 * glow));
   // a whisper of dither so dimmed gradients don't band
   float d = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
   outColor = vec4(col + (d - 0.5) / 255.0, 1.0);
@@ -189,10 +193,23 @@ vec3 scene(vec2 P) {
   Q.x += heat * 1.5 * sin(P.y * 0.12 - t * 2.4 + 2.0 * N(vec2(P.x * 0.02, P.y * 0.01 - t * 0.3)));
   vec3 col = base(Q);
   float L = lit(P);
-  if (m.r > 0.0) col = mix(col, lake(P, crust(P)) * L, m.r);
+  if (m.r > 0.0) {
+    float c = crust(P);
+    col = mix(col, lake(P, c) * L, m.r);
+    glow = m.r * smoothstep(0.1, 0.8, c);
+  }
+  // the rivers: streaks of crust sliding down them, and surges of fresh
+  // lava following each other down
   vec3 e = layer(Q).rgb;
-  float flow = 0.72 + 0.4 * N(vec2(P.x * 0.035, P.y * 0.022 - t * 0.05)) + 0.22 * N2(vec2(P.x * 0.09 + 5.0, P.y * 0.06 - t * 0.12));
-  col += e * e * 4.0 * flow;
+  if (e.r > 0.0) {
+    float slide = smoothstep(-0.45, 0.55, N(vec2(P.x * 0.05, P.y * 0.012 - t * 0.17)));
+    float skin = smoothstep(0.05, 0.5, N2(vec2(P.x * 0.07 + 3.0, P.y * 0.02 - t * 0.24)));
+    float surge = 0.8 + 0.3 * sin(P.y * 0.025 - t * 0.9 + 2.0 * N2(vec2(P.x * 0.01, t * 0.05)));
+    float flow = (0.25 + 0.95 * slide) * (1.0 - 0.6 * skin) * surge + 0.15 * N2(vec2(P.x * 0.1 + 5.0, P.y * 0.04 - t * 0.5));
+    vec3 light = e * e * 4.0 * flow;
+    col += light;
+    glow = max(glow, smoothstep(0.15, 0.9, max(light.r, max(light.g, light.b))));
+  }
   if (P.y < CRATER.y + 6.0) {
     vec4 s = plume(P);
     col = mix(col, s.rgb * L, s.a);
