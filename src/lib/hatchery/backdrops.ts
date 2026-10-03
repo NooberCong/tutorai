@@ -808,129 +808,371 @@ function leaf(p: Paint) {
   vignette(p, VIGNETTE.leaf);
 }
 
+/** The ember crags' volcano: the middle of its crater's mouth. Its plume
+ *  rises from here (living.ts), and now and then it throws up sparks
+ *  (ember.ts). */
+export const CRATER: readonly [number, number] = [1350, 350];
+/** The lava lake's far shore, and the horizon its surface runs toward in
+ *  perspective. Shared by the painter, living.ts (its crust drifting) and
+ *  ember.ts (bubbles breaking on it). */
+export const LAVA_SHORE = 806;
+export const LAVA_HORIZON = 650;
+/** Where bubbles rise and break on the lake, in the open lava beside the
+ *  pages: [x, y, size]. */
+export const LAVA_BUBBLES: readonly [number, number, number][] = [
+  [262, 868, 0.8],
+  [118, 916, 1],
+  [352, 944, 1.15],
+  [1228, 858, 0.75],
+  [1330, 902, 1],
+  [1262, 962, 1.2],
+];
+
+/** The volcano's flanks at x, where the cinders it throws land
+ *  (ember.ts). The painter roughens them a little. */
+export function volcanoAt(x: number): number {
+  const dx = Math.abs(x - CRATER[0]);
+  return CRATER[1] + (dx < 46 ? 3 : 480 * (1 - 1 / (1 + ((dx - 46) / 300) ** 1.6)));
+}
+
+/** The plume's middle and half-width at height h over the crater: it
+ *  leans away on the wind and spreads as it climbs. Keep in step with
+ *  plume() in living.ts. */
+export function plumeAt(h: number): [number, number] {
+  return [CRATER[0] - 0.0016 * h * h - 0.08 * h, 22 + h * 0.5];
+}
+
+const fract = (v: number) => v - Math.floor(v);
+
+/** Cells of 2-D space around (x, y), points jittered by a hash: the
+ *  distances to the nearest point and the next, and the nearest one's
+ *  hash. */
+function cells(x: number, y: number): [number, number, number] {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  let f1 = 9;
+  let f2 = 9;
+  let id = 0;
+  for (let j = -1; j <= 1; j++) {
+    for (let i = -1; i <= 1; i++) {
+      const cx = ix + i;
+      const cy = iy + j;
+      const hx = fract(Math.sin(cx * 127.1 + cy * 311.7) * 43758.5453);
+      const hy = fract(Math.sin(cx * 269.5 + cy * 183.3) * 43758.5453);
+      const dx = cx + 0.5 + 0.4 * Math.sin(Math.PI * 2 * hx) - x;
+      const dy = cy + 0.5 + 0.4 * Math.sin(Math.PI * 2 * hy) - y;
+      const e = dx * dx + dy * dy;
+      if (e < f1) {
+        f2 = f1;
+        f1 = e;
+        id = hx;
+      } else if (e < f2) f2 = e;
+    }
+  }
+  return [Math.sqrt(f1), Math.sqrt(f2), id];
+}
+
+/** The lake's crust at a point of the painting, seen in perspective:
+ *  plates of cooled skin, glowing red at their thin edges, parted by
+ *  seams of open lava, some seams healing over, a plate here and there
+ *  thin enough to glow through. 0 = cold crust … 1 = open lava. Only
+ *  trig and hashes, so living.ts's crust() — keep the two in step —
+ *  draws the same lake to the pixel, then sets it drifting. */
+function crust(X: number, Y: number): number {
+  const d = Y - LAVA_HORIZON;
+  let sx = ((X - 800) * 3.4) / d;
+  let sy = 2600 / d;
+  const wx = 0.3 * Math.sin(sy * 1.3 + 1.7 * Math.sin(sx * 0.5)) + 0.2 * Math.sin(sx * 0.9 - sy * 0.7);
+  const wy = 0.3 * Math.sin(sx * 1.1 + 1.3 * Math.sin(sy * 0.6)) + 0.2 * Math.sin(sy * 0.8 + sx * 0.5);
+  sx += wx;
+  sy += wy;
+  const [f1, f2, id] = cells(sx, sy);
+  const edge = f2 - f1;
+  // how hot this part of the lake runs: seams bright here, faint there
+  const heat = smooth(-0.6, 0.9, Math.sin(sx * 0.35 + 1.5 * Math.sin(sy * 0.3)) + 0.6 * Math.sin(sy * 0.55 - sx * 0.2));
+  const seam = Math.exp(-((edge / (0.035 + 0.05 * heat)) ** 2));
+  const rim = Math.exp(-edge / 0.16);
+  // finer cracks across the plates
+  const [g1, g2] = cells(sx * 2.6 + 7, sy * 2.6);
+  const crack = Math.exp(-(((g2 - g1) / 0.05) ** 2)) * 0.35;
+  // a plate here and there thinner, glowing through
+  const thin = smooth(0.85, 1, id) * heat * 0.3;
+  return clamp(seam * (0.45 + 0.55 * heat) + rim * 0.22 * heat + crack * heat + thin);
+}
+
 function ember(p: Paint) {
   const n = perlin(3);
   const n2 = perlin(4);
-  sky(p, [[0, "#12070f"], [0.3, "#2a0c18"], [0.55, "#5a1a1e"], [0.7, "#a84020"], [0.76, "#e07a30"], [1, "#2a0d10"]]);
-  const lava = hex("#ff7a28");
+  const [cx, cy] = CRATER;
+  const lava = hex("#ff6a1c");
   const hot = hex("#ffd27a");
+  const fire = hex("#ff8a3a");
+  sky(p, [[0, "#0a0610"], [0.22, "#190a14"], [0.42, "#341219"], [0.56, "#5e1e1c"], [0.64, "#923820"], [0.7, "#c05a28"], [1, "#2a0d10"]]);
 
-  // smoke rolling over the sky, lit from below by the lava (live: it
-  // billows, channel 1)
+  // a ruddy moon, dim through the ash
+  const [mx, my, mr] = [250, 196, 40];
+  glow(p, mx, my, mr * 2.4, hex("#c0603e"), 0.22);
+  const [moonDark, moonLit] = [hex("#c8704c"), hex("#ffcfa8")];
+  p.each(mx - mr - 2, my - mr - 2, mx + mr + 2, my + mr + 2, (X, Y, i) => {
+    const d = Math.hypot(X - mx, Y - my) / mr;
+    const cov = clamp((1 - d) * mr * p.k + 0.5);
+    if (cov <= 0) return;
+    mix(moonDark, moonLit, clamp(0.8 - d * d * 0.4 + fbm(n2, X * 0.045, Y * 0.045, 3) * 0.45));
+    p.over(i, cov * 0.62);
+  });
+
+  // ash clouds, their undersides lit by the fire below (live: they
+  // billow, channel 1)
   p.tag(1, 20);
   p.brush[1] = 1;
+  const soot = hex("#140a10");
+  const ruddy = hex("#7a2a1e");
+  const moonlit = hex("#b47a6c");
   p.each(0, 0, W, 640, (X, Y, i) => {
-    const wx = fbm(n2, X * 0.0015, Y * 0.003, 3) * 140;
-    const d = fbm(n, (X + wx) * 0.0022, Y * 0.0045, 6);
-    const a = smooth(-0.05, 0.4, d) * (1 - smooth(420, 640, Y)) * 0.9;
-    if (a <= 0) return;
-    const under = clamp((fbm(n, (X + wx) * 0.0022, (Y + 14) * 0.0045, 6) - d) * -8 + 0.3);
-    const near = Math.exp(-(((X - 1270) / 500) ** 2) - ((Y - 330) / 300) ** 2);
-    mix(hex("#1a0a10"), hex("#8a3020"), clamp(Y / 700 + near * 0.7) * (0.4 + under * 0.8));
-    p.over(i, a);
+    const wx = fbm(n2, X * 0.0015, Y * 0.003, 3) * 160;
+    // (and a thin bank drawn across the moon)
+    const veil = Math.exp(-(((X - mx) / 190) ** 2) - ((Y - my - 8) / 30) ** 2) * 0.32;
+    const dens = (y: number, oct: number) =>
+      fbm(n, (X + wx) * 0.0017, y * 0.0055, oct) + (veil > 0.003 ? veil * Math.exp(-(((y - my - 8) / 16) ** 2)) * (0.6 + fbm(n2, X * 0.01, y * 0.05, 3)) : 0);
+    const d = dens(Y, 5);
+    const a = smooth(-0.1, 0.32, d) * smooth(0, 50, Y) * (1 - smooth(430, 620, Y));
+    if (a <= 0.004) return;
+    // thinner just below: an underside, catching the light
+    const under = clamp((d - dens(Y + 16, 3)) * 7 + 0.35);
+    const heat = Math.exp(-(((X - cx) / 560) ** 2) - ((Y - 340) / 300) ** 2) + smooth(200, 620, Y) * 0.5;
+    const moon = Math.exp(-(((X - mx) / 200) ** 2) - ((Y - my) / 130) ** 2);
+    mix(soot, ruddy, clamp(heat * (0.25 + under * 0.9)));
+    toward(fire, clamp(heat - 0.35) * under * 0.55);
+    toward(moonlit, moon * (1 - under) * 0.45);
+    p.over(i, a * 0.94);
   });
   p.brush[1] = 0;
-  glow(p, 800, 740, 520, hex("#ff8a3a"), 0.22);
 
-  // far range, rim-lit
-  land(p, curve((X) => 700 - 200 * ridged(n, X * 0.0024, 0.3, 5)), (X, Y, d) => {
-    const b = bump(n2, X, Y, 0.01, 0.004);
-    mix(hex("#3a1420"), hex("#6a2424"), clamp(0.3 + b * 0.4));
-    toward(hex("#9a3a24"), 0.35 * (1 - smooth(0, 180, d)));
-    toward(hot, (1 - smooth(0, 3, d)) * 0.45);
+  // the plume (live: living.ts draws it rising)
+  if (!p.live) {
+    const [smokeDark, smokeLit] = [hex("#2a1416"), hex("#5a2c26")];
+    p.each(cx - 760, 0, cx + 240, cy + 4, (X, Y, i) => {
+      const h = cy - Y;
+      const [pc, hw] = plumeAt(h);
+      const q = Math.abs(X - pc) / hw;
+      if (q > 1.6) return;
+      const b = fbm(n, (X - pc) * 0.012, Y * 0.01, 4);
+      const a = smooth(1.15, 0.45, q - b * 0.6) * smooth(-6, 20, h) * (1 - smooth(200, 360, h) * 0.6);
+      if (a <= 0) return;
+      const low = Math.exp(-h / 150);
+      mix(smokeDark, smokeLit, clamp(0.4 + b));
+      toward(fire, low * 0.7 * clamp(0.6 - b));
+      p.over(i, a * 0.9);
+    });
+  }
+
+  // the far range, and a smaller volcano smoking on it
+  const far = curve((X) => Math.min(668 - 110 * ridged(n, X * 0.0026, 0.3, 5), 566 + Math.abs(X - 350) * 0.62 + 6 * n(X * 0.06, 2)));
+  const [farDark, farLit, farRim] = [hex("#3a141e"), hex("#5a2026"), hex("#a84426")];
+  land(p, far, (X, Y, d) => {
+    mix(farDark, farLit, clamp(0.35 + bump(n2, X, Y, 0.01, 0.004) * 0.4));
+    toward(farRim, 0.3 * (1 - smooth(0, 140, d)));
+    toward(hot, (1 - smooth(0, 2.5, d)) * 0.35);
+    // its thread of lava
+    const lx = 350 + 14 * fbm(n2, Y * 0.02, 4, 2) * smooth(566, 640, Y);
+    toward(lava, Math.exp(-(((X - lx) / 3) ** 2)) * smooth(562, 572, Y) * (1 - smooth(610, 670, Y)) * 0.8);
     return 1;
   });
+  glow(p, 350, 570, 26, lava, 0.4);
+  mist(p, n2, 600, 720, hex("#8a3424"), 0.35);
 
-  // the volcano, lava pouring down
-  const cone = curve((X) => {
-    const dx = Math.abs(X - 1270);
-    const rim = 350 + 8 * n(X * 0.05, 1);
-    return dx < 60 ? rim + 6 : rim + 440 * (1 - 1 / (1 + ((dx - 60) / 300) ** 1.7)) + 12 * fbm(n2, X * 0.01, 3, 3);
+  // the volcano: gullies running down from the rim, lava pouring down
+  // them
+  const cone = curve((X) => volcanoAt(X) + 5 * n(X * 0.06, 1) + 10 * fbm(n2, X * 0.012, 3, 3) * smooth(46, 120, Math.abs(X - cx)));
+  /** A river from the rim at x0, swinging `drift` aside by the foot: its
+   *  middle by height, sampled once. */
+  const river = (x0: number, drift: number, w: number, seed: number) => ({
+    w,
+    seed,
+    mid: curve((Y) => {
+      const t = clamp((Y - cy) / (LAVA_SHORE - cy));
+      return x0 + drift * t * t + 26 * fbm(n2, Y * 0.01, seed, 3) * t;
+    }),
   });
-  const flows = [
-    { x0: 1250, drift: -150, w: 1, seed: 5 },
-    { x0: 1295, drift: 170, w: 0.8, seed: 6 },
-    { x0: 1270, drift: 20, w: 0.5, seed: 7 },
-  ];
-  const flowAt = (f: (typeof flows)[number], Y: number) => {
-    const t = clamp((Y - 350) / 440);
-    return { cx: f.x0 + f.drift * t * t + 24 * fbm(n2, Y * 0.01, f.seed, 3) * t, hw: (3 + 9 * t) * f.w, t };
+  const rivers = [river(cx - 16, -190, 1, 5), river(cx + 18, 110, 0.8, 6), river(cx + 2, -36, 0.55, 7)];
+  /** A river at height Y: its two braids' middles, and their half-width. */
+  const riverAt = (f: (typeof rivers)[number], Y: number) => {
+    const t = clamp((Y - cy) / (LAVA_SHORE - cy));
+    const c = f.mid(Y);
+    const split = 7 * f.w * Math.max(0, Math.sin(t * 9 + f.seed)) * t;
+    return { a: c - split, b: c + split, hw: (2.5 + 8 * t) * f.w, t };
   };
+  const heatOf = (X: number, Y: number) => {
+    let h = 0;
+    for (const f of rivers) {
+      const { a, b, hw } = riverAt(f, Y);
+      h += Math.exp(-(((X - a) / (hw * 6 + 18)) ** 2)) + Math.exp(-(((X - b) / (hw * 6 + 18)) ** 2));
+    }
+    return clamp(h * 0.6);
+  };
+  const gully = (X: number, Y: number) => ridged(n, Math.atan2(X - cx, Y - cy + 60) * 7, Math.sqrt(Math.max(0, Y - cy)) * 0.22, 4);
+  const [slopeDark, slopeLit, slopeHot, foot] = [hex("#1a080c"), hex("#4a1a1a"), hex("#c0481e"), hex("#7a2a18")];
   land(p, cone, (X, Y, d) => {
-    const b = bump(n, X, Y, 0.012, 0.003, 1, -0.3);
-    mix(hex("#1e0a10"), hex("#4a1a1c"), clamp(0.35 + b * 0.35 - smooth(0, 300, d) * 0.2));
-    let heat = 0;
-    for (const f of flows) {
-      const { cx, hw } = flowAt(f, Y);
-      heat += Math.exp(-(((X - cx) / (hw * 7 + 20)) ** 2));
-    }
-    toward(hex("#a8401e"), clamp(heat) * 0.55);
+    // the ridges between gullies lit on the side toward the crater's glow
+    const g = gully(X, Y);
+    const slope = (gully(X + 2, Y) - g) * 2 * (X < cx ? 1 : -1);
+    mix(slopeDark, slopeLit, clamp(0.3 + g * 0.35 + slope * 3 + bump(n2, X, Y, 0.02, 0.01) * 0.15 - smooth(0, 320, d) * 0.15));
+    toward(slopeHot, heatOf(X, Y) * 0.6);
+    // the rim, lit from the crater
+    toward(fire, Math.exp(-d / 26) * smooth(140, 20, Math.abs(X - cx)) * 0.5);
+    // and the foot, by the lake
+    toward(foot, smooth(700, 806, Y) * 0.5);
     return 1;
   });
-  // the lava's own light (live: a layer, its crust creeping downhill)
+  // the lava's own light, and the crater's (live: a layer, its crust
+  // creeping downhill)
   p.beginLayer("add");
-  p.each(900, 330, 1650, 800, (X, Y, i) => {
+  p.each(cx - 420, cy - 20, cx + 300, LAVA_SHORE + 4, (X, Y, i) => {
     if (Y < cone(X) - 1) return;
-    for (const f of flows) {
-      const { cx, hw, t } = flowAt(f, Y);
-      const d = Math.abs(X - cx) / hw;
+    for (const f of rivers) {
+      const { a, b, hw, t } = riverAt(f, Y);
+      const d = Math.min(Math.abs(X - a), Math.abs(X - b)) / hw;
       if (d > 6) continue;
-      const crust = smooth(0.2, 0.7, n(X * 0.15, Y * 0.06) * 0.5 + 0.5) * t * 0.6;
-      p.add(i, lava, Math.exp(-d * d * 0.6) * 1.1 * (1 - crust * 0.6) + Math.exp(-d * 0.8) * 0.25);
-      p.add(i, hot, Math.exp(-d * d * 2) * 0.9 * (1 - crust));
+      const skin = smooth(0.15, 0.7, n(X * 0.15, Y * 0.06) * 0.5 + 0.5) * t * 0.6;
+      p.add(i, lava, Math.exp(-d * d * 0.6) * 1.1 * (1 - skin * 0.6) + Math.exp(-d * 0.8) * 0.22);
+      p.add(i, hot, Math.exp(-d * d * 2) * 0.9 * (1 - skin));
     }
   });
+  // the mouth, molten
+  p.each(cx - 60, cy - 14, cx + 60, cy + 14, (X, Y, i) => {
+    const e = Math.hypot((X - cx) / 46, (Y - cy - 2) / 8);
+    if (e > 1.6 || Y > cone(X) + 2) return;
+    p.add(i, hot, Math.exp(-e * e * 2) * 1.4);
+    p.add(i, lava, Math.exp(-e * e) * 0.8);
+  });
   p.endLayer();
-  glow(p, 1270, 345, 110, hot, 0.9);
-  glow(p, 1270, 330, 300, lava, 0.35);
+  glow(p, cx, cy - 4, 44, hot, 0.6);
+  glow(p, cx, cy - 20, 200, lava, 0.24);
 
-  // spires on the left, rim-lit on the side facing the fire
-  const spire = (cx: number, top: number, wb: number, lean: number, seed: number) => {
-    const sn = perlin(seed);
-    strand(
-      p,
-      top,
-      790,
-      (v) => cx + lean * (1 - v),
-      (v, Y) => (wb * 0.25 + wb * 0.75 * v ** 0.7) / 2 + 6 * sn(Y * 0.03, 0.5),
-      (X, Y, u, v) => {
-        const b = bump(sn, X, Y, 0.02, 0.008);
-        mix(hex("#150810"), hex("#3a1418"), clamp(0.3 + b * 0.35));
-        toward(hex("#ff8a3a"), smooth(0.55, 1, u) * 0.55 * (0.4 + v * 0.6));
-        return 1;
-      },
-    );
+  // basalt columns: the cliff on the left, a few on the right; their
+  // faces toward the lava lit by it
+  /** A column `w` across from `top` down to `base`, broken off at a slant;
+   *  `side` is the face toward the light (1 right, -1 left). */
+  const column = (x: number, top: number, base: number, w: number, side: number, near: number, seed: number) => {
+    const r = rng(seed);
+    const tilt = (r() - 0.5) * 0.9;
+    // turned a little each: where its faces meet, and how much light it gets
+    const e1 = -0.5 + (r() - 0.5) * 0.4;
+    const e2 = 0.3 + (r() - 0.5) * 0.4;
+    const k = 0.75 + r() * 0.35;
+    const joints: number[] = [];
+    for (let y = top + 50 + r() * 120; y < base - 30; y += 90 + r() * 160) joints.push(y);
+    const dark = times(hex("#140709"), 1 - near * 0.3);
+    const mid = times(hex("#3a1716"), 1 - near * 0.2);
+    const lit = hex("#d0602c");
+    const rim = hex("#ffa060");
+    const broken = hex("#6a3028");
+    const hw = w / 2;
+    p.each(x - hw - 1, top - hw, x + hw + 1, base, (X, Y, i) => {
+      const u = (X - x) / hw;
+      if (Math.abs(u) > 1 + 1 / (hw * p.k)) return;
+      const lid = top + tilt * u * hw + 2 * n(X * 0.08, seed);
+      const cov = clamp((1 - Math.abs(u)) * hw * p.k + 0.5) * clamp((Y - lid) * p.k + 0.5);
+      if (cov <= 0) return;
+      // three faces of the prism: away from the light, front, toward it
+      const s = u * side;
+      const face = (s < e1 ? 0.05 : s < e2 ? 0.38 : 1) * k;
+      const grain = fbm(n2, X * 0.1, Y * 0.01, 3) * 0.2;
+      // the lava below lights them more the lower down
+      const warm = 0.25 + 0.75 * smooth(top - 60, base + 40, Y) ** 1.6;
+      ramp(face * warm * 0.95 + grain, dark, mid, lit);
+      // the edge where the lit face turns, catching it
+      toward(rim, Math.exp(-((((s - e2) * hw) / 1.4) ** 2)) * warm * 0.4);
+      // and a dark seam between one column and the next
+      scale(1 - smooth(0.8, 1, Math.abs(u)) * 0.5);
+      // joints: a dark crack, its lower lip lit
+      for (const jy of joints) {
+        const dy = Y - jy - tilt * u * hw * 0.6;
+        if (dy > -1.6 && dy < 0.6) scale(0.4);
+        else if (dy >= 0.6 && dy < 2.6) toward(rim, face * warm * 0.3);
+      }
+      // the broken top, lit by the sky's glow
+      toward(broken, smooth(5, 0, Y - lid) * 0.6);
+      toward(lava, near * face * smooth(base - 80, base, Y) * 0.25);
+      p.over(i, cov);
+    });
   };
-  spire(90, 220, 150, 16, 41);
-  spire(230, 370, 110, 10, 42);
-  spire(360, 290, 150, -12, 43);
-  spire(480, 520, 80, 6, 44);
-  spire(1560, 420, 120, -10, 45);
+  // the cliff stepping down toward the lake, and its fallen pieces
+  const r = rng(13);
+  for (let x = -14; x < 260; x += 30 + r() * 12) {
+    const top = 150 + 470 * smooth(20, 280, x) ** 1.3 + (r() - 0.5) * 80;
+    column(x, top, 830, 30 + r() * 12, 1, 0, 100 + x);
+  }
+  for (let x = 1616; x > 1500; x -= 32 + r() * 10) column(x, 500 + (1616 - x) * 1.1 + (r() - 0.5) * 60, 830, 32 + r() * 10, -1, 0, 200 + x);
+  // the lava lake (live: channel 0, its crust drifting)
+  const shore = curve((X) => LAVA_SHORE + 5 * fbm(n2, X * 0.01, 6.5, 3));
+  p.tag(0);
+  p.brush[0] = 1;
+  const crustC = hex("#170605");
+  const crustL = hex("#3a1209");
+  const red = hex("#b8300e");
+  land(p, shore, (X, Y, d) => {
+    const c = crust(X, Y);
+    // far off, the plates too small to tell apart: a glow
+    const far = smooth(36, 0, d);
+    mix(crustC, crustL, clamp(0.4 + fbm(n, X * 0.05, Y * 0.14, 3) * 0.8));
+    toward(red, smooth(0, 0.35, c) * 0.8 + far * 0.4);
+    toward(lava, smooth(0.25, 0.75, c) + far * 0.3);
+    toward(hot, smooth(0.65, 1, c) * 0.8);
+    // brightest along the far shore, where the rivers run in
+    toward(hot, Math.exp(-d / 4) * 0.5);
+    return 1;
+  });
+  p.brush[0] = 0;
+  glow(p, 1200, LAVA_SHORE, 46, hot, 0.5);
+  glow(p, 800, LAVA_SHORE + 20, 600, fire, 0.1);
 
-  // the ground, split by glowing cracks; a darker lip in front
-  const ground = curve((X) => 770 + 16 * fbm(n2, X * 0.004, 2.5, 3));
-  land(p, ground, (X, Y, d) => {
-    const b = bump(n, X, Y, 0.008, 0.02);
-    mix(hex("#12060a"), hex("#321216"), clamp(0.3 + b * 0.3 - smooth(0, 200, d) * 0.2));
-    return 1;
-  });
-  p.beginLayer("add");
-  p.each(0, 760, W, H, (X, Y, i) => {
-    if (Y < ground(X)) return;
-    const c = ridged(n2, X * 0.004, Y * 0.013, 3);
-    const side = smooth(250, 600, Math.abs(X - 800));
-    const v = smooth(0.84, 0.97, c) * side;
-    if (v > 0) {
-      p.add(i, lava, v * 0.9);
-      p.add(i, hot, smooth(0.94, 0.99, c) * side * 0.6);
-    }
-  });
-  p.endLayer();
-  land(p, curve((X) => 905 + 20 * fbm(n, X * 0.005, 7.7, 3)), (X, Y) => {
-    mix(hex("#0c0407"), hex("#26100f"), clamp(0.3 + bump(n2, X, Y, 0.01, 0.02) * 0.3));
-    return 1;
-  });
-  glow(p, 800, 735, 700, hex("#ff6a20"), 0.08);
+  // broken columns standing in the lava, low enough to see their tops:
+  // hexagons, lit by the sky's glow, their sides by the lava
+  const top6 = hex("#26100f");
+  const side6 = hex("#1a0809");
+  const top6Lit = hex("#6a3228");
+  const side6Lit = hex("#8a3418");
+  const edge6 = hex("#ffb070");
+  const stump = (x: number, y: number, R: number, h: number, seed: number) => {
+    const q = 0.36;
+    const ry = R * q * Math.sin(Math.PI / 3);
+    // the hexagon's outline below and above its middle, at x
+    const rimAt = (dx: number) => ry * clamp((R - Math.abs(dx)) / (R / 2));
+    p.each(x - R - 1, y - ry - 1, x + R + 1, y + ry + h + 1, (X, Y, i) => {
+      const dx = X - x;
+      const e = rimAt(dx);
+      const cx_ = clamp((R - Math.abs(dx)) * p.k + 0.5);
+      if (cx_ <= 0) return;
+      const dy = Y - y;
+      if (dy < -e - 1) return;
+      if (dy <= e) {
+        // the top: cracked basalt, its edge catching the light
+        const cov = cx_ * clamp((dy + e) * p.k + 0.5);
+        const edge = Math.min(R - Math.abs(dx), e - Math.abs(dy) * 0.9);
+        const cracks = smooth(0.82, 0.95, ridged(n2, X * 0.06 + seed, Y * 0.16, 3));
+        mix(top6, top6Lit, clamp(0.3 + fbm(n, X * 0.08 + seed, Y * 0.2, 3) * 0.7 - dy / ry * 0.15 - cracks * 0.4));
+        toward(edge6, Math.exp(-edge / 1.1) * 0.28);
+        p.over(i, cov);
+        return;
+      }
+      if (dy > e + h) return;
+      // the sides: three faces, the one toward the middle of the lake lit
+      const f = dx < -R / 2 ? 0 : dx < R / 2 ? 1 : 2;
+      const toLake = x < W / 2 ? 2 : 0;
+      const v = (dy - e) / h;
+      mix(side6, side6Lit, clamp((f === toLake ? 0.5 : f === 1 ? 0.26 : 0.06) + v * 0.45 + fbm(n2, X * 0.14, Y * 0.015, 3) * 0.3));
+      toward(edge6, Math.exp(-(dy - e) / 1.2) * 0.3);
+      // where it meets the lava: molten
+      toward(lava, smooth(0.6, 1, v) * 0.7);
+      p.over(i, cx_ * clamp((e + h - dy) * p.k + 0.5));
+    });
+    glow(p, x, y + ry + h, R * 0.8, lava, 0.18);
+  };
+  for (const [x, y, R, h] of [[300, 874, 16, 8], [1196, 866, 13, 6], [1420, 904, 18, 10], [176, 948, 34, 30], [70, 910, 46, 90], [-6, 950, 56, 70], [118, 990, 44, 40], [1470, 960, 34, 24], [1556, 920, 50, 90], [1640, 960, 60, 60], [1500, 1000, 44, 40]] as const) stump(x, y, R, h, x);
+
+  // sparks in the air (live: ember.ts)
+  if (!p.live) motes(p, 33, 70, [0, 300, W, 900], [1, 2.6], [hot, lava, fire], 0.7);
   vignette(p, VIGNETTE.ember);
 }
 

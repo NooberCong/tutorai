@@ -1,10 +1,11 @@
 /** The living backdrop: the habitat painting redrawn every frame by a
  *  WebGL shader, so its big features move. Aurora curtains ripple and
  *  surge, kelp sways in the swell under a moving surface, clouds billow,
- *  lava creeps, crowns and grass stir in the wind, the moonlit oak bends
- *  in the gusts, drips ring the cavern's pool, mist drifts through
- *  the hollows, fires burn in the library's fireplaces, and the runes on
- *  the study floor turn.
+ *  the volcano's plume climbs, lava creeps down its flanks and the
+ *  crust drifts on the lava lake, crowns and grass stir in the wind, the
+ *  moonlit oak bends in the gusts, drips ring the cavern's pool, mist
+ *  drifts through the hollows, fires burn in the library's fireplaces,
+ *  and the runes on the study floor turn.
  *
  *  The painter (backdrops.ts, `paintLive`) leaves the moving parts out of
  *  the painting and records where they go: masks for what sways and for
@@ -19,7 +20,7 @@
  *  cheap. It runs in the ambience worker, off the main thread. */
 
 import type { Element } from "./kit.ts";
-import { BACKDROP_H, BACKDROP_W, CAVE_WATER, DRIPS, FIRES, FIRE_BASE, VIGNETTE, backdropExposure, type LiveBackdrop } from "./backdrops.ts";
+import { BACKDROP_H, BACKDROP_W, CAVE_WATER, CRATER, DRIPS, FIRES, FIRE_BASE, LAVA_HORIZON, LAVA_SHORE, VIGNETTE, backdropExposure, type LiveBackdrop } from "./backdrops.ts";
 
 const VERT = `#version 300 es
 void main() {
@@ -111,19 +112,92 @@ vec3 scene(vec2 P) {
   float dap = smoothstep(-0.1, 0.5, fbm(vec2(P.x * 0.006 - t * 0.02, P.y * 0.018 + t * 0.008)));
   return col * (1.0 + mask(Q).a * (dap - 0.45) * 0.3);
 }`,
-  // smoke billows and rises (1); the lava's light creeps downhill (layer);
-  // heat shimmers over the crater
+  // the ash clouds billow (1); the plume climbs out of the crater, its
+  // billows lit from below; the lava's light creeps down the rivers
+  // (layer); the lake's crust (0) drifts toward you, its plates grinding
+  // and its seams brightening and fading; heat shimmers over both
   ember: `
+const vec2 CRATER = vec2(${CRATER[0]}.0, ${CRATER[1]}.0);
+float hash(vec2 c, vec2 k) { return fract(sin(dot(c, k)) * 43758.5453); }
+/** As cells() in backdrops.ts, the points wandering a little with time:
+ *  the distances to the nearest and the next, and the nearest one's hash. */
+vec3 cells(vec2 s, float drift) {
+  vec2 i0 = floor(s);
+  float f1 = 9.0, f2 = 9.0, id = 0.0;
+  for (int j = -1; j <= 1; j++)
+    for (int i = -1; i <= 1; i++) {
+      vec2 c = i0 + vec2(i, j);
+      float hx = hash(c, vec2(127.1, 311.7)), hy = hash(c, vec2(269.5, 183.3));
+      vec2 d = c + 0.5 + 0.4 * sin(6.2831853 * vec2(hx, hy) + drift * vec2(hy - 0.5, hx - 0.5)) - s;
+      float e = dot(d, d);
+      if (e < f1) { f2 = f1; f1 = e; id = hx; } else if (e < f2) f2 = e;
+    }
+  return vec3(sqrt(f1), sqrt(f2), id);
+}
+/** crust() in backdrops.ts, drifting: the same lake at t = 0. */
+float crust(vec2 P) {
+  float d = P.y - ${LAVA_HORIZON}.0;
+  // the surface flows slowly toward you and to the left
+  vec2 s = vec2((P.x - 800.0) * 3.4 / d + t * 0.012, 2600.0 / d + t * 0.03);
+  s += vec2(0.3 * sin(s.y * 1.3 + 1.7 * sin(s.x * 0.5)) + 0.2 * sin(s.x * 0.9 - s.y * 0.7),
+            0.3 * sin(s.x * 1.1 + 1.3 * sin(s.y * 0.6)) + 0.2 * sin(s.y * 0.8 + s.x * 0.5));
+  vec3 c = cells(s, t * 0.12);
+  float edge = c.y - c.x;
+  float heat = smoothstep(-0.6, 0.9, sin(s.x * 0.35 + 1.5 * sin(s.y * 0.3) + t * 0.05) + 0.6 * sin(s.y * 0.55 - s.x * 0.2 - t * 0.04));
+  float seam = exp(-pow(edge / (0.035 + 0.05 * heat), 2.0));
+  float rim = exp(-edge / 0.16);
+  vec3 g = cells(s * 2.6 + vec2(7.0, 0.0), t * 0.2);
+  float crack = exp(-pow((g.y - g.x) / 0.05, 2.0)) * 0.35;
+  float thin = smoothstep(0.85, 1.0, c.z) * heat * 0.3;
+  return clamp(seam * (0.45 + 0.55 * heat) + rim * 0.22 * heat + crack * heat + thin, 0.0, 1.0);
+}
+/** The lake's colour from its crust, as the painter mixes it. */
+vec3 lake(vec2 P, float c) {
+  float d = P.y - ${LAVA_SHORE}.0;
+  float far = 1.0 - smoothstep(0.0, 36.0, d);
+  vec3 col = mix(rgb(23.0, 6.0, 5.0), rgb(58.0, 18.0, 9.0), clamp(0.4 + 0.5 * N(vec2(P.x * 0.05, P.y * 0.14)), 0.0, 1.0));
+  col = mix(col, rgb(184.0, 48.0, 14.0), clamp(smoothstep(0.0, 0.35, c) * 0.8 + far * 0.4, 0.0, 1.0));
+  col = mix(col, rgb(255.0, 106.0, 28.0), clamp(smoothstep(0.25, 0.75, c) + far * 0.3, 0.0, 1.0));
+  col = mix(col, rgb(255.0, 210.0, 122.0), smoothstep(0.65, 1.0, c) * 0.8);
+  return mix(col, rgb(255.0, 210.0, 122.0), exp(-max(d, 0.0) / 4.0) * 0.5);
+}
+/** The plume at P: rgb and cover. Its shape is plumeAt() in backdrops.ts. */
+vec4 plume(vec2 P) {
+  float h = CRATER.y - P.y;
+  if (h < -6.0) return vec4(0.0);
+  float x = P.x - (CRATER.x - 0.0016 * h * h - 0.08 * h);
+  float q = abs(x) / (22.0 + h * 0.5);
+  if (q > 1.7) return vec4(0.0);
+  // billows climbing with the smoke, and turning over as they go
+  vec2 s = vec2(x, P.y + t * 9.0) * 0.009;
+  s += 0.4 * vec2(N(s * 0.6 + vec2(0.0, t * 0.03)), N2(s * 0.6 + vec2(4.0, t * 0.025)));
+  float b = fbm(s);
+  float a = (1.0 - smoothstep(0.35, 1.1, q - b * 0.7)) * smoothstep(-6.0, 20.0, h) * (1.0 - smoothstep(200.0, 360.0, h) * 0.5);
+  // lit from the crater: the low billows, and their undersides
+  float under = clamp((b - fbm(s + vec2(0.0, 0.08))) * 5.0 + 0.5, 0.0, 1.0);
+  vec3 c = mix(rgb(40.0, 20.0, 22.0), rgb(104.0, 52.0, 44.0), clamp(0.5 + b * 1.2, 0.0, 1.0));
+  c += rgb(255.0, 132.0, 56.0) * (exp(-h / 110.0) * 0.75 + under * 0.22 * exp(-h / 320.0)) * clamp(0.7 - b, 0.2, 1.0);
+  return vec4(c, a * 0.9);
+}
 vec3 scene(vec2 P) {
   vec4 m = mask(P);
   vec2 w = vec2(N(vec2(P.x * 0.004 + t * 0.012, P.y * 0.006 + t * 0.02)), N2(vec2(P.x * 0.004 + 13.0, P.y * 0.006 + t * 0.028)));
   vec2 Q = P + m.g * w * 16.0;
-  float heat = exp(-pow((P.x - 1270.0) / 170.0, 2.0)) * smoothstep(80.0, 330.0, P.y) * (1.0 - smoothstep(330.0, 390.0, P.y));
-  Q.x += heat * 1.6 * sin(P.y * 0.12 - t * 2.6 + 2.0 * N(vec2(P.x * 0.02, P.y * 0.01 - t * 0.3)));
+  // heat shimmer over the crater, and over the lake's far shore
+  float heat = exp(-pow((P.x - CRATER.x) / 150.0, 2.0)) * smoothstep(60.0, 300.0, P.y) * (1.0 - smoothstep(CRATER.y - 20.0, CRATER.y + 30.0, P.y));
+  heat += smoothstep(${LAVA_SHORE - 110}.0, ${LAVA_SHORE}.0, P.y) * (1.0 - smoothstep(${LAVA_SHORE}.0, ${LAVA_SHORE + 6}.0, P.y)) * 0.6;
+  Q.x += heat * 1.5 * sin(P.y * 0.12 - t * 2.4 + 2.0 * N(vec2(P.x * 0.02, P.y * 0.01 - t * 0.3)));
   vec3 col = base(Q);
+  float L = lit(P);
+  if (m.r > 0.0) col = mix(col, lake(P, crust(P)) * L, m.r);
   vec3 e = layer(Q).rgb;
   float flow = 0.72 + 0.4 * N(vec2(P.x * 0.035, P.y * 0.022 - t * 0.05)) + 0.22 * N2(vec2(P.x * 0.09 + 5.0, P.y * 0.06 - t * 0.12));
-  return col + e * e * 4.0 * flow;
+  col += e * e * 4.0 * flow;
+  if (P.y < CRATER.y + 6.0) {
+    vec4 s = plume(P);
+    col = mix(col, s.rgb * L, s.a);
+  }
+  return col;
 }`,
   // the surface overhead moves and refracts; caustics dance on the sand
   // (3); kelp sways in the swell (layer)

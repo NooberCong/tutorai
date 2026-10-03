@@ -1,10 +1,11 @@
 /** Ambience: what drifts over a reader backdrop — pollen and falling
- *  leaves, butterflies and songbirds (wildlife.ts), embers, bubbles, fish,
- *  snow, meteors, fireflies, crystal glints, glowworms and drips (cave.ts),
- *  candle flicker — in the same
- *  1600×1000 scene space as the painting, mapped the way the reader shows
- *  it: two halves, each pinned to its own edge and cropped to cover. The
- *  painting's own big features move in living.ts.
+ *  leaves, butterflies and songbirds (wildlife.ts), sparks, ash, lava
+ *  bubbles and the volcano's coughs (ember.ts), bubbles, fish, snow,
+ *  meteors, fireflies, crystal glints, glowworms and drips (cave.ts),
+ *  candle flicker — in the same 1600×1000 scene space as the painting,
+ *  mapped the way the reader shows it: two halves, each pinned to its own
+ *  edge and cropped to cover. The painting's own big features move in
+ *  living.ts.
  *
  *  Everything moves slowly and continuously (time-based, eased by sums of
  *  sines, no jumps), so it reads as calm. It runs in a worker on an
@@ -12,8 +13,9 @@
  *  main thread. */
 
 import type { Element } from "./kit.ts";
-import { CAVE_CRACK, CAVE_SHROOMS, FIRES } from "./backdrops.ts";
+import { CAVE_CRACK, CAVE_SHROOMS, CRATER, FIRES, LAVA_SHORE } from "./backdrops.ts";
 import { bat, beamDust, drips, glowworms } from "./cave.ts";
+import { ash, eruptions, lavaBubbles, sparks } from "./ember.ts";
 import { butterflies, songbirds } from "./wildlife.ts";
 
 const W = 1600;
@@ -820,9 +822,18 @@ const LAYERS: Record<Element, () => Layer[]> = {
     leaves(9, [[20, 60, 480, 260], [1120, 60, 1580, 240], [260, 300, 440, 380]], ["#6f9f48", "#8cb85a", "#a8c460", "#5a8a3e"], 3),
   ],
   ember: () => [
-    pulse(1270, 345, 170, "#ffb14a", 0.14, 0.1, 6, false, 1),
-    pulse(1270, 700, 260, "#ff6a20", 0.06, 0.05, 9, false, 2),
-    motes({ n: 110, area: [0, 120, W, 920], v: [5, -34], spread: [6, 14], wander: 16, size: [1.2, 3.6], colors: ["#ff7a28", "#ffd27a", "#ff9a40"], alpha: [0.5, 1], twinkle: 1.3, core: true, depth: true, seed: 3 }),
+    // the crater and the lake breathing
+    pulse(CRATER[0], CRATER[1] - 6, 110, "#ffb14a", 0.12, 0.08, 7, false, 1),
+    pulse(220, 900, 260, "#ff6a20", 0.05, 0.04, 11, false, 2),
+    pulse(1380, 900, 260, "#ff6a20", 0.05, 0.04, 13, false, 4),
+    ash(70, 64),
+    eruptions(65),
+    lavaBubbles(66),
+    // sparks off the lake beside the pages and out of the crater, and
+    // embers high up, carried far
+    sparks(46, [[0, LAVA_SHORE + 10, 420, 990], [1180, LAVA_SHORE + 10, W, 990]], 67),
+    sparks(10, [[CRATER[0] - 30, CRATER[1] - 8, CRATER[0] + 30, CRATER[1]]], 68),
+    motes({ n: 36, area: [0, 60, W, 700], v: [-6, -12], spread: [4, 6], wander: 10, size: [0.8, 1.8], colors: ["#ff7a28", "#ffd27a", "#ff9a40"], alpha: [0.35, 0.8], twinkle: 2.2, core: true, depth: true, seed: 3 }),
   ],
   tide: () => [
     shafts(800, -420, Math.PI / 2, 0.5, 9, 1450, "#d8fff8", 0.06, 4),

@@ -209,7 +209,13 @@ plants' sway through `gladeSway` in `living.ts`, a CPU copy of the leaf
 shader's that must change with it. The cavern's glowworms, drips and bat
 live in `cave.ts`. Its drops fall on the `DRIPS` schedule from stalactites
 the painter hangs at those tips, and `living.ts` rings the pool where and
-when they land, so all three read the same constants.
+when they land, so all three read the same constants. The ember crags'
+sparks, ash, lava bubbles and eruptions live in `ember.ts`: bubbles break
+at the painter's `LAVA_BUBBLES` and cinders land on its `volcanoAt`
+flanks. The lake's crust is only trig and hashes (`crust` in the painter
+and the shader), so the living lake starts exactly where the still one
+is, and the shader's plume follows the painter's `plumeAt`. `speck.ts`
+is the soft light both stamp.
 
 Both run in `ambience.worker.ts` on OffscreenCanvases: the main thread only
 forwards resizes, visibility and where the page column is. The painting

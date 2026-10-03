@@ -171,15 +171,17 @@ An optional hatchery that rewards actual reading:
   shows your companion's habitat, painted wide and dimmed so it sets a mood
   without pulling your eye off the text. It lives, slowly: the aurora's
   curtains ripple and surge over the pines, kelp sways in the swell under a
-  moving surface while fish cruise through it, clouds billow, lava creeps
-  downhill, crowns and grass stir as butterflies settle on the glade's
+  moving surface while fish cruise through it, clouds billow, the
+  volcano's plume climbs and lava creeps down its flanks into a lake whose
+  crust drifts and cracks, bubbles breaking on it and now and then a puff
+  of cinders arcing out of the crater, crowns and grass stir as butterflies settle on the glade's
   wildflowers and a robin, blue tit or goldfinch drops in to perch and
   hop about, the moonlit oak bends in the gusts as shooting stars streak past,
   glowworm threads glisten over the crystal cavern's pool as drops fall from
   the stalactites and ring the water,
   mist drifts through the hollows, and in the night library a fire burns
   in the hearth under each bookcase, its light wavering over the shelves
-  and the floorboards. Snow, embers, bubbles and fireflies drift
+  and the floorboards. Snow, sparks, ash, bubbles and fireflies drift
   through it all. It's drawn on the GPU in a worker, off the reader's
   thread, and only beside the pages. It stops when the reader is out of
   sight and respects "reduce motion". The motion

@@ -10,6 +10,7 @@
 
 import type { Layer } from "./ambience.ts";
 import { CAVE_CRACK, DRIPS, rng } from "./backdrops.ts";
+import { speck } from "./speck.ts";
 
 type Ctx = OffscreenCanvasRenderingContext2D;
 type Point = [x: number, y: number];
@@ -19,20 +20,6 @@ const TAU = Math.PI * 2;
 const RES = 2;
 /** The cavern's two seen strips, beside the pages. */
 const SIDES: readonly Point[] = [[10, 410], [1190, 1590]];
-
-/** A soft round light, `core` adding a bright centre; painted once. */
-function speck(color: string, core: boolean): OffscreenCanvas {
-  const s = new OffscreenCanvas(32, 32);
-  const c = s.getContext("2d")!;
-  const g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
-  if (core) g.addColorStop(0, "#ffffff");
-  g.addColorStop(core ? 0.18 : 0, color);
-  g.addColorStop(0.45, color + "55");
-  g.addColorStop(1, color + "00");
-  c.fillStyle = g;
-  c.fillRect(0, 0, 32, 32);
-  return s;
-}
 
 // ── glowworms ──
 
