@@ -72,6 +72,34 @@
   0%, 100% { translate: 0 0; }
   50% { translate: 0 var(--bob); }
 }
+/* An animated pet: a window onto its film strip of frames (sprites.tsx),
+   stepped one frame at a time. Translating the strip runs on the
+   compositor; the blink strip rides on top, shown only mid-blink. */
+.pet-live {
+  display: block;
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+.pet-film {
+  position: absolute;
+  inset: 0 auto auto 0;
+  animation: pet-film 1s steps(var(--n)) infinite;
+}
+.pet-film.once {
+  animation-iteration-count: 1;
+}
+.pet-film img {
+  position: absolute;
+  inset: 0 auto auto 0;
+  max-width: none;
+}
+.pet-film img.blink.off {
+  visibility: hidden;
+}
+@keyframes pet-film {
+  to { translate: var(--to) 0; }
+}
 /* Asleep: sinks one sprite pixel on a slow breath. */
 .breathe {
   animation: pix-breathe 3.6s steps(1, end) infinite;
@@ -549,6 +577,38 @@
   right: 8px;
   margin: 0;
 }
+/* Where an egg was found or a pet hatched: long document names stop at
+   two lines (the full name is on hover). */
+.provenance {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+/* An owned pet's growth: one step per stage, filling as it grows. */
+.growth {
+  display: flex;
+  gap: 2px;
+  margin-top: 7px;
+}
+.growth > i {
+  display: block;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--tier) 16%, transparent);
+  overflow: hidden;
+}
+.growth > i > i {
+  display: block;
+  height: 100%;
+  background: var(--tier);
+}
+.growth-stage {
+  color: var(--dim);
+}
 /* the companion's species */
 .species-cell.current {
   border-color: rgba(242, 193, 78, 0.5);
@@ -824,7 +884,7 @@
 .den-egg:hover img {
   filter: brightness(1.12);
 }
-.den-pet img.asleep {
+.den-pet .asleep {
   opacity: 0.85;
 }
 .den-pet .bob {
@@ -892,7 +952,8 @@
 .den-egg.nudge {
   animation: pix-hop 420ms steps(4, end);
 }
-.den-egg-bar {
+/* Progress under the egg (warmth) and the pet (growth to its next stage). */
+.den-bar {
   position: absolute;
   left: 50%;
   bottom: -6px;
@@ -903,7 +964,12 @@
   background: rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
-.den-egg-bar > i {
+/* The egg's box ends 2px above the pet's (its margin), so the pet's bar
+   hangs 2px higher to line up with the egg's. */
+.den-pet .den-bar {
+  bottom: -4px;
+}
+.den-bar > i {
   display: block;
   height: 100%;
   background: var(--tier);

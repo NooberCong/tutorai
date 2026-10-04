@@ -24,10 +24,11 @@
  *  in `scripts/sprite-sheet.ts` (to PNG contact sheets for review). */
 
 import { BASE, DARK, LIGHT, OUTLINE, SHADOW, SHINE, hexToRgb, makeRamp } from "./color.ts";
+import type { Move } from "./motion.ts";
 
 export type V = [number, number];
 
-export type Prim =
+export type Prim = (
   /** Ellipse centered at c with radii r, rotated by rot degrees. */
   | { k: "ell"; c: V; r: V; rot?: number }
   /** Capsule from a (radius ra) to b (radius rb) — limbs, horns, tails. */
@@ -37,7 +38,12 @@ export type Prim =
   /** Polygon (any winding), optionally inflated by `round`. */
   | { k: "poly"; pts: V[]; round: number }
   /** Egg: ellipse whose top narrows by `taper` (0–0.4). */
-  | { k: "egg"; c: V; r: V; taper: number };
+  | { k: "egg"; c: V; r: V; taper: number }
+) & {
+  /** Its own moves when animated, before its part's (a wing drawn in one
+   *  part with the body it blends into). */
+  move?: Move[];
+};
 
 export interface Paint {
   mat: string;
@@ -68,6 +74,8 @@ export interface Part {
   /** Worn on top (accessories): the creature's own decals — eyes, blush,
    *  mouths — don't paint over it; only decals marked `cover` do. */
   cover?: boolean;
+  /** How it moves when animated (motion.ts), applied in order. */
+  move?: Move[];
 }
 
 /** An ink is "mat:level" (a ramp step of a palette material) or "#rrggbb". */
@@ -84,11 +92,17 @@ export interface Decal {
   over?: boolean;
   /** Belongs with `cover` parts, so it may paint over them. */
   cover?: boolean;
+  /** How it moves when animated (motion.ts), by whole pixels. */
+  move?: Move[];
 }
 
 export interface Drawing {
   parts: Part[];
   decals?: Decal[];
+  /** The moves that carry the head and the neck when animated, so hats,
+   *  glasses and scarves ride along. */
+  head?: Move[];
+  neck?: Move[];
 }
 
 export type Palette = Record<string, string>;

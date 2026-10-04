@@ -132,8 +132,55 @@ Each element has ten species: 4 common, 3 rare, 2 epic, 1 legendary.
 - [ ] Hatchling → adult clearly the same creature, clearly grown.
 - [ ] Nothing clipped at the canvas edge; grounded creatures sit on y≈30.
 - [ ] Blink and sleep frames look right (eyes are decals, not parts).
+- [ ] Animated: every clip at every stage reviewed on `motion-sheet.ts`, calm and seamless.
 - [ ] Shiny looks special.
 - [ ] `npx tsc --noEmit` passes.
+
+## Animation
+
+A species with `motion` is animated (`motion.ts`). Its `draw` marks the parts
+that move with `Move`s, and every frame re-renders the creature as pixel art
+from the moved shapes. A turned wing is re-shaded and re-outlined, never a
+bitmap pushed around. Mark moves with `rig(moves, ...parts | decals |
+prims)`. A part's own moves apply first, then whatever carries it.
+
+- **Moves:**
+  - `turn` swings about the joint `at`.
+  - `bend` + `lag` make a whip, a wave running out along a tail, fin or flame.
+  - `shift` moves by whole pixels.
+  - `grow` swells continuously; pair it with a `stepped` wave on big parts so their shading doesn't shimmer.
+  - `pair` mirrors the move for the right half of a mirrored part.
+  - `side` moves only one half.
+- **Whole-pixel steps:** turns step by the angle that carries the part's far
+  end one pixel, so slow swings move a pixel at a time and rigid parts stay
+  rigid.
+- **Clips:**
+  - The idle loop (`motion.idle` seconds, waves with whole cycles per loop).
+  - Blink, which runs on the same frames.
+  - The sleeping breath.
+  - The signature act: `draw(stage, "act", t)` with `t` the act's own time. It plays over the idle loop from its first frame and lasts `motion.act` loops, so it must match the loop at both ends.
+- **Riding the head:** set `head` (and `neck`) on the drawing to the moves
+  that carry the head; hats, glasses and scarves ride them.
+- **Room to move:** frames render with `ROOM` around the 32×32 box (5 px
+  each side, 10 above, 2 below), so a wing or tail may swing past the
+  still's edges. Nothing may leave that room. `zzz()` drifts only as far as
+  the canvas allows.
+- **Gotchas:**
+  - Put moves on a part or on its prims; a `paint` carries none of its own.
+  - A wave that closes over the act's time (`() => env`) ignores `lag`. Use a wave of `u` for an act ripple that should run out along a part.
+- **Subtle and relaxing:** the pet sits beside the text.
+  - Use eased waves (`sine`, `rise`, `pulse`, `ease`), 1–2 px of travel and loops of 3 s or more.
+  - No snaps (`twitch` is for rare, tiny accents), no big flares.
+  - Acts are gentle: a yawn, a bow, a slow stretch.
+
+```
+node scripts/motion-sheet.ts <out.png> <id> [stage] [idle|blink|sleep|act|dressed] [scale] [step] [diff] [from:to]
+```
+
+Read the frames as a flipbook; `diff` dots every pixel that changed since
+the frame before, which shows exactly what moves when. Check every stage and
+clip, dressed too. The act's first and last frames must equal the idle
+loop's.
 
 ## Accessories
 
@@ -172,9 +219,11 @@ Motes (embers, snow, bubbles) are CSS-animated in the UI from `MOTES`.
 `backdrops.ts` paints each habitat wide (a 1600×1000 scene space, rendered
 at any size) for the space beside the reader's pages. It is not pixel art:
 it is a small per-pixel painter. Terrain comes from fractal noise, lit by
-its slope (`faceLight`) or a bump map. Foliage, clouds and rock are
-noise-edged lit spheres (`ball`/`cluster`), and distance fades into the sky
-through haze and mist. Light is additive (`glow`, `rays`, lava, aurora).
+its slope (`faceLight`) or a bump map. Foliage and rock are noise-edged
+lit spheres (`ball`/`cluster`). Clouds are not (they read as wax, or as a
+stack of balls): `cloud` merges a cloud's billows into one silhouette,
+lights the mass as a whole, and keeps crisp gold rims only on its outline,
+with faint folds inside. Distance fades into the sky through haze and mist. Light is additive (`glow`, `rays`, lava, aurora).
 Keep the scenery at the left and right edges; the middle is under the
 pages. The reader shows each half pinned to its own edge and dims it
 (styles.css), and `EXPOSURE` evens out bright and dark habitats. Review with
@@ -200,8 +249,8 @@ masks and layer with `backdrop-sheet.ts --live`.
 
 `ambience.ts` is what drifts over the painting: pollen and falling leaves,
 embers, bubbles, fish, snow, fireflies, shooting stars, crystal glints, candle
-flicker and cloud wisps, in the same scene space and mapped the same
-two-halves way. Particles that move are left out of the painting (only stars
+flicker and birds gliding over the cloud sea, in the same scene space and
+mapped the same two-halves way. Particles that move are left out of the painting (only stars
 and flowers stay baked in), so nothing looks frozen. The glade's butterflies
 and songbirds live in `wildlife.ts`: they land on the painter's own flowers
 (`GLADE_FLOWERS`), bush tops and ground (`gladeGround`), and ride the

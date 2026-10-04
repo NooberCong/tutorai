@@ -38,7 +38,7 @@ import { flushHatchery, mutate, useHatchery } from "../../lib/hatchery/store";
 import { saveSetting, useSetting } from "../../lib/settings";
 import { EggHelp } from "./EggHelp";
 import { HatchModal } from "./HatchModal";
-import { Meter } from "./Meter";
+import { GrowthMeter, Meter } from "./Meter";
 import { StagePicker } from "./StagePicker";
 import { ELEMENT_LABEL, STAGE_LABEL, TIER_LABEL, minutes } from "./labels";
 import { Habitat, PetSprite, PixelImg, SpeciesImg, crackOf, eggUrl, itemUrl, sceneUrl, speciesUrl } from "./sprites";
@@ -104,7 +104,7 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
                   />
                 )}
                 {egg.foundIn && (
-                  <p className="fine">
+                  <p className="fine provenance" title={egg.foundIn.title}>
                     Found on p.{egg.foundIn.page} of <i>{egg.foundIn.title}</i>
                   </p>
                 )}
@@ -219,7 +219,7 @@ export function HatcheryScreen(props: { onTurnOff: () => void }) {
           </span>
         </div>
         {ELEMENTS.map((el) => (
-          <ElementRow key={el} element={el} dex={s.dex} reading={pet?.species} onOpen={setDetail} />
+          <ElementRow key={el} element={el} dex={s.dex} pets={s.pets} reading={pet?.species} onOpen={setDetail} />
         ))}
       </section>
 
@@ -409,7 +409,7 @@ function CompanionDetail(props: { pet: Pet }) {
   return (
     <div className="companion-detail">
       <Habitat element={homeOf(pet)} scale={5} live className="companion-stage">
-        <PetSprite pet={pet} scale={5} className="bob" />
+        <PetSprite pet={pet} scale={5} />
       </Habitat>
       <div className="companion-meta">
         <h3>
@@ -434,7 +434,7 @@ function CompanionDetail(props: { pet: Pet }) {
         )}
         <StagePicker pet={pet} />
         {pet.hatchedIn && (
-          <p className="fine">
+          <p className="fine provenance" title={pet.hatchedIn.title}>
             Hatched on p.{pet.hatchedIn.page} of <i>{pet.hatchedIn.title}</i>
           </p>
         )}
@@ -446,6 +446,8 @@ function CompanionDetail(props: { pet: Pet }) {
 function ElementRow(props: {
   element: Element;
   dex: Record<string, { best: Stage; count: number; shiny: number }>;
+  /** Your pets, whose growth shows on their species. */
+  pets: Pet[];
   /** The companion's species, marked in the row. */
   reading?: string;
   onOpen: (s: Species) => void;
@@ -470,6 +472,7 @@ function ElementRow(props: {
       <div className="species-row">
         {list.map((sp) => {
           const d = props.dex[sp.id];
+          const mine = props.pets.find((p) => p.species === sp.id);
           const reading = sp.id === props.reading;
           return (
             <button
@@ -480,7 +483,11 @@ function ElementRow(props: {
             >
               <SpeciesImg id={sp.id} stage={d ? d.best : 0} hidden={!d} scale={3} />
               <b>{d ? sp.name : "???"}</b>
-              <span className={`tier-text tier-${sp.tier}`}>{TIER_LABEL[sp.tier]}</span>
+              <span>
+                <span className={`tier-text tier-${sp.tier}`}>{TIER_LABEL[sp.tier]}</span>
+                {mine && <span className="growth-stage"> · {STAGE_LABEL[grownStage(mine)]}</span>}
+              </span>
+              {mine && <GrowthMeter pet={mine} />}
               {d && d.shiny > 0 && <i className="shiny-star">✦</i>}
             </button>
           );

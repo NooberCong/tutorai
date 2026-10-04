@@ -151,7 +151,10 @@ An optional hatchery that rewards actual reading:
   and hatching its shiny lets you switch it to the shiny colours. A grown
   pet can also be shown at an earlier, smaller stage (it doesn't grow
   meanwhile).
-- **A companion in the corner.** Your chosen pet sits by the page. It sleeps
+- **A companion in the corner.** Your chosen pet sits by the page, quietly
+  alive: tails sway, wings ripple, flames lick, and now and then it does its
+  own small thing, a yawn, a bow, a stretch. A thin bar under it fills as it
+  grows toward its next stage. It sleeps
   when you stop reading, hops when you come back, and cheers finished
   chapters and study habits (highlighting, quizzing, lookups). With the
   reading companion on, it also cracks a joke now and then about what you're

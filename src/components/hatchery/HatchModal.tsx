@@ -82,7 +82,7 @@ export function HatchModal(props: { where?: Where; onClose: () => void }) {
         ) : (
           <div className="hatch-born">
             <div className="hatch-creature">
-              <PetSprite pet={result.pet} scale={6} className="bob" />
+              <PetSprite pet={result.pet} scale={6} />
             </div>
             {(result.isNew ? result.pet.shiny : result.shinyNow) && (
               <div className="shiny-tag">{result.isNew ? "✦ Shiny" : "✦ Now shiny"}</div>

@@ -1,7 +1,8 @@
 /** Cached sprite rendering for species, and for pets wearing accessories. */
 
-import type { Sprite } from "./pixel.ts";
+import type { Drawing, Sprite } from "./pixel.ts";
 import { render, shiftDrawing } from "./pixel.ts";
+import { animate } from "./motion.ts";
 import type { Pose, Species, Stage } from "./kit.ts";
 import type { AccessoryId, Wear } from "./accessories.ts";
 import { ACCESSORY, ACC_PALETTE, wearDrawing } from "./accessories.ts";
@@ -10,41 +11,66 @@ import { fitOf } from "./fit.ts";
 
 const cache = new Map<string, Sprite>();
 
-export function renderSpecies(s: Species, stage: Stage, pose: Pose, shiny = false): Sprite {
-  const key = `${s.id}/${stage}/${pose}/${shiny ? 1 : 0}`;
+/** Frames per second of each clip. Sleep is a slow breath, drawn coarser. */
+const FPS: Record<Pose, number> = { idle: 12, blink: 12, act: 12, sleep: 8 };
+
+/** How many frames a clip of an animated species has (blink runs with the
+ *  idle loop, so a blink can swap in on any frame). */
+export function frameCount(s: Species, pose: Pose): number {
+  const m = s.motion;
+  if (!m) return 1;
+  const sec = pose === "sleep" ? m.sleep : pose === "act" ? m.idle * (m.act ?? 1) : m.idle;
+  return Math.round(sec * FPS[pose]);
+}
+
+/** A pose's drawing, still or as frame `i` of its clip: the act's own time
+ *  goes to `draw`, and its moves run on the idle loop it plays over. */
+function posed(s: Species, stage: Stage, pose: Pose, i: number | undefined, extra?: (d: Drawing) => Drawing): Drawing {
+  if (i === undefined || !s.motion) return extra ? extra(s.draw(stage, pose)) : s.draw(stage, pose);
+  const tau = i / frameCount(s, pose);
+  const d = s.draw(stage, pose, tau);
+  const t = pose === "act" ? (tau * (s.motion.act ?? 1)) % 1 : tau;
+  return animate(extra ? extra(d) : d, t);
+}
+
+/** A species sprite: still, on its 32×32 canvas, or frame `i` of the
+ *  pose's clip, with ROOM around it to move into. */
+export function renderSpecies(s: Species, stage: Stage, pose: Pose, shiny = false, i?: number): Sprite {
+  const key = `${s.id}/${stage}/${pose}/${shiny ? 1 : 0}/${i ?? ""}`;
   let sprite = cache.get(key);
   if (!sprite) {
-    sprite = render(s.draw(stage, pose), shiny ? { ...s.palette, ...s.shiny } : s.palette);
+    const palette = shiny ? { ...s.palette, ...s.shiny } : s.palette;
+    const d = posed(s, stage, pose, i);
+    sprite = i === undefined ? render(d, palette) : render(shiftDrawing(d, ROOM.x, ROOM.top), palette, ROOM_W, ROOM_H);
     cache.set(key, sprite);
   }
   return sprite;
 }
 
-/** Room around a dressed creature for hats and tails: the creature keeps
- *  its 32×32 box (and its ground line), the extra canvas overflows it. */
-export const DRESSED_PAD = { x: 5, top: 10 };
-export const DRESSED_W = 32 + 2 * DRESSED_PAD.x;
-export const DRESSED_H = 32 + DRESSED_PAD.top;
+/** Room around a creature for hats, and for wings and tails to swing
+ *  into when animated: the creature keeps its 32×32 box (and its ground
+ *  line), the extra canvas overflows it. Dressed and animated sprites use it. */
+export const ROOM = { x: 5, top: 10, bottom: 2 };
+export const ROOM_W = 32 + 2 * ROOM.x;
+export const ROOM_H = 32 + ROOM.top + ROOM.bottom;
 
 export const wearKey = (w: Wear) => [w.neck, w.face, w.head].map((x) => x ?? "").join("+");
 
-/** A creature wearing accessories, on the padded DRESSED_W × DRESSED_H
+/** A creature wearing accessories, on the padded ROOM_W × ROOM_H
  *  canvas. Accessories render in the same pass as the body, so they shade,
- *  outline and overlap like any other part. */
-export function renderDressed(s: Species, stage: Stage, pose: Pose, shiny: boolean, wear: Wear): Sprite {
-  const key = `${s.id}/${stage}/${pose}/${shiny ? 1 : 0}/${wearKey(wear)}`;
+ *  outline and overlap like any other part — and when animated they ride
+ *  the moves that carry the head and neck. */
+export function renderDressed(s: Species, stage: Stage, pose: Pose, shiny: boolean, wear: Wear, i?: number): Sprite {
+  const key = `${s.id}/${stage}/${pose}/${shiny ? 1 : 0}/${wearKey(wear)}/${i ?? ""}`;
   let sprite = cache.get(key);
   if (!sprite) {
     const palette = { ...ACC_PALETTE, ...s.palette, ...(shiny ? s.shiny : {}) };
     const fit = fitOf(s, stage);
-    const body = s.draw(stage, pose);
-    const worn = wearDrawing(fit, wear, palette[fit.skin] ?? "#888888");
-    const d = shiftDrawing(
-      { parts: [...body.parts, ...worn.parts], decals: [...(body.decals ?? []), ...worn.decals] },
-      DRESSED_PAD.x,
-      DRESSED_PAD.top,
-    );
-    sprite = render(d, palette, DRESSED_W, DRESSED_H);
+    const dressed = posed(s, stage, pose, i, (body) => {
+      const worn = wearDrawing(fit, wear, palette[fit.skin] ?? "#888888", body);
+      return { parts: [...body.parts, ...worn.parts], decals: [...(body.decals ?? []), ...worn.decals] };
+    });
+    sprite = render(shiftDrawing(dressed, ROOM.x, ROOM.top), palette, ROOM_W, ROOM_H);
     cache.set(key, sprite);
   }
   return sprite;

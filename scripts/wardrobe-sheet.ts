@@ -12,7 +12,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
 import { SPECIES } from "../src/lib/hatchery/species.ts";
-import { DRESSED_H, DRESSED_PAD, DRESSED_W, renderDressed } from "../src/lib/hatchery/catalog.ts";
+import { ROOM_H, ROOM, ROOM_W, renderDressed } from "../src/lib/hatchery/catalog.ts";
 import type { Wear } from "../src/lib/hatchery/accessories.ts";
 import { ACCESSORIES } from "../src/lib/hatchery/accessories.ts";
 import type { Stage } from "../src/lib/hatchery/kit.ts";
@@ -20,8 +20,8 @@ import type { Stage } from "../src/lib/hatchery/kit.ts";
 const outDir = process.argv[2] ?? "wardrobe";
 const filter = process.argv[3] ?? "";
 const SCALE = Number(process.argv[4] ?? 4);
-const CW = DRESSED_W * SCALE + 12;
-const CH = DRESSED_H * SCALE + 26;
+const CW = ROOM_W * SCALE + 12;
+const CH = ROOM_H * SCALE + 26;
 const LABEL_W = 110;
 
 const only = process.argv[5]?.split(",");
@@ -48,7 +48,7 @@ for (const sp of list) {
       const x0 = LABEL_W + ci * CW;
       svg += `<rect x="${x0}" y="${y0}" width="${CW - 6}" height="${CH - 20}" rx="6" fill="#151d18"/>`;
       // The creature's own box.
-      svg += `<rect x="${x0 + 3 + DRESSED_PAD.x * SCALE}" y="${y0 + 3 + DRESSED_PAD.top * SCALE}" width="${32 * SCALE}" height="${32 * SCALE}" fill="none" stroke="#1f2a23" stroke-width="1"/>`;
+      svg += `<rect x="${x0 + 3 + ROOM.x * SCALE}" y="${y0 + 3 + ROOM.top * SCALE}" width="${32 * SCALE}" height="${32 * SCALE}" fill="none" stroke="#1f2a23" stroke-width="1"/>`;
       const { w, h, data } = renderDressed(sp, st, "idle", false, col.wear);
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {

@@ -8,9 +8,10 @@ import type { Element, Pose, Stage } from "../../lib/hatchery/kit";
 import type { Egg, Pet } from "../../lib/hatchery/game";
 import { speciesById, stageOf } from "../../lib/hatchery/game";
 import {
-  DRESSED_H,
-  DRESSED_PAD,
-  DRESSED_W,
+  ROOM_H,
+  ROOM,
+  ROOM_W,
+  frameCount,
   renderDressed,
   renderItem,
   renderSpecies,
@@ -113,9 +114,9 @@ export function PixelImg(props: {
       <img
         className={`pixel ${props.className ?? ""}`}
         src={props.src}
-        width={DRESSED_W * k}
-        height={DRESSED_H * k}
-        style={{ margin: `${-DRESSED_PAD.top * k}px ${-DRESSED_PAD.x * k}px 0` }}
+        width={ROOM_W * k}
+        height={ROOM_H * k}
+        style={{ margin: `${-ROOM.top * k}px ${-ROOM.x * k}px ${-ROOM.bottom * k}px` }}
         alt={props.alt ?? ""}
         draggable={false}
       />
@@ -188,17 +189,19 @@ export function SpeciesImg(props: {
   return <PixelImg src={url} scale={scale} dressed={dressed} />;
 }
 
-/** A pet, alive: idle with an occasional blink, or asleep. */
-export function PetSprite(props: {
-  pet: Pet;
-  scale: number;
-  asleep?: boolean;
-  className?: string;
-}) {
-  const { pet, scale, asleep } = props;
+/** A pet, alive. Animated species play their clips (LivePet); the rest
+ *  are a still sprite with an occasional blink that the UI bobs, or
+ *  breathes when asleep. */
+export function PetSprite(props: { pet: Pet; scale: number; asleep?: boolean; className?: string }) {
+  const sp = speciesById(props.pet.species);
+  return sp?.motion ? <LivePet {...props} /> : <StillPet {...props} />;
+}
+
+/** True for a moment every few seconds, while enabled. */
+function useBlink(enabled: boolean): boolean {
   const [blink, setBlink] = useState(false);
   useEffect(() => {
-    if (asleep) return;
+    if (!enabled) return;
     let t: number;
     const loop = () => {
       t = window.setTimeout(() => {
@@ -210,8 +213,17 @@ export function PetSprite(props: {
       }, 2600 + Math.random() * 3800);
     };
     loop();
-    return () => window.clearTimeout(t);
-  }, [asleep]);
+    return () => {
+      window.clearTimeout(t);
+      setBlink(false);
+    };
+  }, [enabled]);
+  return blink;
+}
+
+function StillPet(props: { pet: Pet; scale: number; asleep?: boolean; className?: string }) {
+  const { pet, scale, asleep } = props;
+  const blink = useBlink(!asleep);
   const pose: Pose = asleep ? "sleep" : blink ? "blink" : "idle";
   const { src, dressed } = petUrl(pet.species, stageOf(pet), pose, pet.shiny, pet.wear);
   return (
@@ -219,9 +231,159 @@ export function PetSprite(props: {
       src={src}
       dressed={dressed}
       scale={scale}
-      className={`${props.className ?? ""} ${asleep ? "asleep" : "awake"}`}
+      className={`${props.className ?? ""} ${asleep ? "asleep breathe" : "awake bob"}`}
       alt={speciesById(pet.species)?.stages[stageOf(pet)] ?? pet.species}
     />
+  );
+}
+
+// ── animated pets ──
+// Each clip renders once, frame by frame in idle slices, into a film strip:
+// the frames side by side with a pixel of gap so a neighbour never bleeds in
+// at fractional zoom. A CSS animation steps the strip across its window, on
+// the compositor, so playing costs the page nothing.
+
+const strips = new Map<string, string>();
+const pending = new Map<string, Promise<string>>();
+
+function stripUrl(key: string, n: number, frame: (i: number) => Sprite): Promise<string> {
+  const done = strips.get(key);
+  if (done) return Promise.resolve(done);
+  let p = pending.get(key);
+  if (!p) {
+    p = new Promise<string>((resolve) => {
+      const frames: Sprite[] = [];
+      const step = () => {
+        frames.push(frame(frames.length));
+        if (frames.length < n) return whenIdle(step);
+        const { w, h } = frames[0];
+        const canvas = document.createElement("canvas");
+        canvas.width = n * (w + 1) - 1;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d")!;
+        frames.forEach((f, i) => ctx.putImageData(new ImageData(new Uint8ClampedArray(f.data), w, h), i * (w + 1), 0));
+        const url = canvas.toDataURL("image/png");
+        strips.set(key, url);
+        pending.delete(key);
+        resolve(url);
+      };
+      whenIdle(step);
+    });
+    pending.set(key, p);
+  }
+  return p;
+}
+
+/** A clip's film strip for a pet once it's rendered; null until then, or
+ *  when `clip` is null. */
+function useStrip(pet: Pet, clip: Pose | null): { url: string; n: number } | null {
+  const sp = speciesById(pet.species)!;
+  const stage = stageOf(pet);
+  const wear = isDressed(pet.wear) ? pet.wear : undefined;
+  const key = clip && `${dressedKey(sp.id, stage, clip, pet.shiny, wear ?? {})}/film`;
+  const n = clip ? frameCount(sp, clip) : 0;
+  const [ready, setReady] = useState<{ key: string; url: string } | null>(null);
+  useEffect(() => {
+    if (!key || !clip) return;
+    let live = true;
+    void stripUrl(key, n, (i) =>
+      wear ? renderDressed(sp, stage, clip, pet.shiny, wear, i) : renderSpecies(sp, stage, clip, pet.shiny, i),
+    ).then((url) => live && setReady({ key, url }));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  if (!key) return null;
+  const url = strips.get(key) ?? (ready?.key === key ? ready.url : null);
+  return url ? { url, n } : null;
+}
+
+const REDUCE = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+
+/** An animated pet: its idle loop with blinks swapped in on the same
+ *  frames, its signature act now and then (starting as the loop comes
+ *  round, so it flows out of the loop and back into it), or its sleeping
+ *  breath. */
+function LivePet(props: { pet: Pet; scale: number; asleep?: boolean; className?: string }) {
+  const { pet, scale: k, asleep } = props;
+  const sp = speciesById(pet.species)!;
+  const m = sp.motion!;
+  const dressed = isDressed(pet.wear);
+  const [acting, setActing] = useState(false);
+  // The act is due; it starts when the idle loop next comes round.
+  const [due, setDue] = useState(false);
+  // Bumped after an act so the idle loop restarts from its first frame.
+  const [run, setRun] = useState(0);
+  const idle = useStrip(pet, asleep ? null : "idle");
+  const blinkStrip = useStrip(pet, idle ? "blink" : null);
+  const sleep = useStrip(pet, asleep ? "sleep" : null);
+  const act = useStrip(pet, !asleep && m.act && (due || acting) ? "act" : null);
+  const blink = useBlink(!asleep && !acting && !!blinkStrip);
+
+  useEffect(() => {
+    if (asleep || !m.act || acting || due || REDUCE?.matches) return;
+    const t = window.setTimeout(() => setDue(true), 25_000 + Math.random() * 35_000);
+    return () => window.clearTimeout(t);
+  }, [asleep, m.act, acting, due]);
+  useEffect(() => {
+    if (!asleep) return;
+    setDue(false);
+    setActing(false);
+  }, [asleep]);
+
+  // Frames have room around the creature's box to move into.
+  const w = ROOM_W;
+  const h = ROOM_H;
+  const alt = sp.stages[stageOf(pet)] ?? pet.species;
+  const state = asleep ? "asleep" : "awake";
+  const playing = asleep ? sleep : acting ? act : idle;
+  if (!playing) {
+    // Its frames are still rendering: the still sprite meanwhile.
+    const { src } = petUrl(pet.species, stageOf(pet), asleep ? "sleep" : "idle", pet.shiny, pet.wear);
+    return <PixelImg src={src} dressed={dressed} scale={k} className={`${props.className ?? ""} ${state}`} alt={alt} />;
+  }
+  const sec = asleep ? m.sleep : acting ? m.idle * (m.act ?? 1) : m.idle;
+  const film = (url: string, className = "") => (
+    <img
+      className={`pixel ${className}`}
+      src={url}
+      width={(playing.n * (w + 1) - 1) * k}
+      height={h * k}
+      alt=""
+      draggable={false}
+    />
+  );
+  return (
+    <span
+      className={`pet-live ${props.className ?? ""} ${state}`}
+      role="img"
+      aria-label={alt}
+      style={{
+        width: w * k,
+        height: h * k,
+        margin: `${-ROOM.top * k}px ${-ROOM.x * k}px ${-ROOM.bottom * k}px`,
+      }}
+    >
+      <span
+        key={asleep ? "sleep" : acting ? "act" : `idle${run}`}
+        className={acting ? "pet-film once" : "pet-film"}
+        style={{ "--to": `${-playing.n * (w + 1) * k}px`, "--n": playing.n, animationDuration: `${sec}s` } as CSSProperties}
+        onAnimationIteration={() => {
+          if (!due || !act) return;
+          setDue(false);
+          setActing(true);
+        }}
+        onAnimationEnd={() => {
+          if (!acting) return;
+          setActing(false);
+          setRun((r) => r + 1);
+        }}
+      >
+        {film(playing.url)}
+        {!asleep && !acting && blinkStrip && film(blinkStrip.url, blink ? "blink" : "blink off")}
+      </span>
+    </span>
   );
 }
 

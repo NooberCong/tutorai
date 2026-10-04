@@ -10,9 +10,10 @@
  *  Local coordinates: u to the right, v down, origin at the anchor. */
 
 import type { Fit, Nudge } from "./fit.ts";
-import type { Decal, Part, Prim, V } from "./pixel.ts";
+import type { Decal, Drawing, Part, Prim, V } from "./pixel.ts";
 import { cap, ell, mirror, path, poly, transform } from "./pixel.ts";
 import { hexToRgb } from "./color.ts";
+import { rig } from "./motion.ts";
 
 export type Slot = "head" | "face" | "neck";
 export type AccessoryId =
@@ -479,7 +480,12 @@ function glasses(fit: Fit, n: Nudge | undefined, skin: string): Made {
 
 /** Everything worn, in draw order (neck under face under head), in the
  *  creature's 32×32 space. `skin` is the head's base color. */
-export function wearDrawing(fit: Fit & { item: Record<string, Nudge> }, wear: Wear, skin: string): Made {
+export function wearDrawing(
+  fit: Fit & { item: Record<string, Nudge> },
+  wear: Wear,
+  skin: string,
+  carry: Pick<Drawing, "head" | "neck"> = {},
+): Made {
   const out: Made = { parts: [], decals: [] };
   const add = (m: Made) => {
     out.parts.push(...m.parts);
@@ -494,6 +500,10 @@ export function wearDrawing(fit: Fit & { item: Record<string, Nudge> }, wear: We
     if (!id) continue;
     const n = fit.item[id];
     const made = MAKERS[id](fit, n);
+    // Worn things ride whatever carries the head (or neck) when animated.
+    const moves = (slot === "neck" ? carry.neck : carry.head) ?? [];
+    rig(moves, ...made.parts);
+    rig(moves, ...made.decals);
     add(n?.alt ? alt(made, n.alt === "gold" ? GOLD : ALT) : made);
   }
   return out;

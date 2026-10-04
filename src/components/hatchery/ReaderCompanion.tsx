@@ -312,8 +312,13 @@ function Den(props: { onOpenHatchery: () => void }) {
             title={active ? `${petName} is reading with you` : `${petName} is asleep — reading time is paused`}
           >
             <span key={reaction?.n} className={reaction ? `den-react react-${reaction.kind}` : "den-react"}>
-              <PetSprite pet={pet} scale={2} asleep={!active} className={active ? "bob" : "breathe"} />
+              <PetSprite pet={pet} scale={2} asleep={!active} />
             </span>
+            {grow && !keptSmall(pet) && (
+              <i className="den-bar">
+                <i style={{ width: `${(grow.done / grow.span) * 100}%` }} />
+              </i>
+            )}
             {reaction?.kind === "love" && <Heart key={`heart-${reaction.n}`} />}
           </button>
         )}
@@ -326,7 +331,7 @@ function Den(props: { onOpenHatchery: () => void }) {
             title={ready ? "Ready — click to hatch!" : `${ELEMENT_LABEL[egg.element]} egg — warms while you read`}
           >
             <PixelImg src={eggUrl(egg, crackOf(egg))} scale={2} />
-            <i className="den-egg-bar">
+            <i className="den-bar">
               <i style={{ width: `${Math.min(100, (egg.warmth / egg.need) * 100)}%` }} />
             </i>
           </button>
