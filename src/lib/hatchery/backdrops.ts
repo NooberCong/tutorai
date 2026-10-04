@@ -1587,67 +1587,296 @@ function stone(p: Paint) {
   vignette(p, VIGNETTE.stone);
 }
 
+/** The low sun, just above the cloud sea's far edge. */
+export const SUN: readonly [number, number] = [1330, 584];
+export const CLOUD_HORIZON = 600;
+
+const CLOUD_SHADE = hex("#6c6aa4");
+const CLOUD_MID = hex("#d8a6b6");
+const CLOUD_LIT = hex("#ffdcae");
+const CLOUD_GLOW = hex("#fff6e0");
+const CLOUD_HAZE = hex("#f2cdb8");
+
+/** One billow of cloud; `sq` is its height over width (the cloud sea's
+ *  flatten with distance). */
+interface Puff {
+  x: number;
+  y: number;
+  r: number;
+  sq?: number;
+}
+
+/** A whole cloud: its billows, painted as one mass. `form` is its overall
+ *  shape as an ellipse [x, y, rx, ry], which the light models; without
+ *  one (a stratum of the cloud sea) it's a layer whose tops face up, with
+ *  `slab` filling in below that line down to `bottom`. `size` is a
+ *  typical billow's radius. */
+interface Cloud {
+  puffs: Puff[];
+  size: number;
+  haze: number;
+  form?: readonly [number, number, number, number];
+  slab?: number;
+  bottom?: number;
+}
+
+/** Paint a cloud the way a cumulus is painted by hand: the billows merge
+ *  into one silhouette and the light models the mass as a whole (a lit
+ *  side toward the sun, a shadowed side, a darker base). Only the outline
+ *  keeps crisp edges, rimmed with gold where it faces the sun and glowing
+ *  through near it; inside, the billows show only as faint folds of light
+ *  on the lit side, so it reads as one cloud and not a stack of balls.
+ *
+ *  Depth below the outline comes from the silhouette blurred, not from
+ *  the billows: their own edges cross inside the cloud, and taken as
+ *  outline they'd light up as seams. */
+function cloud(p: Paint, n: Noise, c: Cloud) {
+  let x0 = W;
+  let x1 = 0;
+  let y0 = H;
+  let y1 = c.bottom ?? 0;
+  for (const b of c.puffs) {
+    const sq = b.sq ?? 1;
+    x0 = Math.min(x0, b.x - b.r * 1.2);
+    x1 = Math.max(x1, b.x + b.r * 1.2);
+    y0 = Math.min(y0, b.y - b.r * sq * 1.2);
+    y1 = Math.max(y1, b.y + b.r * sq * 1.2);
+  }
+  const k = p.k;
+  const px0 = Math.max(0, Math.floor(x0 * k));
+  const px1 = Math.min(p.w, Math.ceil(x1 * k));
+  const py0 = Math.max(0, Math.floor(y0 * k));
+  const py1 = Math.min(p.h, Math.ceil(y1 * k));
+  const w = px1 - px0;
+  const h = py1 - py0;
+  if (w <= 0 || h <= 0) return;
+  const B = 32;
+  const buckets: Puff[][] = Array.from({ length: Math.ceil((x1 - x0) / B) + 1 }, () => []);
+  for (const b of c.puffs) {
+    const k0 = Math.max(0, Math.floor((b.x - b.r * 1.2 - x0) / B));
+    const k1 = Math.min(buckets.length - 1, Math.floor((b.x + b.r * 1.2 - x0) / B));
+    for (let j = k0; j <= k1; j++) buckets[j].push(b);
+  }
+  const f = 2 / c.size;
+  const feather = 1 + c.size * 0.06;
+  // the silhouette, and the frontmost billow at each pixel (later ones
+  // are in front)
+  const cover = new Float32Array(w * h);
+  const front: (Puff | null)[] = new Array(w * h).fill(null);
+  const grain = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const Y = (py0 + y + 0.5) / k;
+    for (let x = 0; x < w; x++) {
+      const X = (px0 + x + 0.5) / k;
+      const e = fbm(n, X * f, Y * f, 3);
+      let inside = -Infinity;
+      let fr: Puff | null = null;
+      for (const b of buckets[clamp(Math.floor((X - x0) / B), 0, buckets.length - 1)]) {
+        const s = b.r * (1 + 0.1 * e) - Math.hypot(X - b.x, (Y - b.y) / (b.sq ?? 1));
+        if (s > inside) inside = s;
+        if (s > 0) fr = b;
+      }
+      if (c.slab !== undefined) inside = Math.max(inside, Y - c.slab - e * c.size * 0.3);
+      const j = y * w + x;
+      cover[j] = clamp(inside / feather);
+      front[j] = fr;
+      grain[j] = e;
+    }
+  }
+  const depth = cover.slice();
+  blurChannel(depth, w, h, 0, Math.round(c.size * 0.35 * k), 1);
+  for (let y = 0; y < h; y++) {
+    const Y = (py0 + y + 0.5) / k;
+    for (let x = 0; x < w; x++) {
+      const j = y * w + x;
+      const a = cover[j];
+      if (a <= 0) continue;
+      const X = (px0 + x + 0.5) / k;
+      const e = grain[j];
+      // 0 at the outline, 1 well inside; the outline's outward direction
+      const inner = clamp((depth[j] - 0.5) * 2);
+      let nx = depth[Math.max(0, j - 1)] - depth[Math.min(w * h - 1, j + 1)];
+      let ny = depth[Math.max(0, j - w)] - depth[Math.min(w * h - 1, j + w)];
+      const nl = Math.hypot(nx, ny);
+      if (nl > 1e-6) {
+        nx /= nl;
+        ny /= nl;
+      } else ny = -1;
+      // the light: from the sun, and from the bright sky overhead
+      const tx = SUN[0] - X;
+      const ty = SUN[1] - Y;
+      const dist = Math.hypot(tx, ty) + 1;
+      let lx = (tx / dist) * 0.65;
+      let ly = (ty / dist) * 0.65 - 0.75;
+      const ll = Math.hypot(lx, ly);
+      lx /= ll;
+      ly /= ll;
+      const near = Math.exp(-dist / 520);
+      const reach = 0.6 + 0.4 * Math.exp(-dist / 1100);
+      // the mass's own light and shade
+      let tone: number;
+      let base = 0;
+      if (c.form) {
+        const [cx, cy, rx, ry] = c.form;
+        const fx = clamp((X - cx) / rx, -1, 1);
+        const fy = clamp((Y - cy) / ry, -1, 1);
+        const fz = Math.sqrt(Math.max(0, 1 - fx * fx - fy * fy));
+        tone = clamp(0.5 + (fx * lx + fy * ly) * 0.65 + (fz - 0.5) * 0.25);
+        base = smooth(cy, cy + ry * 1.1, Y);
+      } else tone = 0.32 + 0.25 * (1 - inner);
+      ramp(tone * reach * (1 - 0.4 * base) + 0.1 + 0.06 * e, CLOUD_SHADE, CLOUD_MID, CLOUD_LIT);
+      // folds: the front billow's lit side, faint, only where the mass is
+      // lit and away from the outline (the rim has that)
+      const fr = front[j];
+      if (fr) {
+        const sq = fr.sq ?? 1;
+        const s = fr.r * 0.3;
+        const fold = smooth(fr.r * 0.8, fr.r * 1.05, Math.hypot(X - fr.x + lx * s, (Y - fr.y + ly * s * sq) / sq));
+        toward(CLOUD_LIT, fold * 0.4 * tone * reach * inner);
+      }
+      // the outline: gold where it faces the light, glowing through near
+      // the sun, softly translucent on the shaded side
+      const rim = 1 - inner;
+      const facing = clamp(nx * lx + ny * ly + 0.15);
+      toward(CLOUD_LIT, rim * facing * reach * 0.9);
+      toward(CLOUD_GLOW, rim * facing * near);
+      toward(CLOUD_MID, rim * (1 - facing) * 0.2);
+      // the foot sinks into the haze over the sea
+      toward(CLOUD_HAZE, c.haze + (1 - c.haze) * base * 0.45);
+      p.over(((py0 + y) * p.w + px0 + x) * 3, a);
+    }
+  }
+}
+
+/** A cumulus heaped up out of the cloud sea: a few big lobes making a
+ *  dome, smaller billows along its outline and a few on its face, lower
+ *  ones in front. */
+function cumulus(cx: number, base: number, height: number, hw: number, haze: number, seed: number): Cloud {
+  const r = rng(seed);
+  const puffs: Puff[] = [];
+  // the body
+  for (const v of [-0.2, -0.45, -0.68]) {
+    const span = Math.sqrt(1 - v * v) * 0.45 * (1 + v * 0.4);
+    for (const u of [-span, 0, span]) puffs.push({ x: cx + u * hw, y: base + v * height, r: hw * (0.36 + 0.08 * r()) });
+  }
+  const ring = (count: number, out: [number, number], size: [number, number], kids: boolean) => {
+    for (let k = 0; k < count; k++) {
+      const a = Math.PI * (1 + (k + r()) / count);
+      const o = out[0] + r() * (out[1] - out[0]);
+      const u = Math.cos(a) * o;
+      const v = Math.sin(a) * o * 0.92;
+      const rad = hw * (size[0] + r() * (size[1] - size[0])) * (0.9 - 0.3 * v);
+      puffs.push({ x: cx + u * hw, y: base + v * height, r: rad });
+      if (kids && Math.abs(u) < 0.8) {
+        const b = a + (r() - 0.5) * 1.4;
+        puffs.push({ x: cx + u * hw + Math.cos(b) * rad * 0.8, y: base + v * height + Math.sin(b) * rad * 0.8, r: rad * (0.3 + 0.2 * r()) });
+      }
+    }
+  };
+  ring(5, [0.45, 0.6], [0.32, 0.42], false);
+  ring(6, [0.2, 0.55], [0.18, 0.26], false);
+  ring(18, [0.84, 0.92], [0.14, 0.22], true);
+  puffs.sort((p, q) => p.y - q.y);
+  return { puffs, size: hw * 0.2, haze, form: [cx, base - height * 0.5, hw, height * 0.55] };
+}
+
 function skyScene(p: Paint) {
   const n = perlin(9);
   const n2 = perlin(10);
-  sky(p, [[0, "#2a55a6"], [0.3, "#5d86c8"], [0.5, "#a9b4d6"], [0.6, "#eec3b0"], [0.68, "#ffd8a4"], [1, "#ffe6c4"]]);
-  glow(p, 1180, 610, 260, hex("#ffd8a0"), 0.55);
-  glow(p, 1180, 610, 40, hex("#fff0c8"), 1.2);
+  sky(p, [[0, "#1c3a80"], [0.28, "#3f69b0"], [0.46, "#90a6d0"], [0.55, "#e2b8b0"], [0.6, "#ffcf98"], [1, "#ffe0b0"]]);
+  // the sky warms toward the sun
+  const warm = hex("#ff9a5a");
+  p.each(0, 0, W, CLOUD_HORIZON + 40, (X, Y, i) => {
+    const w = Math.exp(-(((X - SUN[0]) / 700) ** 2) - ((Y - SUN[1]) / 260) ** 2);
+    p.add(i, warm, 0.35 * w);
+  });
 
-  // cirrus: long combed streaks high up (live: combed along, channel 3)
-  p.tag(3, 12);
-  p.tag(1, 16);
+  // a field of small rippled clouds high on the left, smaller toward the
+  // horizon, catching pink (live: drifting, channel 3)
+  p.tag(3, 10);
   p.brush[3] = 1;
-  p.each(0, 0, W, 520, (X, Y, i) => {
-    const d = fbm(n, X * 0.0012 + fbm(n2, X * 0.002, Y * 0.01, 2) * 0.6, Y * 0.018, 5);
-    const a = smooth(0.08, 0.45, d) * (1 - smooth(300, 520, Y)) * 0.55;
-    if (a <= 0) return;
-    mix(hex("#ffffff"), hex("#ffd8c8"), Y / 520);
+  const fleckLit = hex("#ffd6cc");
+  const fleckShade = hex("#a49ac8");
+  p.each(0, 60, 1000, 420, (X, Y, i) => {
+    const patch = smooth(-0.05, 0.35, fbm(n2, X * 0.0025 + 3, Y * 0.007, 3)) * smooth(60, 160, Y) * (1 - smooth(300, 420, Y)) * (1 - smooth(500, 1000, X));
+    if (patch <= 0) return;
+    const d = 640 - Y;
+    const [f1] = cells(((X - 800) * 7) / d + fbm(n, X * 0.01, Y * 0.02, 2) * 0.3, 2600 / d);
+    const a = (1 - smooth(0.1, 0.4, f1)) * patch * 0.5;
+    if (a <= 0.003) return;
+    mix(fleckShade, fleckLit, 1 - smooth(0.05, 0.4, f1));
     p.over(i, a);
   });
 
+  // mares' tails: wisps of ice combed out by high wind (live: combed,
+  // channel 3)
+  const tailLit = hex("#fff4ec");
+  const tailWarm = hex("#ffd2b8");
+  p.each(600, 0, W, 330, (X, Y, i) => {
+    const u = X * 0.98 + Y * 0.2;
+    const v = Y * 0.98 - X * 0.2 + 46 * fbm(n, u * 0.0022, 0.5, 3);
+    const body = smooth(0.08, 0.42, fbm(n2, u * 0.0016 + 7, v * 0.011, 4));
+    if (body <= 0) return;
+    const fiber = 0.7 + 0.3 * smooth(-0.4, 0.6, n(u * 0.004, v * 0.11));
+    const a = body * fiber * smooth(600, 820, X) * (1 - smooth(220, 330, Y)) * 0.55;
+    mix(tailLit, tailWarm, Y / 330);
+    p.over(i, a);
+  });
   p.brush[3] = 0;
 
-  // the cloud sea: banks of puffs lit warm from the low sun, far ones hazed
-  // (live: they billow, channel 1)
-  p.brush[1] = 1;
-  const sunDir = light(0.6, -0.5, 0.6);
-  const puff: Ball = {
-    dark: hex("#a898c8"),
-    mid: hex("#f0cccc"),
-    light: hex("#fff6ea"),
-    rough: 0.3,
-    freq: 0.02,
-    tex: 0.25,
-    texFreq: 0.025,
-    L: sunDir,
-    feather: 10,
-    flat: 0.35,
-  };
-  const horizon = hex("#f6d6c0");
-  const bank = (y: number, size: [number, number], seed: number, hz: number) => {
-    const r = rng(seed);
-    const st: Ball = { ...puff, dark: blend(puff.dark, horizon, hz), mid: blend(puff.mid, horizon, hz), light: blend(puff.light, horizon, hz * 0.5) };
-    land(p, () => y + size[0] * 0.2, () => {
-      mix(st.mid, st.dark, 0.25);
-      return 1;
-    });
-    for (let x = -80; x < W + 80; x += size[0] * (0.45 + r() * 0.4)) {
-      const s = size[0] + r() * (size[1] - size[0]);
-      ball(p, n, x, y - r() * s * 0.5, s, st, 0.75);
+  // the sun, low
+  glow(p, SUN[0], SUN[1], 150, hex("#ffc878"), 0.5);
+  glow(p, SUN[0], SUN[1], 30, hex("#fff6dc"), 1.6, 3);
+  // its shafts (live: the shader's, strongest where channel 0 shows sky)
+  p.hide(0);
+  if (!p.live) rays(p, n, SUN[0], SUN[1], -Math.PI / 2 - 0.55, 0.95, 620, hex("#ffdca0"), 0.1, 7);
+
+  // the cloud sea in strata, small and hazy far off, big and near at the
+  // bottom (live: rolling, channel 2), and a cumulus heaped up out of it
+  // at each side (live: billowing, channel 1)
+  p.tag(1, 14);
+  p.tag(2, 6);
+  const r = rng(5);
+  const K = 9;
+  const at = (k: number) => CLOUD_HORIZON + 6 + 420 * (k / (K - 1)) ** 1.8;
+  const stratum = (k: number) => {
+    const y = at(k);
+    const size = 4 + (y - CLOUD_HORIZON) * 0.3;
+    const haze = 0.8 * (1 - k / (K - 1)) ** 1.5;
+    const puffs: Puff[] = [];
+    // flatter the farther, and swelling into mounds here and there
+    const sq = 0.35 + 0.35 * (k / (K - 1));
+    for (let x = -size * 2; x < W + size * 2; x += size * (0.9 + 1.2 * r())) {
+      const swell = smooth(-0.3, 0.5, fbm(n2, x * 0.003, k * 3.1, 2));
+      const rad = size * (0.9 + 1.1 * r() * r()) * (0.8 + 1.1 * swell);
+      puffs.push({ x, y: y + rad * sq * (0.15 - 0.5 * r() * swell), r: rad, sq });
     }
+    puffs.sort((p, q) => p.y - q.y);
+    cloud(p, n, { puffs, size, haze, slab: y + size * 0.2, bottom: k < K - 1 ? at(k + 1) + 2 + size : H });
   };
-  bank(640, [34, 60], 1, 0.65);
-  bank(700, [46, 80], 2, 0.45);
-  bank(790, [64, 110], 3, 0.22);
+  p.brush[2] = 1;
+  for (let k = 0; k < 3; k++) stratum(k);
+  p.brush[1] = 1;
+  p.brush[2] = 0;
+  cloud(p, n, cumulus(1590, 690, 250, 190, 0.25, 31));
+  p.brush[1] = 0;
+  p.brush[2] = 1;
+  for (let k = 3; k < 5; k++) stratum(k);
+  p.brush[1] = 1;
+  p.brush[2] = 0;
+  cloud(p, n, cumulus(190, 770, 520, 250, 0.08, 47));
+  p.brush[1] = 0;
+  p.brush[2] = 1;
+  for (let k = 5; k < K; k++) stratum(k);
+  p.brush[2] = 0;
 
-  // cloud towers rising at the sides
-  const tower: Ball = { ...puff, dark: hex("#a494c4"), mid: hex("#f0d0d4"), light: hex("#fffaf0") };
-  cluster(p, n, 11, 200, 520, 170, 260, 60, [36, 80], tower, 0.12);
-  cluster(p, n, 12, 1500, 560, 140, 220, 50, [36, 76], tower, 0.12);
-  bank(900, [90, 150], 4, 0);
+  // the glare over the clouds around the sun
+  glow(p, SUN[0], SUN[1] + 20, 120, hex("#ffd8a0"), 0.35);
 
-  // birds and drifting wisps move: ambience.ts
+  // a veil of mist drifting in front (live: the shader's)
+  if (!p.live) mist(p, n2, 820, 1060, hex("#f6dccc"), 0.4);
+
+  // birds and motes in the sunbeams move: ambience.ts
   vignette(p, VIGNETTE.sky);
 }
 
@@ -2450,7 +2679,7 @@ const PAINT: Record<Element, (p: Paint) => void> = { leaf, ember, tide, stone, s
 
 /** Brightness trim so every habitat sits at a similar level once the reader
  *  dims it: daylight scenes down, the cavern up. */
-const EXPOSURE: Record<Element, number> = { leaf: 0.8, ember: 1.05, tide: 0.9, stone: 1.35, sky: 0.72, frost: 1, moon: 1.1, arcane: 1.1 };
+const EXPOSURE: Record<Element, number> = { leaf: 0.8, ember: 1.05, tide: 0.9, stone: 1.35, sky: 0.82, frost: 1, moon: 1.1, arcane: 1.1 };
 
 /** Paint an element's backdrop at w×h (keep the 16:10 aspect; the reader
  *  crops to fill). Returns 8-bit RGBA. Takes a second or two, so render it
@@ -2504,8 +2733,9 @@ export function paintLive(el: Element, w = W, h = H): LiveBackdrop {
   return { w, h, base: p.rgba(), mask, layer, layerMode: p.layerMode };
 }
 
-/** Three box blurs, across then down: close to a gaussian of radius `r`. */
-function blurChannel(m: Float32Array, w: number, h: number, ch: number, r: number) {
+/** Three box blurs, across then down: close to a gaussian of radius `r`.
+ *  Blurs channel `ch` of `stride` interleaved channels. */
+function blurChannel(m: Float32Array, w: number, h: number, ch: number, r: number, stride = 4) {
   if (r < 1) return;
   const line = new Float32Array(Math.max(w, h));
   const pass = (n: number, count: number, at: (line: number, i: number) => number) => {
@@ -2521,6 +2751,6 @@ function blurChannel(m: Float32Array, w: number, h: number, ch: number, r: numbe
       }
     }
   };
-  pass(w, h, (y, x) => (y * w + x) * 4 + ch);
-  pass(h, w, (x, y) => (y * w + x) * 4 + ch);
+  pass(w, h, (y, x) => (y * w + x) * stride + ch);
+  pass(h, w, (x, y) => (y * w + x) * stride + ch);
 }

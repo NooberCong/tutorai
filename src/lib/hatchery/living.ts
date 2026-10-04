@@ -1,11 +1,12 @@
 /** The living backdrop: the habitat painting redrawn every frame by a
  *  WebGL shader, so its big features move. Aurora curtains ripple and
- *  surge, kelp sways in the swell under a moving surface, clouds billow,
- *  the volcano's plume climbs, lava creeps down its flanks and the
- *  crust drifts on the lava lake, crowns and grass stir in the wind, the
- *  moonlit oak bends in the gusts, drips ring the cavern's pool, mist
- *  drifts through the hollows, fires burn in the library's fireplaces,
- *  and the runes on the study floor turn.
+ *  surge, kelp sways in the swell under a moving surface, cumulus billow
+ *  over a rolling cloud sea as the sun's shafts breathe, the volcano's
+ *  plume climbs, lava creeps down its flanks and the crust drifts on the
+ *  lava lake, crowns and grass stir in the wind, the moonlit oak bends in
+ *  the gusts, drips ring the cavern's pool, mist drifts through the
+ *  hollows, fires burn in the library's fireplaces, and the runes on the
+ *  study floor turn.
  *
  *  The painter (backdrops.ts, `paintLive`) leaves the moving parts out of
  *  the painting and records where they go: masks for what sways and for
@@ -20,7 +21,7 @@
  *  cheap. It runs in the ambience worker, off the main thread. */
 
 import type { Element } from "./kit.ts";
-import { BACKDROP_H, BACKDROP_W, CAVE_WATER, CRATER, DRIPS, FIRES, FIRE_BASE, LAVA_HORIZON, LAVA_SHORE, VIGNETTE, backdropExposure, type LiveBackdrop } from "./backdrops.ts";
+import { BACKDROP_H, BACKDROP_W, CAVE_WATER, CLOUD_HORIZON, CRATER, DRIPS, FIRES, FIRE_BASE, LAVA_HORIZON, LAVA_SHORE, SUN, VIGNETTE, backdropExposure, type LiveBackdrop } from "./backdrops.ts";
 
 const VERT = `#version 300 es
 void main() {
@@ -292,17 +293,40 @@ vec3 scene(vec2 P) {
   }
   return col;
 }`,
-  // the clouds billow (1): two slow warps drifting different ways, so the
-  // shapes change rather than slide; high wind combs the cirrus (3)
+  // the cumulus billow upward (1); the cloud sea rolls in a slow swell
+  // under the shadows of passing clouds (2); high wind combs the high
+  // clouds (3); shafts from the sun breathe over the sky (0); a veil of
+  // mist drifts by in front; and over minutes the light warms and cools
   sky: `
+const vec2 SUN = vec2(${SUN[0]}.0, ${SUN[1]}.0);
 vec3 scene(vec2 P) {
   vec4 m = mask(P);
-  vec2 w = vec2(N(vec2(P.x * 0.004 + t * 0.02, P.y * 0.006)), N2(vec2(P.x * 0.004 + 31.0, P.y * 0.006 - t * 0.017)))
-         + 0.45 * vec2(N2(vec2(P.x * 0.01 - t * 0.035, P.y * 0.013 + 5.0)), N(vec2(P.x * 0.01 + 9.0, P.y * 0.013 + t * 0.03)));
-  vec2 Q = P + m.g * w * 24.0;
-  Q.x += m.a * 24.0 * N(vec2(P.y * 0.02, t * 0.03));
+  vec2 w = vec2(N(vec2(P.x * 0.006, P.y * 0.008 + t * 0.03)), N2(vec2(P.x * 0.006 + 31.0, P.y * 0.008 + t * 0.022)))
+         + 0.5 * vec2(N2(vec2(P.x * 0.014 - t * 0.02, P.y * 0.016 + t * 0.05)), N(vec2(P.x * 0.014 + 9.0, P.y * 0.016 + t * 0.045)));
+  vec2 Q = P + m.g * w * 9.0;
+  // the sea as a plane running off to the horizon
+  float d = max(P.y - ${CLOUD_HORIZON}.0, 4.0);
+  vec2 sea = vec2((P.x - 800.0) / d, 300.0 / d);
+  float near = clamp(d / 400.0, 0.0, 1.0);
+  Q.y += m.b * (1.0 + 7.0 * near) * sin(sea.y * 1.6 + t * 0.4 + 2.0 * N(sea * 0.4));
+  Q.x += m.a * 20.0 * N(vec2(P.y * 0.02, t * 0.03));
   vec3 col = base(Q);
-  return col * (1.0 + m.g * 0.06 * N2(vec2(P.x * 0.004 - t * 0.012, P.y * 0.006 + t * 0.006)));
+  float sh = smoothstep(-0.2, 0.5, fbm(vec2(sea.x * 0.25 + t * 0.02, sea.y * 0.5 + t * 0.008)));
+  col *= 1.0 - 0.14 * sh * m.b * smoothstep(${CLOUD_HORIZON + 30}.0, ${CLOUD_HORIZON + 140}.0, P.y);
+  vec2 r = P - SUN;
+  float a = atan(r.y, r.x) + 2.12;
+  float e = 1.0 - a * a / 0.9;
+  if (e > 0.0 && r.y < 0.0) {
+    float stripe = smoothstep(0.15, 0.8, 0.5 + 0.5 * N(vec2(a * 7.0 + t * 0.005, t * 0.02)) + 0.25 * N2(vec2(a * 21.0, t * 0.035)));
+    float breathe = 0.7 + 0.3 * sin(t * 0.13 + sin(t * 0.05));
+    col += rgb(255.0, 220.0, 160.0) * lit(P) * 0.1 * stripe * breathe * e * exp(-length(r) / 620.0) * (0.35 + 0.65 * m.r);
+  }
+  col = mix(col, rgb(246.0, 220.0, 204.0) * lit(P), mist(P, 820.0, 1060.0, 0.4, 0.012));
+  float warm = 0.5 - 0.5 * cos(t * 0.021);
+  col *= mix(vec3(1.0), vec3(1.07, 0.99, 0.9), warm);
+  // the sun and its glare shine through the reader's dimming
+  glow = 0.6 * exp(-dot(r, r) / 22000.0);
+  return col;
 }`,
   // aurora curtains ripple and surge and stars twinkle where the sky shows
   // (2); mist drifts

@@ -13,7 +13,7 @@
  *  main thread. */
 
 import type { Element } from "./kit.ts";
-import { CAVE_CRACK, CAVE_SHROOMS, CRATER, FIRES, LAVA_SHORE } from "./backdrops.ts";
+import { CAVE_CRACK, CAVE_SHROOMS, CRATER, FIRES, LAVA_SHORE, SUN } from "./backdrops.ts";
 import { bat, beamDust, drips, glowworms } from "./cave.ts";
 import { ash, eruptions, lavaBubbles, sparks } from "./ember.ts";
 import { butterflies, songbirds } from "./wildlife.ts";
@@ -747,65 +747,62 @@ function meteors(areas: (Area | [...Area, number, number])[], every: [number, nu
   };
 }
 
-/** Soft wisps of cloud drifting sideways across the sky. */
-function wisps(n: number, area: Area, seed: number): Layer {
-  const r = rng(seed);
-  const img = sprite("#ffffff");
-  const [ax0, ay0, ax1, ay1] = area;
-  const ws = Array.from({ length: n }, () => ({ x: ax0 + r() * (ax1 - ax0), y: ay0 + r() * (ay1 - ay0), w: 220 + r() * 260, h: 26 + r() * 30, vx: 6 + r() * 8, a: 0.1 + r() * 0.12 }));
-  return {
-    update(dt) {
-      for (const w of ws) {
-        w.x += w.vx * dt;
-        if (w.x - w.w > ax1) w.x = ax0 - w.w;
-      }
-    },
-    draw(c, _t, x0, x1) {
-      for (const w of ws) {
-        if (w.x + w.w < x0 || w.x - w.w > x1) continue;
-        c.globalAlpha = w.a;
-        c.drawImage(img, w.x - w.w, w.y - w.h, w.w * 2, w.h * 2);
-      }
-      c.globalAlpha = 1;
-    },
-  };
-}
-
-/** A few birds gliding across now and then, wings beating slowly. */
+/** Now and then a few birds crossing on a long glide: they follow their
+ *  leader along a gentle rising and falling curve, banking into it, a few
+ *  wingbeats and then a coast on held wings. */
 function birds(seed: number): Layer {
   const r = rng(seed);
-  let flock: { x: number; y: number; dy: number; ph: number }[] = [];
-  let vx = 40;
-  let next = 6;
+  let flock: { lag: number; dy: number; ph: number }[] = [];
+  let dir = 1;
+  let speed = 40;
+  let y0 = 300;
+  let amp = 30;
+  let freq = 0.1;
+  let size = 1;
+  let age = 0;
+  let next = 8;
   let clock = 0;
+  const pathY = (s: number) => y0 + amp * Math.sin(s * freq);
   return {
     update(dt) {
       clock += dt;
+      age += dt;
       if (!flock.length && clock > next) {
-        const dir = r() < 0.5 ? 1 : -1;
-        vx = dir * (34 + r() * 16);
-        const y = 180 + r() * 200;
-        const x = dir > 0 ? -60 : W + 60;
-        flock = Array.from({ length: 3 + Math.floor(r() * 3) }, (_, i) => ({ x: x - dir * i * (24 + r() * 12), y: y + (i % 2 ? 1 : -1) * i * 9, dy: (r() - 0.5) * 4, ph: r() * TAU }));
-        next = clock + 30 + r() * 30;
+        dir = r() < 0.5 ? 1 : -1;
+        speed = 34 + r() * 14;
+        y0 = 160 + r() * 260;
+        amp = 15 + r() * 30;
+        freq = 0.08 + r() * 0.08;
+        size = 0.75 + r() * 0.45;
+        age = 0;
+        flock = Array.from({ length: 3 + Math.floor(r() * 3) }, (_, i) => ({ lag: i * (0.7 + r() * 0.5), dy: (i % 2 ? 1 : -1) * i * 7 * size, ph: r() * TAU }));
+        next = clock + 35 + r() * 35;
       }
-      for (const b of flock) {
-        b.x += vx * dt;
-        b.y += b.dy * dt;
-      }
-      if (flock.length && flock.every((b) => b.x < -100 || b.x > W + 100)) flock = [];
+      if (flock.length && speed * (age - flock[flock.length - 1].lag) > W + 200) flock = [];
     },
-    draw(c, t) {
-      c.strokeStyle = "rgba(62,68,112,0.85)";
-      c.lineWidth = 1.8;
+    draw(c) {
+      c.strokeStyle = "rgba(70,60,104,0.8)";
+      c.lineWidth = 1.7;
       c.lineCap = "round";
       for (const b of flock) {
-        const lift = 5 * Math.sin(t * 5 + b.ph);
+        const s = age - b.lag;
+        if (s < 0) continue;
+        const x = dir > 0 ? -60 + speed * s : W + 60 - speed * s;
+        const y = pathY(s) + b.dy;
+        // bank into the turn; beat the wings for a while, then glide
+        const bank = Math.atan((amp * freq * Math.cos(s * freq)) / speed) * dir;
+        const beating = Math.sin(s * 0.45 + b.ph) > 0.2;
+        const lift = beating ? 5 * Math.sin(s * 6 + b.ph) : 1.5;
+        c.save();
+        c.translate(x, y);
+        c.rotate(bank);
+        c.scale(size, size);
         c.beginPath();
-        c.moveTo(b.x - 10, b.y - lift);
-        c.quadraticCurveTo(b.x - 4, b.y - 3, b.x, b.y);
-        c.quadraticCurveTo(b.x + 4, b.y - 3, b.x + 10, b.y - lift);
+        c.moveTo(-10, -lift);
+        c.quadraticCurveTo(-4, -3, 0, 0);
+        c.quadraticCurveTo(4, -3, 10, -lift);
         c.stroke();
+        c.restore();
       }
     },
   };
@@ -861,8 +858,9 @@ const LAYERS: Record<Element, () => Layer[]> = {
     bat(63),
   ],
   sky: () => [
-    pulse(1180, 610, 260, "#ffe2a8", 0.05, 0.04, 10, false, 13),
-    wisps(7, [-200, 70, W + 200, 460], 14),
+    pulse(SUN[0], SUN[1], 300, "#ffe2a8", 0.05, 0.04, 10, false, 13),
+    // dust turning gold in the sun's shafts
+    motes({ n: 20, area: [1000, 240, W, 600], v: [-3, -2], spread: [3, 3], wander: 5, size: [1.5, 3.5], colors: ["#ffe6b0", "#fff2d0"], alpha: [0.2, 0.5], twinkle: 6, seed: 14 }),
     birds(15),
   ],
   frost: () => [

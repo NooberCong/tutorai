@@ -171,7 +171,8 @@ An optional hatchery that rewards actual reading:
   shows your companion's habitat, painted wide and dimmed so it sets a mood
   without pulling your eye off the text. It lives, slowly: the aurora's
   curtains ripple and surge over the pines, kelp sways in the swell under a
-  moving surface while fish cruise through it, clouds billow, the
+  moving surface while fish cruise through it, cumulus billow over a
+  rolling cloud sea as the low sun's shafts breathe and birds glide by, the
   volcano's plume climbs and lava creeps down its flanks into a lake whose
   crust drifts and cracks, bubbles breaking on it and now and then a puff
   of cinders arcing out of the crater, crowns and grass stir as butterflies settle on the glade's
