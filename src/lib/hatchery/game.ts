@@ -104,6 +104,9 @@ export interface DocProgress {
   pages: number[];
   /** Chapter indexes already rewarded. */
   chapters: number[];
+  /** The reader has actually dwelled on the document's final page. Optional
+   *  so saved hatcheries from before this was tracked remain valid. */
+  reachedEnd?: boolean;
   finished: boolean;
 }
 
@@ -446,8 +449,9 @@ export function noteHabit(s: HatcheryState, habit: Habit): GameEvent[] {
   return [{ kind: "habit", habit }, ...checkWardrobe(s, Date.now())];
 }
 
-/** A page the reader actually dwelled on. Rewards finished chapters (most
- *  of the pages read, and the reader reached the end) and books, once each. */
+/** A page the reader actually dwelled on. Rewards finished chapters and
+ *  books once each. Completing a book means actually dwelling on its final
+ *  page — the same concrete end-of-book action the reader presents. */
 export function pageRead(
   s: HatcheryState,
   docId: string,
@@ -458,14 +462,17 @@ export function pageRead(
 ): GameEvent[] {
   const events: GameEvent[] = [];
   const doc = (s.docs[docId] ??= { pages: [], chapters: [], finished: false });
-  if (doc.pages.includes(page)) return events;
-  doc.pages.push(page);
-  doc.pages.sort((a, b) => a - b);
-  s.pagesRead += 1;
+  if (page >= info.pages) doc.reachedEnd = true;
+  const isNewPage = !doc.pages.includes(page);
+  if (isNewPage) {
+    doc.pages.push(page);
+    doc.pages.sort((a, b) => a - b);
+    s.pagesRead += 1;
+  }
 
   const read = new Set(doc.pages);
   const where = { title: info.title, page };
-  info.chapters.forEach((ch, i) => {
+  if (isNewPage) info.chapters.forEach((ch, i) => {
     // Finished means reached the end: the next chapter's opening page (the
     // current page flips at mid-screen, so dwelling on the chapter's last
     // page means only half of it is read), or the book's last page.
@@ -481,7 +488,7 @@ export function pageRead(
       events.push(...findEgg(s, "chapter", now, rng, where));
     }
   });
-  if (!doc.finished && info.pages >= 20 && read.size / info.pages >= 0.85) {
+  if (!doc.finished && doc.reachedEnd) {
     doc.finished = true;
     events.push(...findEgg(s, "book", now, rng, where));
   }
