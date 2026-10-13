@@ -11,7 +11,9 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { TextLayer } from "pdfjs-dist";
+import { TextLayer, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
+import type { TextContent } from "pdfjs-dist/types/src/display/api";
+import { cachedPageGlyphs, fetchPageGlyphs, fitTextLayer, type Glyph } from "../lib/textFit";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   destToPage,
@@ -223,6 +225,15 @@ export function Reader(props: {
       if (el.offsetTop <= center) best = Math.max(best, num);
       if (el.offsetTop <= container.scrollTop) top = Math.max(top, num);
     }
+    // Scrolled all the way down is on the last page, even when it's too short
+    // to reach the viewport's center (zoomed out, landscape, a short final
+    // page) — otherwise the end of the book can never be reached.
+    if (
+      container.scrollHeight > container.clientHeight &&
+      container.scrollTop + container.clientHeight >= container.scrollHeight - 2
+    ) {
+      best = pdf.numPages;
+    }
     const topEl = pageRefs.current.get(top);
     if (topEl && topEl.offsetHeight > 0) {
       anchorRef.current = {
@@ -239,7 +250,7 @@ export function Reader(props: {
         ? (container.scrollTop - el.offsetTop) / el.offsetHeight
         : 0;
     reportPage(best, frac);
-  }, [reportPage, jumpTargetTop]);
+  }, [reportPage, jumpTargetTop, pdf.numPages]);
 
   // Pin the reading position through layout reflows. All page geometry
   // derives from layoutScale and pageDims, so re-applying the anchor when
@@ -588,6 +599,13 @@ const PageContent = memo(function PageContent(props: {
     let cancelled = false;
     let renderTask: { cancel: () => void } | null = null;
     let textLayer: TextLayer | null = null;
+    // The rendered layer awaiting its exact-glyph fit (see textFit.ts).
+    let fitPending: {
+      page: PDFPageProxy;
+      viewport: PageViewport;
+      content: TextContent;
+      divs: HTMLElement[];
+    } | null = null;
 
     (async () => {
       const page = await pdf.getPage(num);
@@ -619,15 +637,21 @@ const PageContent = memo(function PageContent(props: {
       }
       if (cancelled) return;
 
+      const content = await page.getTextContent();
+      if (cancelled) return;
       textDiv.replaceChildren();
       textDiv.style.setProperty("--scale-factor", String(viewport.scale));
-      textLayer = new TextLayer({
-        textContentSource: page.streamTextContent(),
+      const layer = new TextLayer({
+        textContentSource: content,
         container: textDiv,
         viewport,
       });
-      await textLayer.render().catch(() => {});
+      textLayer = layer;
+      await layer.render().catch(() => {});
       if (cancelled) return;
+      // Exact glyph boxes are laid out the first time the pointer reaches
+      // this page's text — before any selection can start on it.
+      fitPending = { page, viewport, content, divs: layer.textDivs };
 
       // Sentinel the official viewer adds: while dragging a selection it
       // covers the page, so the caret anchors to it past the last glyph
@@ -638,17 +662,59 @@ const PageContent = memo(function PageContent(props: {
     })();
 
     const textEl = textRef.current;
+    // Runs on the first hover (or the first move after a re-render under the
+    // pointer). Fitting swaps the layer's spans, which would cut a live
+    // selection reaching into it — a drag carried over from the page above,
+    // a shift-click extend — so then it waits for the next hover or click.
+    const holdsSelection = () => {
+      const sel = window.getSelection();
+      return !!sel && !sel.isCollapsed && !!textEl && sel.containsNode(textEl, true);
+    };
+    const applyFit = (glyphs: Glyph[]) => {
+      const job = fitPending;
+      fitPending = null;
+      if (job) fitTextLayer(glyphs, job.viewport, job.content, job.divs);
+    };
+    let fetched: Glyph[] | null = null;
+    let fetching = false;
+    const fit = (e: PointerEvent) => {
+      const job = fitPending;
+      if (!job || !textEl) return;
+      // A plain press starts a fresh selection, so only shift keeps the old.
+      if (e.type === "pointerdown" ? holdsSelection() && e.shiftKey : holdsSelection() || e.buttons) return;
+      const glyphs = fetched ?? cachedPageGlyphs(job.page);
+      if (glyphs) return applyFit(glyphs);
+      if (fetching) return;
+      // pdf.js freed the render's operator list (a text extraction cleans
+      // pages up): fetch it once and fit when it lands — or, if a selection
+      // got underway here meanwhile, on the next hover.
+      fetching = true;
+      fetchPageGlyphs(job.page).then(
+        (g) => {
+          if (fitPending !== job) return;
+          fetched = g;
+          if (!textEl.classList.contains("selecting") && !holdsSelection()) applyFit(g);
+        },
+        () => {},
+      );
+    };
     const stopSelecting = () => textEl?.classList.remove("selecting");
-    const startSelecting = () => {
+    const startSelecting = (e: PointerEvent) => {
+      fit(e);
       textEl?.classList.add("selecting");
       window.addEventListener("pointerup", stopSelecting, { once: true });
     };
+    textEl?.addEventListener("pointerenter", fit);
+    textEl?.addEventListener("pointermove", fit);
     textEl?.addEventListener("pointerdown", startSelecting);
 
     return () => {
       cancelled = true;
       renderTask?.cancel();
       textLayer?.cancel();
+      fitPending = null;
+      textEl?.removeEventListener("pointerenter", fit);
+      textEl?.removeEventListener("pointermove", fit);
       textEl?.removeEventListener("pointerdown", startSelecting);
       window.removeEventListener("pointerup", stopSelecting);
     };

@@ -1196,6 +1196,12 @@ textarea::placeholder {
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  /* A selection ending on a span's last character also paints a "line break"
+     a space wide past it; clip that to the span. The 1px margin lets
+     neighboring spans' highlights overlap (opaque, so no darker seam)
+     instead of leaving antialiased hairlines between them. */
+  overflow: clip;
+  overflow-clip-margin: 1px;
 }
 .textLayer > :not(.markedContent),
 .textLayer .markedContent span:not(.markedContent) {
