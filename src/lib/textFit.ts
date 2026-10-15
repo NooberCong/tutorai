@@ -70,6 +70,9 @@ const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
 const FONT_IDENTITY: Matrix = [0.001, 0, 0, 0.001, 0, 0];
 /** Max drift of any character boundary from its glyph, in CSS px. */
 const TOLERANCE_PX = 0.25;
+/** Widest word gap, in em, still bridged as a space (see fitTextLayer):
+ *  loose justification, but not a table's or a column's gutter. */
+const MAX_SPACE_EM = 2;
 
 /** Operator args carry matrices as plain arrays or Float32Arrays. */
 const asMatrix = (v: unknown): Matrix | null =>
@@ -536,6 +539,10 @@ export function fitTextLayer(
   const items = content.items.filter((it): it is TextItem => "str" in it);
 
   const pieces: (Piece | null)[] = [];
+  // pdf.js reports a word gap wider than 0.6em (loose justification) as an
+  // item of its own, " ", that no glyph marks and that its layer leaves a
+  // plain space wide, so a selection showed holes there. Bridged below.
+  const blanks = new Set<number>();
   let cursor = 0;
   for (let n = 0; n < items.length && n < divs.length; n++) {
     const item = items[n];
@@ -545,7 +552,10 @@ export function fitTextLayer(
     // surrogate pairs or combining marks to pdf.js.
     if (!div.isConnected || !item.str || /[\uD800-\uDFFF\p{M}]/u.test(item.str)) continue;
     const fit = charEdges(item, glyphs, cursor);
-    if (!fit) continue;
+    if (!fit) {
+      if (!item.str.trim()) blanks.add(n);
+      continue;
+    }
     cursor = fit.next;
     const fontHeight = parseFloat(div.style.getPropertyValue("--font-height"));
     if (fontHeight > 0) pieces[n] = { item, div, edges: fit.edges, fontHeight };
@@ -559,19 +569,45 @@ export function fitTextLayer(
     // objects or sizes mid-word, e.g. small caps), and double-click word
     // selection stops at element edges. Pieces that touch on the same
     // baseline become one; a word no layout can follow is placed per char.
+    //
+    // Pieces a space apart on a line join too, the space taking the whole
+    // gap: justification widens it with an offset after the space glyph,
+    // which no glyph's box covers, or pdf.js reports it as a blank item
+    // (above) — either way the selection had a hole at every space.
     const group = [first];
-    for (let next = pieces[n + 1]; next; next = pieces[n + group.length]) {
+    let j = n + 1; // the next unconsumed item
+    for (;;) {
       const last = group[group.length - 1];
-      const touching =
-        !last.item.hasEOL &&
-        last.div.nextSibling === next.div &&
+      const blank = blanks.has(j) ? j : -1;
+      const next = pieces[blank < 0 ? j : j + 1];
+      if (!next || last.item.hasEOL) break;
+      const sameLine =
         Math.max(next.fontHeight, last.fontHeight) <= 2.5 * Math.min(next.fontHeight, last.fontHeight) &&
-        Math.abs(next.item.transform[5] - last.item.transform[5]) < 0.01 * last.fontHeight &&
-        Math.abs(next.edges[0] - last.edges[last.edges.length - 1]) < 0.15 * last.fontHeight;
-      if (!touching) break;
+        Math.abs(next.item.transform[5] - last.item.transform[5]) < 0.01 * last.fontHeight;
+      if (!sameLine) break;
+      const end = last.edges[last.edges.length - 1];
+      const gap = next.edges[0] - end;
+      const touching = Math.abs(gap) < 0.15 * last.fontHeight;
+      const spaced = gap > 0 && gap < MAX_SPACE_EM * last.fontHeight;
+      if (blank >= 0) {
+        const item = items[blank];
+        const div = divs[blank];
+        if (item.hasEOL || last.div.nextSibling !== div || div.nextSibling !== next.div || !spaced) break;
+        const k = item.str.length;
+        const edges = Array.from({ length: k + 1 }, (_, t) => end + (gap * t) / k);
+        group.push({ item, div, edges, fontHeight: last.fontHeight });
+        j++;
+      } else {
+        if (last.div.nextSibling !== next.div) break;
+        if (isWs(last.item.str[last.item.str.length - 1])) {
+          if (!touching && !spaced) break;
+          if (gap > 0) last.edges[last.edges.length - 1] = next.edges[0];
+        } else if (!touching) break;
+      }
       group.push(next);
+      j++;
     }
-    n += group.length - 1;
+    n = j - 1;
     // Style (top, size, font) from the tallest piece, so a small-caps word's
     // highlight covers its capital too.
     const { item } = first;
