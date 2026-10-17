@@ -19,7 +19,12 @@ export const readHatchery = () => invoke<string | null>("read_hatchery");
 export const writeHatchery = (content: string) =>
   invoke<void>("write_hatchery", { content });
 
-export const registerPdf = (path: string) =>
+export const readTrivia = () => invoke<string | null>("read_trivia");
+export const writeTrivia = (content: string) =>
+  invoke<void>("write_trivia", { content });
+export const triviaDir = () => invoke<string>("trivia_dir");
+
+export const registerPdf =(path: string) =>
   invoke<RegisteredDoc>("register_pdf", { path });
 
 /** asset:// URL pdf.js can stream with range requests. */

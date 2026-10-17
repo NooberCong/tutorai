@@ -274,6 +274,42 @@ textarea::placeholder {
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+/* Library · Hatchery · Trivia. */
+.home-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--ink1);
+  border: 1px solid var(--line);
+}
+.home-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--dim);
+  transition: background 130ms, color 130ms;
+}
+.home-tabs button:hover {
+  color: var(--text);
+}
+.home-tabs button.on {
+  background: var(--ink3);
+  color: var(--text);
+  box-shadow: var(--lift);
+}
+/* "Something new here", on a tab. */
+.home-tabs .tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
 .home-scroll {
   flex: 1;
   overflow-y: auto;

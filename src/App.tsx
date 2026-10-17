@@ -7,7 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Home } from "./components/Home";
+import { Home, type HomeView } from "./components/Home";
 import { Reader } from "./components/Reader";
 import { TabStrip } from "./components/TabStrip";
 import { Toolbar } from "./components/Toolbar";
@@ -36,6 +36,7 @@ import {
 } from "./lib/tauri";
 import type { RegisteredDoc } from "./lib/types";
 import { getSetting, saveSetting, SETTINGS_DEFAULTS, useSetting } from "./lib/settings";
+import { useDailyTrivia } from "./lib/trivia/daily";
 
 /** One open document. `page`/`scroll` are where the reader resumes when the
  *  tab (re)activates — seeded from the library index on open, refreshed by the
@@ -66,6 +67,9 @@ function dismissSplash() {
 }
 
 export default function App() {
+  // Today's trivia pack is written in the background, whatever's on screen.
+  useDailyTrivia();
+
   // Open documents, one tab each; a null activeId shows the library. Every
   // document lives in at most one tab: opening it again focuses the existing
   // tab (docId is a content hash, so the same file under two paths dedups too).
@@ -194,9 +198,9 @@ export default function App() {
   // "Back to library" keeps every tab alive — the strip stays visible on the
   // library screen, so open documents remain one click away.
   const goHome = useCallback(() => setActiveId(null), []);
-  // Which library-screen view shows: the book grid or the hatchery. Lives
-  // here so the reader's companion can jump straight to the hatchery.
-  const [homeView, setHomeView] = useState<"library" | "hatchery">("library");
+  // Which library-screen view shows: the book grid, the hatchery or trivia.
+  // Lives here so the reader's companion can jump straight to the hatchery.
+  const [homeView, setHomeView] = useState<HomeView>("library");
   const openHatchery = useCallback(() => {
     setHomeView("hatchery");
     setActiveId(null);

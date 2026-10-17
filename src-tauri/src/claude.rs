@@ -229,8 +229,11 @@ fn translate_line(
                 .iter()
                 .map(|k| usage[k].as_u64().unwrap_or(0))
                 .sum();
+            // Auth and usage-limit failures arrive as a "success" frame with
+            // is_error set and the CLI's message as the result text.
+            let is_error = v["is_error"].as_bool().unwrap_or(false);
             Some(JobEvent::Done {
-                ok: status == "success",
+                ok: status == "success" && !is_error,
                 text: v["result"].as_str().unwrap_or("").to_string(),
                 session_id: session_id.clone(),
                 duration_ms: v["duration_ms"].as_u64().unwrap_or(0),

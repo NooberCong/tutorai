@@ -8,6 +8,8 @@
 //!   <app-data>/library.json
 //!   <app-data>/hatchery.json                          (reading pets: eggs, collection,
 //!                                                      reading-time stats)
+//!   <app-data>/trivia.json                            (daily trivia packs, streak, scores)
+//!   <app-data>/trivia/                                (empty cwd for the trivia writer)
 //!   <app-data>/dictionaries/<id>/dict.ifo|idx|dict.dz (imported StarDict filesets;
 //!                                                      see dict.rs)
 //!   <app-data>/docs/<docId>/chapters/chapter-01.txt   (page-marked text)
@@ -138,11 +140,7 @@ fn write_library(app: &AppHandle, entries: &[LibraryEntry]) -> Result<(), String
 /// builds, whose webview origins differ.
 #[tauri::command]
 pub fn read_settings(app: AppHandle) -> Result<Option<String>, String> {
-    match fs::read_to_string(settings_path(&app)?) {
-        Ok(text) => Ok(Some(text)),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+    read_optional(&settings_path(&app)?)
 }
 
 #[tauri::command]
@@ -154,24 +152,50 @@ fn hatchery_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_root(app)?.join("hatchery.json"))
 }
 
-#[tauri::command]
-pub fn read_hatchery(app: AppHandle) -> Result<Option<String>, String> {
-    match fs::read_to_string(hatchery_path(&app)?) {
+fn read_optional(path: &Path) -> Result<Option<String>, String> {
+    match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
     }
 }
 
-/// The hatchery save is the one file here a user would grieve over (their
-/// whole collection), so it's written to a temp file and renamed into place:
-/// a crash mid-write leaves the previous save intact, never a torn file.
-#[tauri::command]
-pub fn write_hatchery(app: AppHandle, content: String) -> Result<(), String> {
-    let path = hatchery_path(&app)?;
+/// For saves a user would grieve over (their pet collection, their streak):
+/// written to a temp file and renamed into place, so a crash mid-write
+/// leaves the previous save intact, never a torn file.
+fn write_atomic(path: &Path, content: &str) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, content).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+    fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_hatchery(app: AppHandle) -> Result<Option<String>, String> {
+    read_optional(&hatchery_path(&app)?)
+}
+
+#[tauri::command]
+pub fn write_hatchery(app: AppHandle, content: String) -> Result<(), String> {
+    write_atomic(&hatchery_path(&app)?, &content)
+}
+
+#[tauri::command]
+pub fn read_trivia(app: AppHandle) -> Result<Option<String>, String> {
+    read_optional(&data_root(&app)?.join("trivia.json"))
+}
+
+#[tauri::command]
+pub fn write_trivia(app: AppHandle, content: String) -> Result<(), String> {
+    write_atomic(&data_root(&app)?.join("trivia.json"), &content)
+}
+
+/// Working directory for the trivia writer: an empty folder of its own, so
+/// the run has nothing of the user's within reach — it only needs the web.
+#[tauri::command]
+pub fn trivia_dir(app: AppHandle) -> Result<String, String> {
+    let dir = data_root(&app)?.join("trivia");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
 }
 
 /// Snips are one-shot chat attachments. The chat wipes them when the

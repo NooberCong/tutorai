@@ -1,6 +1,8 @@
 node_modules/
 dist/
 src-tauri/target/
+# alternate cargo target dir, for building while the release exe is running
+release-build/
 src-tauri/gen/
 *.local
 .DS_Store

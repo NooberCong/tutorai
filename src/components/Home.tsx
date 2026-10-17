@@ -1,4 +1,5 @@
-/** Library screen: open a PDF, resume recent documents. */
+/** Library screen: open a PDF, resume recent documents — beside the
+ *  hatchery and daily trivia. */
 
 import { useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -9,21 +10,27 @@ import { Close, LogoMark, Plus } from "./Icons";
 import { DictionaryManager } from "./DictionaryManager";
 import { HatcheryScreen } from "./hatchery/HatcheryScreen";
 import { TabEgg } from "./hatchery/TabEgg";
+import { TriviaScreen } from "./trivia/TriviaScreen";
+import { dayKey } from "../lib/hatchery/game";
+import { packFor } from "../lib/trivia/game";
+import { useTrivia } from "../lib/trivia/store";
 import { saveSetting, useSetting } from "../lib/settings";
 
 /** Most-recent books shown before the grid collapses behind "Show all" —
  *  about two rows at the default window width. */
 const LIBRARY_PREVIEW = 12;
 
+export type HomeView = "library" | "hatchery" | "trivia";
+
 export function Home(props: {
   onOpen: (path: string) => void;
   opening: string | null;
-  view: "library" | "hatchery";
-  setView: (v: "library" | "hatchery") => void;
+  view: HomeView;
+  setView: (v: HomeView) => void;
 }) {
-  // With reading pets off, the library is the only view.
+  // With reading pets off, there's no hatchery to show.
   const hatcheryOn = useSetting("hatchery");
-  const view = hatcheryOn ? props.view : "library";
+  const view = hatcheryOn || props.view !== "hatchery" ? props.view : "library";
   const [library, setLibrary] = useState<LibraryEntry[]>([]);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const [claude, setClaude] = useState<string | null | undefined>(undefined);
@@ -84,16 +91,16 @@ export function Home(props: {
           <LogoMark size={26} />
           <span className="wordmark">TutorAI</span>
         </div>
-        {hatcheryOn && (
-          <div className="home-tabs" role="tablist">
-            <button
-              role="tab"
-              aria-selected={view === "library"}
-              className={view === "library" ? "on" : ""}
-              onClick={() => props.setView("library")}
-            >
-              Library
-            </button>
+        <div className="home-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={view === "library"}
+            className={view === "library" ? "on" : ""}
+            onClick={() => props.setView("library")}
+          >
+            Library
+          </button>
+          {hatcheryOn && (
             <button
               role="tab"
               aria-selected={view === "hatchery"}
@@ -103,8 +110,17 @@ export function Home(props: {
               <TabEgg />
               Hatchery
             </button>
-          </div>
-        )}
+          )}
+          <button
+            role="tab"
+            aria-selected={view === "trivia"}
+            className={view === "trivia" ? "on" : ""}
+            onClick={() => props.setView("trivia")}
+          >
+            Trivia
+            <TriviaDot />
+          </button>
+        </div>
         <button className="btn primary" onClick={pick} disabled={!!props.opening}>
           <Plus width={13} height={13} />
           {props.opening ? "Opening…" : "Open PDF"}
@@ -122,6 +138,8 @@ export function Home(props: {
 
           {view === "hatchery" ? (
             <HatcheryScreen onTurnOff={() => props.setView("library")} />
+          ) : view === "trivia" ? (
+            <TriviaScreen />
           ) : library.length === 0 ? (
             <header className="home-hero">
               <h1>
@@ -221,4 +239,11 @@ export function Home(props: {
       {dragging && <div className="drop-veil">Drop to open</div>}
     </div>
   );
+}
+
+/** A dot on the Trivia tab while today's questions wait to be played. */
+function TriviaDot() {
+  const s = useTrivia();
+  const pack = packFor(s, dayKey(new Date()));
+  return pack && !pack.finishedAt ? <span className="tab-dot" aria-label="New questions" /> : null;
 }

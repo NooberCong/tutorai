@@ -223,6 +223,37 @@ An optional hatchery that rewards actual reading:
   <sub><i>Your companion's habitat fills the space beside the page, dimmed toward the text, and drifts slowly.</i></sub>
 </p>
 
+### Daily trivia
+
+An opt-in third tab on the home screen: ten multiple-choice questions a day,
+each followed by the story behind its answer.
+
+- **Your topics, today's news.** Pick three or more of 17 topics (animals,
+  space, history, food, …). Once a day, in the background, Claude searches
+  what's happened in them over the last month, and builds each question
+  around the most surprising lasting fact the news touches. You won't need
+  to have read the headline to answer. Questions run easy to hard, and the
+  writer fact-checks every answer and every wrong choice against the web
+  before the pack is saved.
+- **A story for every answer.** Answer, and the reveal opens on a photo of
+  the subject (from Wikimedia Commons) and a short, sourced story: who,
+  where, what was at stake, and why it's in the news now. Where a good one
+  exists, a video follows (a mission overview, real footage of the animal).
+  Every picture and video is checked to load before the pack is saved.
+  Sources and videos open in your browser.
+- **Streaks with slack.** Finish a day's ten to keep your streak; yesterday's
+  pack can still be caught up today. A day Claude couldn't write a pack (out
+  of usage, signed out) never breaks it, and every 7 days earns a freeze
+  (hold up to 2) that covers a missed day by itself.
+- **Rewards in the hatchery.** A finished pack warms your egg and grows your
+  companion just like reading does: 5 minutes, plus 1 per right answer, plus
+  1 per streak day up to 5, and 3 more for a perfect 10. Streaks of 7, 30
+  and 100 days (then every 50) turn up an egg whose element follows the
+  topic you play most.
+- **Opt-in, once a day.** Nothing runs, and no quota is spent, until you
+  pick topics. After that it writes one pack a day while the app is open,
+  retrying later (never in a loop) if Claude is unavailable.
+
 ---
 
 ## How it works
@@ -302,12 +333,15 @@ src/                      React frontend
                           brings them to life (living.ts) and what
                           drifts over them (ambience.ts)
   components/hatchery/    hatchery screen, hatch reveal, reader companion
+  lib/trivia/             daily trivia: topics, streak and reward rules,
+                          the save, and the once-a-day background writer
+  components/trivia/      trivia tab: setup, today, player, results
 src-tauri/src/
   claude.rs               headless CLI runner: spawn, NDJSON→event
                           translation, cancellation
   jobs.rs                 in-flight job registry
-  store.rs                library index, per-document cache and the
-                          hatchery save on disk
+  store.rs                library index, per-document cache, and the
+                          hatchery and trivia saves on disk
 scripts/
   render-icon.mjs         rasterizes the SVG app-icon design source
                           (regenerate everything with `npm run icon`)

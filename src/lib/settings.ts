@@ -54,6 +54,11 @@ export interface Settings {
   /** Animate it: drifting motes, snow, bubbles (off-thread, pauses when
    *  hidden). */
   hatcheryBackdropMotion: boolean;
+  /** Daily Trivia — opt-in, spends quota once a day. Off until the player
+   *  sets it up (picks topics), then stays on. */
+  trivia: boolean;
+  /** Daily Trivia topic ids. */
+  triviaTopics: string[];
 }
 
 export const SETTINGS_DEFAULTS: Settings = {
@@ -78,6 +83,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   hatcheryInReader: true,
   hatcheryBackdrop: true,
   hatcheryBackdropMotion: true,
+  trivia: false,
+  triviaTopics: [],
 };
 
 let settings: Settings = { ...SETTINGS_DEFAULTS };

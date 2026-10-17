@@ -8,7 +8,8 @@
  *      user keeps it at a smaller stage;
  *    - fills a "find" meter that turns up a new egg every FIND_EVERY_MIN.
  *  Finishing a chapter or a whole book also turns up an egg, with better
- *  odds on rare tiers and shinies.
+ *  odds on rare tiers and shinies. Daily trivia adds a little warmth of its
+ *  own, and an egg at streak milestones (see trivia/game.ts).
  *
  *  An egg's *element* is decided when it's found, from how the user is
  *  reading at that moment (time of day, long sessions, slow careful reading,
@@ -46,7 +47,7 @@ const PAGE_CAP_MS = 5 * 60_000;
 /** A day "counts" toward the week once this much reading happened. */
 export const DAY_MIN = 10;
 
-export type EggSource = "starter" | "reading" | "chapter" | "book";
+export type EggSource = "starter" | "reading" | "chapter" | "book" | "trivia";
 
 export interface Where {
   title: string;
@@ -354,13 +355,17 @@ const TIER_ODDS: Record<EggSource, Record<Tier, number>> = {
   reading: { common: 62, rare: 26, epic: 9, legendary: 3 },
   chapter: { common: 40, rare: 35, epic: 19, legendary: 6 },
   book: { common: 0, rare: 55, epic: 33, legendary: 12 },
+  trivia: { common: 40, rare: 35, epic: 19, legendary: 6 },
 };
 
-function findEgg(s: HatcheryState, source: EggSource, now: Date, rng: Rng, where?: Where): GameEvent[] {
+/** `element` overrides the habit-drawn roll (trivia eggs follow topics). */
+function findEgg(
+  s: HatcheryState, source: EggSource, now: Date, rng: Rng, where?: Where, element?: Element,
+): GameEvent[] {
   const tier = weighted(TIER_ODDS[source], rng);
   const egg: Egg = {
     id: uid(),
-    element: rollElement(s, now, rng),
+    element: element ?? rollElement(s, now, rng),
     tier,
     source,
     warmth: 0,
@@ -406,23 +411,7 @@ export function tick(
   const fade = Math.pow(0.5, ms / (30 * 60_000));
   for (const k of Object.keys(s.habits) as Habit[]) s.habits[k] *= fade;
 
-  const egg = s.incubator;
-  if (egg && egg.warmth < egg.need) {
-    egg.warmth = Math.min(egg.need, egg.warmth + ms);
-    if (egg.warmth >= egg.need) events.push({ kind: "egg-ready", egg });
-  }
-
-  const pet = companion(s);
-  if (pet && !keptSmall(pet)) {
-    const before = grownStage(pet);
-    pet.xp += ms;
-    const after = grownStage(pet);
-    if (after > before) {
-      events.push({ kind: "grew", pet, stage: after });
-      const d = s.dex[pet.species];
-      if (d && after > d.best) d.best = after;
-    }
-  }
+  events.push(...warm(s, ms));
 
   const h = now.getHours();
   const { long, slow } = sittingPace(s, now);
@@ -440,6 +429,44 @@ export function tick(
       events.push(...findEgg(s, "reading", now, rng, where));
     }
   }
+  return events;
+}
+
+/** What `ms` of reading does for the egg and the companion: warms the one,
+ *  grows the other. */
+function warm(s: HatcheryState, ms: number): GameEvent[] {
+  const events: GameEvent[] = [];
+  const egg = s.incubator;
+  if (egg && egg.warmth < egg.need) {
+    egg.warmth = Math.min(egg.need, egg.warmth + ms);
+    if (egg.warmth >= egg.need) events.push({ kind: "egg-ready", egg });
+  }
+  const pet = companion(s);
+  if (pet && !keptSmall(pet)) {
+    const before = grownStage(pet);
+    pet.xp += ms;
+    const after = grownStage(pet);
+    if (after > before) {
+      events.push({ kind: "grew", pet, stage: after });
+      const d = s.dex[pet.species];
+      if (d && after > d.best) d.best = after;
+    }
+  }
+  return events;
+}
+
+/** A finished trivia pack: `ms` of reading-equivalent warmth for the egg and
+ *  the companion — but not reading itself, so no finds, days or accessory
+ *  progress — plus an egg of `egg`'s element at a streak milestone. */
+export function triviaBonus(
+  s: HatcheryState,
+  ms: number,
+  egg: Element | null,
+  now: Date,
+  rng: Rng = Math.random,
+): GameEvent[] {
+  const events = warm(s, ms);
+  if (egg) events.push(...findEgg(s, "trivia", now, rng, undefined, egg));
   return events;
 }
 
@@ -555,7 +582,8 @@ export function hatch(
     const lean = ink > talk ? "inkling" : talk > ink ? "tomepup" : null;
     sp = pool.find((p) => p.id === lean) ?? sp;
   }
-  const shinyOdds = egg.source === "chapter" || egg.source === "book" ? 1 / 8 : 1 / 16;
+  const earned = egg.source === "chapter" || egg.source === "book" || egg.source === "trivia";
+  const shinyOdds = earned ? 1 / 8 : 1 / 16;
   const shiny = rng() < shinyOdds;
   const d = (s.dex[sp.id] ??= { first: now.getTime(), count: 0, shiny: 0, best: 0 });
   d.count += 1;
