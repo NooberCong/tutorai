@@ -2,9 +2,8 @@
  *  the story behind it. Answers lock. The last answer closes the pack and
  *  pays its reward; the results show what it earned. */
 
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { renderMarkdown } from "../../lib/markdown";
 import { useSetting } from "../../lib/settings";
 import { companion, homeOf, speciesById, stageOf } from "../../lib/hatchery/game";
 import { useHatchery } from "../../lib/hatchery/store";
@@ -17,6 +16,8 @@ import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Close } from "../Icons"
 import { GrowthMeter } from "../hatchery/Meter";
 import { ELEMENT_LABEL } from "../hatchery/labels";
 import { Habitat, PetSprite, PixelImg, crackOf, eggUrl } from "../hatchery/sprites";
+import { Prose } from "./Prose";
+import { TriviaComposer, TriviaSelection, TriviaThread, useTriviaChat } from "./TriviaChat";
 
 export function TriviaPlayer(props: { pack: TriviaPack; onExit: () => void }) {
   const { pack } = props;
@@ -93,8 +94,10 @@ function Question(props: {
   const picked = pack.answers[step];
   const answered = picked !== null;
   const right = picked === q.answer;
+  const host = useRef<HTMLDivElement>(null);
   const reveal = useRef<HTMLDivElement>(null);
   const justAnswered = useRef(false);
+  const chat = useTriviaChat(q, picked);
 
   // When the player answers (not when revisiting), lift the story into view
   // if it starts low — to a third of the way down, so the marked choices
@@ -130,7 +133,7 @@ function Question(props: {
   }, [answered, onPick, onNext]);
 
   return (
-    <>
+    <div className="trivia-q" ref={host}>
       <p className="trivia-hook">
         <b>{TOPIC[q.topic]?.label ?? q.topic}</b>
         {q.hook && <span>{q.hook}</span>}
@@ -162,7 +165,7 @@ function Question(props: {
         <div ref={reveal} className={`trivia-reveal ${right ? "ok" : "bad"}`}>
           <div className="reveal-head">{right ? "Correct" : `Not quite — it's ${String.fromCharCode(65 + q.answer)}`}</div>
           {q.image && <Figure image={q.image} />}
-          <Story text={q.story} />
+          <Prose text={q.story} className="trivia-story" />
           {!right && q.whyNot && <p className="why-not">{q.whyNot}</p>}
           {q.video && <VideoCard video={q.video} />}
           <div className="insight-sources">
@@ -178,7 +181,10 @@ function Question(props: {
           </button>
         </div>
       )}
-    </>
+      <TriviaThread chat={chat} />
+      <TriviaComposer chat={chat} />
+      <TriviaSelection hostRef={host} chat={chat} />
+    </div>
   );
 }
 
@@ -243,24 +249,6 @@ function hostname(url: string): string {
   } catch {
     return url;
   }
-}
-
-/** Story Markdown. Links open in the browser, never inside the app. */
-function Story(props: { text: string }) {
-  const onClick = (e: MouseEvent<HTMLElement>) => {
-    const a = (e.target as HTMLElement).closest?.("a");
-    if (!a) return;
-    e.preventDefault();
-    const href = a.getAttribute("href");
-    if (href?.startsWith("https://")) void openUrl(href);
-  };
-  return (
-    <div
-      className="md trivia-story"
-      onClick={onClick}
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(props.text) }}
-    />
-  );
 }
 
 function Results(props: { pack: TriviaPack; onReview: (step: number) => void; onExit: () => void }) {

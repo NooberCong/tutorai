@@ -10,7 +10,7 @@
   flex-direction: column;
   gap: 18px;
 }
-.trivia section {
+.trivia > section {
   background: var(--ink1);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -539,4 +539,48 @@
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--faint);
+}
+
+/* Talking about a question: the selection pill's thread. */
+.trivia-q {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.trivia-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  animation: pop-in 200ms ease-out;
+}
+.md.trivia-answer {
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.trivia-chat-end {
+  scroll-margin-bottom: 96px; /* clear of the pinned composer */
+}
+/* Pinned to the bottom of the screen, over a fade of the page so the text
+   scrolling under it never crowds it. */
+.trivia-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: 6px;
+  padding: 18px 0 16px;
+  background: linear-gradient(to bottom, transparent, var(--ink0) 18px);
+}
+.trivia-composer .composer-box {
+  flex-direction: row;
+  align-items: flex-end;
+  padding: 8px 8px 8px 14px;
+  box-shadow: var(--shadow);
+}
+.trivia-composer .composer-box textarea {
+  flex: 1;
+  min-height: 0;
+  align-self: center;
 }

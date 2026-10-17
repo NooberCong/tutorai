@@ -245,6 +245,12 @@ each followed by the story behind its answer.
   exists, a video follows (a mission overview, real footage of the animal).
   Every picture and video is checked to load before the pack is saved.
   Sources and videos open in your browser.
+- **Ask about it.** Every question has a box pinned under it for asking
+  Claude anything about it, and selecting text gives the reader's
+  Translate, Explain and Ask. Before you answer, Claude helps with words
+  and background but won't give the answer away; after, it knows the story
+  and searches the web for what happened next. The conversation belongs to
+  the question on screen and ends when you move on.
 - **Streaks with slack.** Finish a day's ten to keep your streak; yesterday's
   pack can still be caught up today. A day Claude couldn't write a pack (out
   of usage, signed out) never breaks it, and every 7 days earns a freeze

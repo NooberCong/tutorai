@@ -622,3 +622,45 @@ function commonsImageOf(o: Record<string, unknown>): TriviaImage | undefined {
 function media<T>(raw: unknown, read: (o: Record<string, unknown>) => T | undefined): T | undefined {
   return raw && typeof raw === "object" ? read(raw as Record<string, unknown>) : undefined;
 }
+
+// ── Trivia follow-ups: Explain / Ask on a selection in a trivia question ──
+
+const letter = (i: number) => String.fromCharCode(65 + i);
+
+/** Opens a conversation about one trivia question. Before the player has
+ *  answered, Claude isn't told the answer and must not find it for them. */
+export function triviaChatPreamble(q: TriviaQuestion, picked: number | null, today: Date): string {
+  return [
+    `I'm playing a daily trivia game and want to talk about one of its questions. Today is ${today.toDateString()}.`,
+    ``,
+    `The news it hangs on: ${q.hook}`,
+    `Question: ${q.question}`,
+    ...q.choices.map((c, i) => `${letter(i)}) ${c}`),
+    ``,
+    picked !== null
+      ? triviaAnswerContext(q, picked)
+      : `I haven't answered yet. Help me with words and background, but never say, hint at or rule out which choice is right, and don't look the answer up.`,
+    ``,
+    `Talk to me like a curious friend, not a textbook: a short paragraph or two unless I ask for more. Search the web when I ask about something beyond what's here (what happened next, the latest news), and link what you cite.`,
+  ].join("\n");
+}
+
+/** Tells a conversation begun before answering that the answer is now open. */
+export function triviaAnsweredNote(q: TriviaQuestion, picked: number): string {
+  return `I've answered now, so you can talk about the answer freely. ${triviaAnswerContext(q, picked)}`;
+}
+
+function triviaAnswerContext(q: TriviaQuestion, picked: number): string {
+  const mine = picked === q.answer ? "I got it right." : `I picked ${letter(picked)}.`;
+  return [
+    `The answer is ${letter(q.answer)}) ${q.choices[q.answer]}. ${mine} The story I read after answering:`,
+    ``,
+    q.story,
+    ``,
+    `Its sources: ${q.sources.map((s) => s.url).join(", ")}`,
+  ].join("\n");
+}
+
+export function explainTriviaMessage(text: string): string {
+  return `Explain this:\n\n"${text.trim()}"\n\nWhat it means in plain language, and the context I need to make sense of it.`;
+}
