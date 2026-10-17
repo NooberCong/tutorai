@@ -48,6 +48,10 @@ export interface TriviaQuestion {
   /** Why the most tempting wrong choice tempts. */
   whyNot: string;
   sources: TriviaSource[];
+  /** Shown with the question: sets the scene of the hook, never hints at
+   *  the answer. */
+  scene?: TriviaImage;
+  /** Shown with the story: the subject of the answer itself. */
   image?: TriviaImage;
   video?: TriviaVideo;
 }
@@ -214,7 +218,24 @@ function favoriteElement(s: TriviaState): Element {
   return top ? TOPIC[top[0]].element : "arcane";
 }
 
-/** Facts asked in recent packs, so the writer doesn't repeat itself. */
-export function recentFacts(s: TriviaState, days = 45): string[] {
-  return s.packs.slice(0, days).flatMap((p) => p.questions.map((q) => q.fact));
+/** What the writer must not repeat. A news story stays in the news for a
+ *  couple of weeks, so its hook is off limits that long — a new fact about
+ *  the same probe or anniversary still feels like the same question. A fact
+ *  is off limits for six weeks; after that, meeting it again is a useful
+ *  reminder rather than a repeat. */
+const HOOK_DAYS = 14;
+const FACT_DAYS = 45;
+
+export interface Recent {
+  hooks: string[];
+  facts: string[];
+}
+
+export function recent(s: TriviaState, today: string): Recent {
+  // Day keys compare as strings: "YYYY-MM-DD".
+  const since = (days: number) => s.packs.filter((p) => p.day >= shiftDay(today, -days) && p.day < today);
+  return {
+    hooks: since(HOOK_DAYS).flatMap((p) => p.questions.map((q) => q.hook)).filter(Boolean),
+    facts: since(FACT_DAYS).flatMap((p) => p.questions.map((q) => q.fact)),
+  };
 }

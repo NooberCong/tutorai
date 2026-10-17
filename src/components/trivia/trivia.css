@@ -411,6 +411,44 @@
   color: var(--bad);
 }
 
+/* The question's scene: a banner short enough to keep all four choices
+   on screen. */
+.trivia-scene {
+  position: relative;
+  margin: 2px 0 0;
+}
+.trivia-scene img {
+  display: block;
+  width: 100%;
+  height: clamp(140px, 24vh, 230px);
+  object-fit: cover;
+  /* Subjects sit high in most photos; a centred crop beheads them. */
+  object-position: 50% 30%;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--ink2);
+}
+.scene-credit {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  background: rgba(5, 8, 7, 0.66);
+  opacity: 0;
+  transition: opacity 160ms, color 130ms;
+}
+.trivia-scene:hover .scene-credit,
+.scene-credit:focus-visible {
+  opacity: 1;
+}
+.scene-credit:hover {
+  color: var(--text);
+}
+
 /* Story media. */
 .trivia-figure {
   margin: 0;

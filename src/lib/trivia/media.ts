@@ -60,12 +60,14 @@ function loadedWidth(src: string): Promise<number> {
 export async function verifyMedia(questions: TriviaQuestion[]): Promise<TriviaQuestion[]> {
   return Promise.all(
     questions.map(async (q) => {
-      const [image, video] = await Promise.all([
+      const [scene, image, video] = await Promise.all([
+        q.scene && loadedWidth(commonsImage(q.scene.file)),
         q.image && loadedWidth(commonsImage(q.image.file)),
         q.video && loadedWidth(youtubeThumb(q.video.id)),
       ]);
       return {
         ...q,
+        scene: scene ? q.scene : undefined,
         image: image ? q.image : undefined,
         video: video && video >= 320 ? q.video : undefined,
       };

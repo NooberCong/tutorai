@@ -16,7 +16,7 @@ import { parseTrivia, triviaPrompt } from "../ai";
 import { getSetting } from "../settings";
 import { claudeVersion, runJob, triviaDir } from "../tauri";
 import { dayKey } from "../hatchery/game";
-import { MIN_QUESTIONS, addPack, excuse, packFor, recentFacts, spendFreezes } from "./game";
+import { MIN_QUESTIONS, addPack, excuse, packFor, recent, spendFreezes } from "./game";
 import { verifyMedia } from "./media";
 import { getTrivia, mutateTrivia } from "./store";
 import { MIN_TOPICS, TOPIC } from "./topics";
@@ -88,7 +88,7 @@ export async function checkTrivia(force = false): Promise<void> {
     let searches = 0;
     const { result } = runJob(
       {
-        prompt: triviaPrompt(topics, now, recentFacts(getTrivia())),
+        prompt: triviaPrompt(topics, now, recent(getTrivia(), today)),
         cwd: await triviaDir(),
         model: getSetting("model") || null,
       },
@@ -124,11 +124,18 @@ export async function checkTrivia(force = false): Promise<void> {
  *  JSON input. */
 function lookup(tool: string, detail: string): string {
   const field = tool === "WebSearch" ? "query" : "url";
-  const m = detail.match(new RegExp(`"${field}"\\s*:\\s*"([^"]*)`));
+  // The JSON string's body, escaped quotes included — it may be cut off.
+  const m = detail.match(new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`));
   if (!m) return "";
-  if (tool === "WebSearch") return m[1];
+  let value = m[1];
   try {
-    return new URL(m[1]).hostname.replace(/^www\./, "");
+    value = JSON.parse(`"${value}"`) as string;
+  } catch {
+    // cut off mid-escape: show it as it came
+  }
+  if (tool === "WebSearch") return value;
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
   } catch {
     return "";
   }

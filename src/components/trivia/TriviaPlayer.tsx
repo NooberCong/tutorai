@@ -135,6 +135,7 @@ function Question(props: {
         <b>{TOPIC[q.topic]?.label ?? q.topic}</b>
         {q.hook && <span>{q.hook}</span>}
       </p>
+      {q.scene && <Scene key={q.scene.file} image={q.scene} />}
       <div className="quiz-question trivia-question">{q.question}</div>
       <div className="quiz-choices">
         {q.choices.map((choice, i) => {
@@ -178,6 +179,23 @@ function Question(props: {
         </div>
       )}
     </>
+  );
+}
+
+/** The question's scene-setter. Nothing that names it is on show — no
+ *  caption, no file name (both can hint at the answer) — just the credit,
+ *  on hover. */
+function Scene(props: { image: TriviaImage }) {
+  const { file } = props.image;
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <figure className="trivia-scene">
+      <img src={commonsImage(file)} alt="" onError={() => setFailed(true)} />
+      <button className="scene-credit" onClick={() => void openUrl(commonsPage(file))}>
+        Wikimedia Commons
+      </button>
+    </figure>
   );
 }
 

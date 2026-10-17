@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import { chapterFileName, figureFileName, wholeDocChapter } from "./pdf";
 import { squashText } from "./anchor";
-import type { TriviaQuestion } from "./trivia/game";
+import type { Recent, TriviaImage, TriviaQuestion } from "./trivia/game";
 import { QUESTIONS } from "./trivia/game";
 import { TOPIC } from "./trivia/topics";
 import { commonsFile, youtubeId } from "./trivia/media";
@@ -334,7 +334,7 @@ export function projectPrompt(
 /** Daily Trivia: ten news-pegged questions over the player's topics, each
  *  with the story behind its answer. Research and fact-checking happen in
  *  this one run, on the web tools the read-only posture allows. */
-export function triviaPrompt(topicIds: string[], today: Date, avoid: string[]): string {
+export function triviaPrompt(topicIds: string[], today: Date, avoid: Recent): string {
   // Round-robin over the topics in a fresh order, so a short list still
   // varies which topics get the extra questions.
   const order = [...topicIds].sort(() => Math.random() - 0.5);
@@ -357,7 +357,7 @@ export function triviaPrompt(topicIds: string[], today: Date, avoid: string[]): 
     `- No trivia-only facts (obscure phobias, collective nouns), nothing contested. Quote someone only if you've traced the quote to its original source.`,
     `- Difficulty: 1 = most people get it, 2 = about two in three do, 3 = a real stretch that still feels fair. Write three 1s, four 2s and three 3s.`,
     ``,
-    `Verify before you finish: confirm with sources that the right answer is right and every other choice is wrong. Replace any question you can't verify. Use around 15–25 searches in all; fetch a page when the snippets aren't conclusive.`,
+    `Verify before you finish: confirm with sources that the right answer is right and every other choice is wrong. Replace any question you can't verify. Fetch a page when the snippets aren't conclusive. Budget: about 30 lookups (searches and page fetches) for the research, plus up to six for videos at the end.`,
     ``,
     `The story is the heart of it — the player reads it right after answering, and should want to read every word:`,
     `- Open with the reveal: the answer and the one-line why, in a sentence that clicks.`,
@@ -366,15 +366,23 @@ export function triviaPrompt(topicIds: string[], today: Date, avoid: string[]): 
     `- End on a kicker — the detail they'll want to tell a friend.`,
     `- 200–320 words of Markdown in short paragraphs. Vivid, warm, plain words; concrete names, numbers and places. At most one bold phrase. No headings, no lists, no "Fun fact:", no wrap-up sentence.`,
     ``,
-    `Give every story something to look at:`,
-    `- "image": a photo from Wikimedia Commons that shows the subject itself — the animal, the object, the place, the person, the moment. Give its exact Commons file name, taken from a page you actually opened (the images in Wikipedia articles live on Commons); never guess one. Choose a striking photograph over a diagram, map, logo or book cover. One for every question; null only if nothing fitting exists. "caption" says in one short line what we're looking at.`,
-    `- "video": a YouTube video worth watching right after the story — real footage of the creature, launch, place or event, or a clear short explainer — from a reputable channel (space agencies, museums, universities, broadcasters, well-known science channels). Only a URL you found by searching; never guess one. Include one for at least three questions where it adds something; null otherwise.`,
-    ...(avoid.length
-      ? [``, `Facts used in recent days — don't ask about these again:`, ...avoid.map((f) => `- ${f}`)]
+    `Give every question and story something to look at. The app loads and checks every picture and video itself, so never spend a lookup confirming one. Pictures cost nothing: take them from the pages you open for research (a Wikipedia article usually has several).`,
+    `- "scene": a second Commons photo, shown above the question before it's answered. It sets the scene of the hook — the storm making landfall, the rocket on the pad, the dig site, the crowd at the festival — so the question feels like news. It shows this question's own subject or news event, never a stand-in (no other species, place or object "in the same spirit"). It must not give away or hint at the right choice (if the subject itself would show the answer, picture its setting or the news event instead), and must be a different photo from "image". Same file-name rules as "image". Aim for one with every question, but leave it null rather than risk a spoiler.`,
+    `- "image": a photo from Wikimedia Commons that shows the subject itself — the animal, the object, the place, the person, the moment. Give its exact Commons file name, as it appears in a page you opened (the images in Wikipedia articles live on Commons); never guess one. Choose a striking photograph over a diagram, map, logo or book cover. One for every question; null only if nothing fitting exists. "caption" says in one short line what we're looking at.`,
+    `- "video" — a required last step, after the research: a YouTube video worth watching right after the story — real footage of the creature, launch, place or event, or a clear short explainer — from a reputable channel (space agencies, museums, universities, broadcasters, well-known science channels). After the research, pick the three questions a video would add most to and find one for each with WebSearch for "site:youtube.com <subject>" (that returns watch links directly; up to two searches per question). Use the best result from a reputable channel; never guess a URL. null for the rest.`,
+    ...(avoid.hooks.length
+      ? [
+          ``,
+          `News already used in the last two weeks — pick different stories and different subjects. A new fact about the same probe, animal, event or anniversary still counts as a repeat:`,
+          ...avoid.hooks.map((h) => `- ${h}`),
+        ]
+      : []),
+    ...(avoid.facts.length
+      ? [``, `Facts asked in recent weeks — don't ask about these again:`, ...avoid.facts.map((f) => `- ${f}`)]
       : []),
     ``,
     `Output ONLY a JSON object — no fences, no prose before or after — matching:`,
-    `{"questions":[{"topic":"${slots[0].id}","difficulty":1,"hook":"...","question":"...","choices":["...","...","...","..."],"answer":0,"fact":"...","story":"...","whyNot":"...","sources":[{"title":"...","url":"https://..."}],"image":{"file":"Example photo.jpg","caption":"..."},"video":{"url":"https://www.youtube.com/watch?v=...","title":"..."}}]}`,
+    `{"questions":[{"topic":"${slots[0].id}","difficulty":1,"hook":"...","question":"...","choices":["...","...","...","..."],"answer":0,"fact":"...","story":"...","whyNot":"...","sources":[{"title":"...","url":"https://..."}],"scene":{"file":"Example scene.jpg","caption":"..."},"image":{"file":"Example photo.jpg","caption":"..."},"video":{"url":"https://www.youtube.com/watch?v=...","title":"..."}}]}`,
     `- "topic" is the topic id from the list. "answer" is the 0-based index of the right choice.`,
     `- "hook": the news, at most 80 characters, with its date — e.g. "Juno's final Io flyby · 3 Oct".`,
     `- "fact": the fact the question tests, in one short sentence.`,
@@ -579,6 +587,8 @@ export function parseTrivia(text: string, topicIds: string[]): TriviaQuestion[] 
       sources.length > 0;
     if (!ok) continue;
     const shuffled = shuffleChoices(choices, q.answer as number);
+    const image = media(q.image, commonsImageOf);
+    const scene = media(q.scene, commonsImageOf);
     out.push({
       topic: str(q.topic),
       difficulty: q.difficulty === 1 || q.difficulty === 3 ? q.difficulty : 2,
@@ -590,10 +600,9 @@ export function parseTrivia(text: string, topicIds: string[]): TriviaQuestion[] 
       story,
       whyNot: str(q.whyNot),
       sources,
-      image: media(q.image, (o) => {
-        const file = commonsFile(str(o.file));
-        return file ? { file, caption: str(o.caption) } : undefined;
-      }),
+      // The same photo twice would spend the reveal's picture early.
+      scene: scene?.file === image?.file ? undefined : scene,
+      image,
       video: media(q.video, (o) => {
         const id = youtubeId(str(o.url));
         return id ? { id, title: str(o.title) } : undefined;
@@ -602,6 +611,11 @@ export function parseTrivia(text: string, topicIds: string[]): TriviaQuestion[] 
   }
   // Array.sort is stable: the writer's order holds within a difficulty.
   return out.slice(0, QUESTIONS).sort((a, b) => a.difficulty - b.difficulty);
+}
+
+function commonsImageOf(o: Record<string, unknown>): TriviaImage | undefined {
+  const file = typeof o.file === "string" ? commonsFile(o.file) : null;
+  return file ? { file, caption: typeof o.caption === "string" ? o.caption.trim() : "" } : undefined;
 }
 
 /** An optional media object from model JSON, or undefined. */

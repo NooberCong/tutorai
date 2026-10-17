@@ -232,7 +232,11 @@ each followed by the story behind its answer.
   space, history, food, …). Once a day, in the background, Claude searches
   what's happened in them over the last month, and builds each question
   around the most surprising lasting fact the news touches. You won't need
-  to have read the headline to answer. Questions run easy to hard, and the
+  to have read the headline to answer. Each question can come with a photo
+  of the news it hangs on (the rocket on the pad, the storm coming ashore),
+  chosen so it never gives the answer away. A story used in the last two
+  weeks isn't picked again, even for a different fact, and a fact you've been
+  asked stays off limits for six weeks. Questions run easy to hard, and the
   writer fact-checks every answer and every wrong choice against the web
   before the pack is saved.
 - **A story for every answer.** Answer, and the reveal opens on a photo of
