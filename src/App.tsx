@@ -19,6 +19,7 @@ import { SelectionPopover } from "./components/SelectionPopover";
 import { Undo } from "./components/Icons";
 import { EvolutionHost } from "./components/hatchery/Evolve";
 import { ReaderCompanion } from "./components/hatchery/ReaderCompanion";
+import { TriviaToast } from "./components/trivia/TriviaToast";
 import { useReaderBackdrop } from "./components/hatchery/backdrop";
 import { ReaderAmbience } from "./components/hatchery/ReaderAmbience";
 import { AnnotationsProvider, useAnnotations } from "./lib/annotations";
@@ -206,6 +207,10 @@ export default function App() {
     setHomeView("hatchery");
     setActiveId(null);
   }, []);
+  const openTrivia = useCallback(() => {
+    setHomeView("trivia");
+    setActiveId(null);
+  }, []);
 
   const closeTab = useCallback((docId: string) => {
     const idx = tabsRef.current.findIndex((t) => t.reg.docId === docId);
@@ -328,6 +333,7 @@ export default function App() {
       ) : (
         <Home onOpen={openPath} opening={opening} view={homeView} setView={setHomeView} />
       )}
+      <TriviaToast onTrivia={!active && homeView === "trivia"} onOpen={openTrivia} />
       <EvolutionHost paused={!!active} />
     </div>
   );

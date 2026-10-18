@@ -304,7 +304,7 @@ function Snowflake() {
   );
 }
 
-function topicList(pack: TriviaPack): string {
+export function topicList(pack: TriviaPack): string {
   return [...new Set(pack.questions.map((q) => TOPIC[q.topic]?.label ?? q.topic))].join(" · ");
 }
 

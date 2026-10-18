@@ -238,7 +238,8 @@ each followed by the story behind its answer.
   weeks isn't picked again, even for a different fact, and a fact you've been
   asked stays off limits for six weeks. Questions run easy to hard, and the
   writer fact-checks every answer and every wrong choice against the web
-  before the pack is saved.
+  before the pack is saved. When it's ready, a toast says so wherever you
+  are in the app; click it to go to Trivia.
 - **A story for every answer.** Answer, and the reveal opens on a photo of
   the subject (from Wikimedia Commons) and a short, sourced story: who,
   where, what was at stake, and why it's in the news now. Where a good one

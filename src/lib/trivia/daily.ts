@@ -35,6 +35,8 @@ export type WriterStatus =
 export type FailReason = "nocli" | "signin" | "usage" | "error";
 
 let status: WriterStatus = { kind: "idle" };
+/** The day of a pack just written and not yet seen — what the toast offers. */
+let fresh: string | null = null;
 const listeners = new Set<() => void>();
 let running = false;
 let retryAt = 0;
@@ -46,14 +48,25 @@ function setStatus(next: WriterStatus) {
   listeners.forEach((l) => l());
 }
 
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+};
+
 export function useTriviaWriter(): WriterStatus {
-  return useSyncExternalStore(
-    (l) => {
-      listeners.add(l);
-      return () => listeners.delete(l);
-    },
-    () => status,
-  );
+  return useSyncExternalStore(subscribe, () => status);
+}
+
+/** Today's pack, while it's news: written since the player last looked. */
+export function useFreshTrivia(): string | null {
+  return useSyncExternalStore(subscribe, () => fresh);
+}
+
+export function dismissFreshTrivia() {
+  fresh = null;
+  listeners.forEach((l) => l());
 }
 
 function classify(message: string): FailReason {
@@ -103,6 +116,7 @@ export async function checkTrivia(force = false): Promise<void> {
     if (parsed.length < MIN_QUESTIONS) throw new Error(`only ${parsed.length} usable questions`);
     const questions = await verifyMedia(parsed);
     mutateTrivia((s) => addPack(s, today, questions));
+    fresh = today;
     setStatus({ kind: "idle" });
   } catch (e) {
     const reason = e instanceof NoCli ? "nocli" : classify(String((e as Error)?.message ?? e));
