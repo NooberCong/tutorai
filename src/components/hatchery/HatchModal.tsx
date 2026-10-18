@@ -1,23 +1,28 @@
 /** The hatch ceremony: the egg rocks and cracks, bursts, and the hatchling
  *  pops out with its card — or, for a species you already have, your pet
- *  appears with the growth the egg gave it. The hatch itself is committed (and saved)
+ *  appears with the growth the egg gave it, growing up on the spot when
+ *  that took it to its next stage. The hatch itself is committed (and saved)
  *  the moment the ceremony starts, so closing early never loses a pet; a
  *  click skips straight to the reveal. */
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Egg, Hatched, Where } from "../../lib/hatchery/game";
-import { hatch, setCompanion, speciesById, stageOf } from "../../lib/hatchery/game";
+import type { Stage } from "../../lib/hatchery/kit";
+import { dueEvolution, hatch, sawEvolution, setCompanion, speciesById, stageOf } from "../../lib/hatchery/game";
 import { getHatchery, mutate } from "../../lib/hatchery/store";
-import { PixelImg, PetSprite, eggUrl } from "./sprites";
+import { Evolve } from "./Evolve";
+import { PixelImg, PetSprite, centerOf, eggUrl } from "./sprites";
 import { TIER_LABEL, minutes } from "./labels";
 import "./hatchery.css";
 
 type Phase = "rock" | "burst" | "reveal";
+type Evolution = { from: Stage; to: Stage } | null;
 
 export function HatchModal(props: { where?: Where; onClose: () => void }) {
   const [egg] = useState<Egg | null>(() => getHatchery().incubator);
-  const [result, setResult] = useState<(Hatched & { count: number }) | null>(null);
+  const [result, setResult] = useState<(Hatched & { count: number; evolution: Evolution }) | null>(null);
+  const [settled, setSettled] = useState(false);
   const [phase, setPhase] = useState<Phase>("rock");
   const [crack, setCrack] = useState(1);
   const started = useRef(false);
@@ -26,15 +31,19 @@ export function HatchModal(props: { where?: Where; onClose: () => void }) {
     if (started.current) return;
     started.current = true;
     let out: Hatched | null = null;
+    let evolution: Evolution = null;
+    // The growth is played here, so nothing else plays it again.
     mutate((s) => {
       out = hatch(s, new Date(), props.where);
+      evolution = out && dueEvolution(out.pet);
+      if (out) sawEvolution(s, out.pet.id);
     }, true);
     if (!out) {
       props.onClose();
       return;
     }
     const r = out as Hatched;
-    setResult({ ...r, count: getHatchery().dex[r.pet.species]?.count ?? 1 });
+    setResult({ ...r, count: getHatchery().dex[r.pet.species]?.count ?? 1, evolution });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -64,6 +73,8 @@ export function HatchModal(props: { where?: Where; onClose: () => void }) {
   if (!egg || !result) return null;
   const sp = speciesById(result.pet.species);
   const isCompanion = getHatchery().companionId === result.pet.id;
+  const evolving = result.evolution && !settled ? result.evolution : null;
+  const stage = evolving ? evolving.from : stageOf(result.pet);
 
   return createPortal(
     <div className="hatch-veil" onClick={phase === "reveal" ? finish : () => setPhase("reveal")}>
@@ -74,7 +85,7 @@ export function HatchModal(props: { where?: Where; onClose: () => void }) {
           if (phase !== "reveal") setPhase("reveal");
         }}
       >
-        <div className="hatch-light" />
+        {phase !== "reveal" && <div className="hatch-light" />}
         {phase !== "reveal" ? (
           <div className={`hatch-egg ${phase === "rock" ? `rock-${crack}` : "pop"}`}>
             <PixelImg src={eggUrl(egg, crack)} scale={6} />
@@ -82,14 +93,19 @@ export function HatchModal(props: { where?: Where; onClose: () => void }) {
         ) : (
           <div className="hatch-born">
             <div className="hatch-creature">
-              <PetSprite pet={result.pet} scale={6} />
+              <div className="hatch-light on-pet" style={centerOf(result.pet.species, stageOf(result.pet))} />
+              {evolving ? (
+                <Evolve pet={result.pet} {...evolving} scale={6} delay={700} onDone={() => setSettled(true)} />
+              ) : (
+                <PetSprite pet={result.pet} scale={6} />
+              )}
             </div>
             {(result.isNew ? result.pet.shiny : result.shinyNow) && (
               <div className="shiny-tag">{result.isNew ? "✦ Shiny" : "✦ Now shiny"}</div>
             )}
             <div className="hatch-card">
               <span className={`tier-badge tier-${sp?.tier}`}>{TIER_LABEL[sp?.tier ?? "common"]}</span>
-              <h2>{sp?.stages[stageOf(result.pet)]}</h2>
+              <h2>{sp?.stages[stage]}</h2>
               <p className="hatch-sub">
                 {result.isNew
                   ? "New to your collection"

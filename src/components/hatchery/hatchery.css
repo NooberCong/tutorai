@@ -622,6 +622,21 @@
   animation: rays 24s linear infinite;
   pointer-events: none;
 }
+/* Centred on the creature itself once it's out (see centerOf). */
+.hatch-light.on-pet {
+  inset: auto;
+  left: calc(var(--cx) * 100%);
+  top: calc(var(--cy) * 100%);
+  width: 540px;
+  height: 540px;
+  translate: -50% -50%;
+  z-index: -1;
+}
+.hatch-creature,
+.evo-creature {
+  position: relative;
+  isolation: isolate;
+}
 @keyframes rays {
   to { rotate: 360deg; }
 }
@@ -883,6 +898,83 @@
 @keyframes grow-glow {
   0%, 100% { filter: none; }
   30% { filter: brightness(1.6) drop-shadow(0 0 10px var(--tier)); }
+}
+/* Growing up (Evolve): the old shape brightens into a glowing outline,
+   trades places with the new one in pulses that quicken, and the new one
+   settles back into colour. Every step eases; nothing snaps. */
+.evolve {
+  position: relative;
+  display: block;
+  --evo-lit: brightness(0) invert(1) drop-shadow(0 0 5px var(--tier));
+  --evo-off: brightness(1) invert(0) drop-shadow(0 0 0 transparent);
+}
+.evo-from,
+.evo-to {
+  position: absolute;
+  inset: 0;
+  animation: 3.6s ease-in-out both;
+}
+.evo-from img,
+.evo-to img {
+  display: block;
+}
+.evo-from { animation-name: evo-from; }
+.evo-to { animation-name: evo-to; }
+@keyframes evo-from {
+  0% { opacity: 1; filter: var(--evo-off); }
+  22% { opacity: 1; filter: var(--evo-lit); }
+  36% { opacity: 0; }
+  48% { opacity: 1; }
+  58% { opacity: 0; }
+  66% { opacity: 0.8; }
+  72%, 100% { opacity: 0; filter: var(--evo-lit); }
+}
+@keyframes evo-to {
+  0%, 22% { opacity: 0; scale: 0.94; filter: var(--evo-lit); }
+  36% { opacity: 1; }
+  48% { opacity: 0; }
+  58% { opacity: 1; }
+  66% { opacity: 0.2; }
+  72% { opacity: 1; scale: 1; filter: var(--evo-lit); }
+  100% { opacity: 1; scale: 1; filter: var(--evo-off); }
+}
+.evo-glow {
+  position: absolute;
+  left: calc(var(--cx) * 100%);
+  top: calc(var(--cy) * 100%);
+  width: 180%;
+  height: 180%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--tier) 55%, transparent), transparent);
+  pointer-events: none;
+  animation: evo-glow 3.6s ease-in-out both;
+}
+@keyframes evo-glow {
+  0%, 15% { opacity: 0; scale: 0.6; }
+  60% { opacity: 0.7; scale: 1; }
+  100% { opacity: 0; scale: 1.15; }
+}
+.evo-creature .bob {
+  --bob: -6px;
+}
+/* Above the creature's light. */
+.hatch-card {
+  position: relative;
+}
+/* The card keeps its place while the pet grows, then rises in. */
+.hatch-card.waiting {
+  visibility: hidden;
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .evo-from { animation: evo-fade 0.8s ease-in-out reverse both; }
+  .evo-to { animation: evo-fade 0.8s ease-in-out both; }
+  .evo-glow { display: none; }
+}
+@keyframes evo-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .den-heart {
   position: absolute;

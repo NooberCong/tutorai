@@ -17,6 +17,7 @@ import { MarkupRail } from "./components/MarkupRail";
 import { SearchBar } from "./components/SearchBar";
 import { SelectionPopover } from "./components/SelectionPopover";
 import { Undo } from "./components/Icons";
+import { EvolutionHost } from "./components/hatchery/Evolve";
 import { ReaderCompanion } from "./components/hatchery/ReaderCompanion";
 import { useReaderBackdrop } from "./components/hatchery/backdrop";
 import { ReaderAmbience } from "./components/hatchery/ReaderAmbience";
@@ -327,6 +328,7 @@ export default function App() {
       ) : (
         <Home onOpen={openPath} opening={opening} view={homeView} setView={setHomeView} />
       )}
+      <EvolutionHost paused={!!active} />
     </div>
   );
 }

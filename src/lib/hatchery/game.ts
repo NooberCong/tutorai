@@ -87,6 +87,10 @@ export interface Pet {
   /** Kept at this smaller stage than it has grown to. It doesn't grow
    *  while kept small. */
   shown?: Stage;
+  /** The stage the reader last saw it at. Below its shown stage, it has
+   *  grown since — by reading, trivia or a repeat hatch — and its
+   *  evolution is still to be played. */
+  seen?: Stage;
 }
 
 export interface DexEntry {
@@ -195,7 +199,7 @@ export function migrate(raw: unknown, now = Date.now()): HatcheryState {
   return {
     ...base,
     ...s,
-    ...onePerSpecies(s.pets ?? [], s.companionId ?? null),
+    ...seenAll(onePerSpecies(s.pets ?? [], s.companionId ?? null)),
     habits: { ...base.habits, ...(s.habits ?? {}) },
     earn: { ...base.earn, ...(s.earn ?? {}) },
     // Saves from before sittings kept real time and per-page dwell.
@@ -223,6 +227,13 @@ function onePerSpecies(pets: Pet[], companionId: string | null): { pets: Pet[]; 
     out.push(keep);
   }
   return { pets: out, companionId: companion };
+}
+
+/** Saves from before evolutions were played: what they've grown to was
+ *  seen already, so nothing replays. */
+function seenAll<T extends { pets: Pet[] }>(r: T): T {
+  for (const p of r.pets) p.seen ??= grownStage(p);
+  return r;
 }
 
 // ── helpers ──
@@ -289,6 +300,22 @@ export function showStage(s: HatcheryState, petId: string, stage: Stage): void {
   if (!pet) return;
   if (stage < grownStage(pet)) pet.shown = stage;
   else delete pet.shown;
+  // Picking a size it has already grown to is no evolution.
+  pet.seen = Math.max(pet.seen ?? 0, stageOf(pet)) as Stage;
+}
+
+/** An evolution still to be played: it has grown from `from` to `to`
+ *  since the reader last saw it. */
+export function dueEvolution(pet: Pet): { from: Stage; to: Stage } | null {
+  const to = stageOf(pet);
+  const from = pet.seen ?? to;
+  return to > from ? { from, to } : null;
+}
+
+/** Its evolution has been played (or skipped). */
+export function sawEvolution(s: HatcheryState, petId: string): void {
+  const pet = s.pets.find((p) => p.id === petId);
+  if (pet) pet.seen = stageOf(pet);
 }
 
 /** Progress toward the next stage, or null once fully grown. */
@@ -609,6 +636,7 @@ export function hatch(
     hasShiny: shiny,
     xp: 0,
     hatchedAt: now.getTime(),
+    seen: 0,
     foundIn: egg.foundIn,
     hatchedIn: where,
   };

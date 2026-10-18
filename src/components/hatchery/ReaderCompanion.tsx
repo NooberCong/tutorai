@@ -15,14 +15,25 @@
 import { useEffect, useRef, useState } from "react";
 import type { GameEvent, HatcheryState } from "../../lib/hatchery/game";
 import { ACCESSORY } from "../../lib/hatchery/accessories";
-import { FIND_EVERY_MIN, companion, eggReady, growth, keptSmall, speciesById, stageOf } from "../../lib/hatchery/game";
-import { flushHatchery, onHatcheryEvent, useHatchery, useReaderActive } from "../../lib/hatchery/store";
+import {
+  FIND_EVERY_MIN,
+  companion,
+  dueEvolution,
+  eggReady,
+  growth,
+  keptSmall,
+  sawEvolution,
+  speciesById,
+  stageOf,
+} from "../../lib/hatchery/game";
+import { flushHatchery, mutate, onHatcheryEvent, useHatchery, useReaderActive } from "../../lib/hatchery/store";
 import { useReadingTracker } from "../../lib/hatchery/tracker";
 import { useInsights } from "../../lib/insights";
 import { useSession } from "../../lib/session";
 import { anchorFracs } from "../../lib/anchor";
 import { saveSetting, useSetting } from "../../lib/settings";
 import { HatchModal } from "./HatchModal";
+import { Evolve } from "./Evolve";
 import { Meter } from "./Meter";
 import { StagePicker } from "./StagePicker";
 import { ELEMENT_LABEL, STAGE_LABEL, TIER_LABEL, minutes } from "./labels";
@@ -111,7 +122,7 @@ function Den(props: { onOpenHatchery: () => void }) {
     () =>
       onHatcheryEvent((e) => {
         if (e.kind === "habit") react("love");
-        if (e.kind === "grew" || e.kind === "accessory") react("grow");
+        if (e.kind === "accessory") react("grow");
         if (e.kind === "chapter-done") react("hop");
         if (e.kind === "egg-found") setEggNudge((n) => n + 1);
         const text = describe(e);
@@ -124,6 +135,9 @@ function Den(props: { onOpenHatchery: () => void }) {
   const sp = pet ? speciesById(pet.species) : undefined;
   const stage = pet ? stageOf(pet) : 0;
   const petName = pet && sp ? sp.stages[stage] : "";
+  // Growing up plays right here, never as an interruption. A hatch
+  // ceremony plays its own.
+  const evolving = pet && !hatching ? dueEvolution(pet) : null;
 
   // The pet's aside, said just after you've read the spot it's about: when
   // that spot, first seen below the reading line, scrolls up past it. The
@@ -311,9 +325,13 @@ function Den(props: { onOpenHatchery: () => void }) {
             aria-label={`${petName} — ${active ? "reading with you" : "asleep"}`}
             title={active ? `${petName} is reading with you` : `${petName} is asleep — reading time is paused`}
           >
-            <span key={reaction?.n} className={reaction ? `den-react react-${reaction.kind}` : "den-react"}>
-              <PetSprite pet={pet} scale={2} asleep={!active} />
-            </span>
+            {evolving ? (
+              <Evolve pet={pet} {...evolving} scale={2} onDone={() => mutate((st) => sawEvolution(st, pet.id), true)} />
+            ) : (
+              <span key={reaction?.n} className={reaction ? `den-react react-${reaction.kind}` : "den-react"}>
+                <PetSprite pet={pet} scale={2} asleep={!active} />
+              </span>
+            )}
             {grow && !keptSmall(pet) && (
               <i className="den-bar">
                 <i style={{ width: `${(grow.done / grow.span) * 100}%` }} />

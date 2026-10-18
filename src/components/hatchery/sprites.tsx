@@ -83,6 +83,35 @@ export function petUrl(
   return { src, dressed: true };
 }
 
+const centers = new Map<string, CSSProperties>();
+
+/** Where a creature's body sits in its 32×32 box, as `--cx`/`--cy`
+ *  fractions: creatures stand on the ground line, so their middle is
+ *  rarely the box's. For lights and glows centred on the creature. */
+export function centerOf(id: string, stage: Stage): CSSProperties {
+  const key = `${id}/${stage}`;
+  let c = centers.get(key);
+  if (!c) {
+    const sp = speciesById(id);
+    const s = sp && renderSpecies(sp, stage, "idle", false);
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -1, -1];
+    if (s)
+      for (let y = 0; y < s.h; y++)
+        for (let x = 0; x < s.w; x++)
+          if (s.data[(y * s.w + x) * 4 + 3]) {
+            x0 = Math.min(x0, x);
+            x1 = Math.max(x1, x);
+            y0 = Math.min(y0, y);
+            y1 = Math.max(y1, y);
+          }
+    c = s && x1 >= 0
+      ? ({ "--cx": (x0 + x1 + 1) / 2 / s.w, "--cy": (y0 + y1 + 1) / 2 / s.h } as CSSProperties)
+      : ({ "--cx": 0.5, "--cy": 0.5 } as CSSProperties);
+    centers.set(key, c);
+  }
+  return c;
+}
+
 /** An accessory on its own, for the wardrobe. */
 export function itemUrl(id: AccessoryId): string {
   return toUrl(`item/${id}`, () => renderItem(id));
