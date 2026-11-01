@@ -7,6 +7,7 @@ import { Util } from "pdfjs-dist";
 import { mergeLineRects } from "./annotGeometry";
 import type { PdfDoc } from "./pdf";
 import type { FracRect } from "./types";
+import { repairLigatures } from "./ligatures";
 
 // ── Folding ────────────────────────────────────────────────────────────
 
@@ -204,7 +205,7 @@ async function pageTextIndex(pdf: PdfDoc, pageNum: number): Promise<PageTextInde
 
   const page = await pdf.getPage(pageNum);
   const vp = page.getViewport({ scale: 1 });
-  const content = await page.getTextContent();
+  const content = repairLigatures(await page.getTextContent());
   const items: TextItem[] = [];
   const itemStart: number[] = [];
   let joined = "";

@@ -31,6 +31,9 @@ export interface DocMeta {
   chapters: Chapter[];
   chaptersSource: "outline" | "ai" | "none";
   extractedAt: number;
+  /** 1 once the page text fills in unmapped ligatures (ligatures.ts); text
+   *  from before that is extracted again where it has any. */
+  textVersion?: number;
 }
 
 /** What a job or artifact covers: the whole document or one chapter. */

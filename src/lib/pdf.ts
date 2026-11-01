@@ -4,6 +4,7 @@ import * as pdfjs from "pdfjs-dist";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { Chapter } from "./types";
+import { repairLigatures } from "./ligatures";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -83,7 +84,7 @@ export async function extractPages(
   const pages: string[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
-    const content = await page.getTextContent();
+    const content = repairLigatures(await page.getTextContent());
     let text = "";
     for (const item of content.items) {
       if ("str" in item) {

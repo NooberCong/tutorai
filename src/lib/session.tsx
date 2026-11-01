@@ -13,6 +13,7 @@ import {
 } from "react";
 import type {
   Artifacts,
+  Chapter,
   DocMeta,
   DoneEvent,
   JobEvent,
@@ -111,34 +112,46 @@ export function SessionProvider(props: {
   useEffect(() => {
     let stale = false;
     (async () => {
-      const cached = await readDocText(reg.docId, "meta.json");
+      const cachedText = await readDocText(reg.docId, "meta.json");
       if (stale) return;
-      if (cached) {
-        setMeta(JSON.parse(cached));
+      const cached: DocMeta | null = cachedText ? JSON.parse(cachedText) : null;
+      // Text extracted before unmapped ligatures were filled in is redone
+      // once, keeping the chapters (they may be the AI's).
+      const redo =
+        cached && !cached.textVersion && (await readDocText(reg.docId, "pages.json"))?.includes("\\u0000");
+      if (stale) return;
+      if (cached && !redo) {
+        setMeta(cached);
         return;
       }
-      const info = (await pdf.getMetadata().catch(() => null)) as
-        | { info?: { Title?: string } }
-        | null;
-      const title = info?.info?.Title?.trim() || fileName.replace(/\.pdf$/i, "");
 
       setExtractProgress({ done: 0, total: pdf.numPages });
-      const [chapters, pages] = await Promise.all([
-        outlineChapters(pdf),
-        extractPages(pdf, (done, total) => !stale && setExtractProgress({ done, total })),
-      ]);
+      const progress = (done: number, total: number) => !stale && setExtractProgress({ done, total });
+      let newMeta: DocMeta;
+      let pages: string[];
+      if (cached) {
+        pages = await extractPages(pdf, progress);
+        newMeta = { ...cached, textVersion: 1 };
+      } else {
+        const info = (await pdf.getMetadata().catch(() => null)) as
+          | { info?: { Title?: string } }
+          | null;
+        const title = info?.info?.Title?.trim() || fileName.replace(/\.pdf$/i, "");
+        let chapters: Chapter[];
+        [chapters, pages] = await Promise.all([outlineChapters(pdf), extractPages(pdf, progress)]);
+        newMeta = {
+          title,
+          pages: pdf.numPages,
+          chapters: chapters.length ? chapters : [wholeDocChapter(pdf.numPages)],
+          chaptersSource: chapters.length ? "outline" : "none",
+          extractedAt: Date.now(),
+          textVersion: 1,
+        };
+      }
       if (stale) return;
 
-      const finalChapters = chapters.length ? chapters : [wholeDocChapter(pdf.numPages)];
-      const newMeta: DocMeta = {
-        title,
-        pages: pdf.numPages,
-        chapters: finalChapters,
-        chaptersSource: chapters.length ? "outline" : "none",
-        extractedAt: Date.now(),
-      };
       await writeDocText(reg.docId, "pages.json", JSON.stringify(pages));
-      for (const file of buildChapterFiles(pages, finalChapters)) {
+      for (const file of buildChapterFiles(pages, newMeta.chapters)) {
         await writeDocText(reg.docId, file.rel, file.content);
       }
       await writeDocText(reg.docId, "meta.json", JSON.stringify(newMeta));

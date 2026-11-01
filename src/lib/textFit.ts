@@ -20,6 +20,7 @@
 
 import { OPS, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import type { TextContent, TextItem } from "pdfjs-dist/types/src/display/api";
+import { UNMAPPED } from "./ligatures";
 
 type Matrix = number[];
 
@@ -311,6 +312,17 @@ function charEdges(item: TextItem, glyphs: Glyph[], from: number): { edges: numb
       for (let t = 0; t < u.length; t++) edges[k + t] = g.x0 + ((g.x1 - g.x0) * t) / u.length;
       pos = g.x1;
       k += u.length;
+      j++;
+    } else if (u === UNMAPPED) {
+      // A ligature repairLigatures spelled out: its letters run up to where
+      // the next glyph's text starts (or the item ends).
+      const nu = glyphs[j + 1] && Math.abs(glyphs[j + 1].y - oy) < eps ? norm(glyphs[j + 1].u) : "";
+      let n = 1;
+      while (n <= 3 && !(k + n === str.length || (nu && str.startsWith(nu, k + n)))) n++;
+      if (n > 3) return null;
+      for (let t = 0; t < n; t++) edges[k + t] = g.x0 + ((g.x1 - g.x0) * t) / n;
+      pos = g.x1;
+      k += n;
       j++;
     } else if (u && u.trim() === "" && /\s/.test(str[k])) {
       edges[k++] = g.x0; // e.g. a tab glyph the text content turned into a space

@@ -14,6 +14,7 @@ import {
 import { TextLayer, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import type { TextContent } from "pdfjs-dist/types/src/display/api";
 import { cachedPageGlyphs, fetchPageGlyphs, fitTextLayer, type Glyph } from "../lib/textFit";
+import { repairLigatures } from "../lib/ligatures";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   destToPage,
@@ -637,7 +638,7 @@ const PageContent = memo(function PageContent(props: {
       }
       if (cancelled) return;
 
-      const content = await page.getTextContent();
+      const content = repairLigatures(await page.getTextContent());
       if (cancelled) return;
       textDiv.replaceChildren();
       textDiv.style.setProperty("--scale-factor", String(viewport.scale));
