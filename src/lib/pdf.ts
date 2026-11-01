@@ -10,7 +10,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 export type PdfDoc = PDFDocumentProxy;
 
 export function loadPdf(url: string): Promise<PdfDoc> {
-  return pdfjs.getDocument({ url }).promise;
+  // wasmUrl: JPEG 2000 / JBIG2 decoders (served by the pdfjs-wasm plugin in
+  // vite.config.ts). Without them, scanned books render as blank pages.
+  return pdfjs.getDocument({ url, wasmUrl: new URL("/pdfjs/wasm/", location.href).href }).promise;
 }
 
 interface OutlineNode {
