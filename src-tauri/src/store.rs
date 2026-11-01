@@ -14,6 +14,8 @@
 //!                                                      see dict.rs)
 //!   <app-data>/docs/<docId>/chapters/chapter-01.txt   (page-marked text)
 //!   <app-data>/docs/<docId>/meta.json                 (extraction result)
+//!   <app-data>/docs/<docId>/markdown.pdf              (a Markdown document typeset
+//!                                                      to PDF; see markdown.rs)
 //!   <app-data>/docs/<docId>/artifacts.json            (summaries, quizzes, chat)
 //!   <app-data>/docs/<docId>/pages/page-0001.jpg       (figure-page images, ≤200)
 //!   <app-data>/docs/<docId>/snips/                    (chat image attachments;
@@ -29,6 +31,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use crate::markdown;
 use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,7 +54,11 @@ pub struct LibraryEntry {
 #[serde(rename_all = "camelCase")]
 pub struct RegisteredDoc {
     pub doc_id: String,
+    /// The file the user opened.
     pub path: String,
+    /// The PDF the reader loads: `path` itself, or a Markdown file's
+    /// typeset copy in the doc cache.
+    pub pdf_path: String,
     pub doc_dir: String,
 }
 
@@ -85,10 +92,10 @@ fn doc_file(app: &AppHandle, doc_id: &str, rel: &str) -> Result<PathBuf, String>
 
 /// Content identity for an imported file: sha256 over (size, head 256 KiB,
 /// tail 256 KiB). Cheap even for huge files, stable across renames and moves.
-/// Used for PDFs here and for dictionary filesets in dict.rs.
+/// Used for documents here and for dictionary filesets in dict.rs.
 pub(crate) fn content_id(path: &str) -> Result<String, String> {
     const CHUNK: usize = 256 * 1024;
-    let mut file = fs::File::open(path).map_err(|e| format!("cannot open PDF: {e}"))?;
+    let mut file = fs::File::open(path).map_err(|e| format!("cannot open file: {e}"))?;
     let len = file.metadata().map_err(|e| e.to_string())?.len();
     let mut hasher = Sha256::new();
     hasher.update(len.to_le_bytes());
@@ -216,19 +223,30 @@ fn prune_stale_snips(dir: &Path) {
     }
 }
 
-/// Identify a PDF, open its cache dir, and whitelist it for the asset
-/// protocol so pdf.js can stream it with range requests.
+/// Identify a document, open its cache dir, and whitelist the PDF the reader
+/// loads for the asset protocol so pdf.js can stream it with range requests.
+/// A Markdown file is typeset to PDF on its first open (markdown.rs).
 #[tauri::command]
-pub fn register_pdf(app: AppHandle, path: String) -> Result<RegisteredDoc, String> {
+pub async fn register_doc(app: AppHandle, path: String) -> Result<RegisteredDoc, String> {
     let doc_id = content_id(&path)?;
     let dir = doc_dir(&app, &doc_id)?;
     prune_stale_snips(&dir);
+    let pdf_path = if markdown::is_markdown(&path) {
+        let pdf = dir.join(markdown::PDF_NAME);
+        if !pdf.exists() {
+            markdown::render_pdf(&app, Path::new(&path), &pdf).await?;
+        }
+        pdf.to_string_lossy().to_string()
+    } else {
+        path.clone()
+    };
     app.asset_protocol_scope()
-        .allow_file(&path)
+        .allow_file(&pdf_path)
         .map_err(|e| e.to_string())?;
     Ok(RegisteredDoc {
         doc_id,
         path,
+        pdf_path,
         doc_dir: dir.to_string_lossy().to_string(),
     })
 }
@@ -246,16 +264,32 @@ pub fn get_library(app: AppHandle) -> Result<Vec<LibraryEntry>, String> {
 
 #[tauri::command]
 pub fn upsert_library_entry(app: AppHandle, mut entry: LibraryEntry) -> Result<(), String> {
-    let mut entries = read_library(&app)?;
+    // The library holds documents as their files are now. A file edited in
+    // place (routine for Markdown notes) is a new document: its old version
+    // can't be opened any more — the path leads to the new one — so an open
+    // tab still showing it doesn't save it back, and the new version replaces
+    // it, cache and all.
+    if content_id(&entry.path).is_ok_and(|id| id != entry.doc_id) {
+        return Ok(());
+    }
+    let (replaced, mut entries): (Vec<_>, Vec<_>) = read_library(&app)?
+        .into_iter()
+        .partition(|e| e.path == entry.path && e.doc_id != entry.doc_id);
     entry.last_opened_at = now_ms();
     if let Some(existing) = entries.iter_mut().find(|e| e.doc_id == entry.doc_id) {
         entry.added_at = existing.added_at;
         *existing = entry;
     } else {
-        entry.added_at = now_ms();
+        entry.added_at = replaced.first().map_or_else(now_ms, |e| e.added_at);
         entries.push(entry);
     }
-    write_library(&app, &entries)
+    write_library(&app, &entries)?;
+    for old in replaced {
+        if let Ok(dir) = doc_dir(&app, &old.doc_id) {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

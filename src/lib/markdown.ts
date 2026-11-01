@@ -97,21 +97,31 @@ marked.use({
   ],
 });
 
-/** Render markdown; [p.N] / [p.N-M] become clickable .cite chips. */
-export function renderMarkdown(text: string): string {
-  const html = marked.parse(text, { async: false });
-  const withCites = html.replace(
-    CITATION,
-    (_m, a: string, b?: string) =>
-      `<button class="cite" data-page="${a}">p.${a}${b ? `–${b}` : ""}</button>`,
-  );
-  return DOMPurify.sanitize(withCites, {
+const sanitize = (html: string) =>
+  DOMPurify.sanitize(html, {
     // <semantics>/<annotation> hold KaTeX's MathML layer, which is what screen
     // readers use. Without them DOMPurify drops the tags but keeps their text,
     // spilling the raw TeX into the rendered output.
     ADD_TAGS: ["semantics", "annotation"],
     ADD_ATTR: ["data-page", "encoding"],
   });
+
+/** Render markdown; [p.N] / [p.N-M] become clickable .cite chips. */
+export function renderMarkdown(text: string): string {
+  const html = marked.parse(text, { async: false });
+  return sanitize(
+    html.replace(
+      CITATION,
+      (_m, a: string, b?: string) =>
+        `<button class="cite" data-page="${a}">p.${a}${b ? `–${b}` : ""}</button>`,
+    ),
+  );
+}
+
+/** Render a Markdown document (a file the reader opened, not a reply):
+ *  standard line breaks, and its text is left as written. */
+export function renderDocument(text: string): string {
+  return sanitize(marked.parse(text, { async: false, breaks: false }));
 }
 
 /** Delegate clicks on .cite chips inside `container` to a page jump. */

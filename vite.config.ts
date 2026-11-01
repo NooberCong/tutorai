@@ -45,5 +45,10 @@ export default defineConfig({
   build: {
     target: "esnext",
     chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      // print.html typesets Markdown documents for printing to PDF
+      // (src-tauri/src/markdown.rs).
+      input: { main: "index.html", print: "print.html" },
+    },
   },
 });

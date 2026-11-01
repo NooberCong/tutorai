@@ -1,4 +1,4 @@
-/** Library screen: open a PDF, resume recent documents — beside the
+/** Library screen: open a PDF or Markdown file, resume recent documents — beside the
  *  hatchery and daily trivia. */
 
 import { useEffect, useState } from "react";
@@ -15,6 +15,7 @@ import { dayKey } from "../lib/hatchery/game";
 import { packFor } from "../lib/trivia/game";
 import { useTrivia } from "../lib/trivia/store";
 import { saveSetting, useSetting } from "../lib/settings";
+import { DOC_EXTENSIONS, isDocPath } from "../lib/docFiles";
 
 /** Most-recent books shown before the grid collapses behind "Show all" —
  *  about two rows at the default window width. */
@@ -61,8 +62,8 @@ export function Home(props: {
       else if (event.payload.type === "leave") setDragging(false);
       else if (event.payload.type === "drop") {
         setDragging(false);
-        const pdf = event.payload.paths.find((p) => p.toLowerCase().endsWith(".pdf"));
-        if (pdf) props.onOpen(pdf);
+        const doc = event.payload.paths.find(isDocPath);
+        if (doc) props.onOpen(doc);
       }
     });
     return () => {
@@ -74,7 +75,7 @@ export function Home(props: {
   const pick = async () => {
     const path = await openDialog({
       multiple: false,
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
+      filters: [{ name: "PDF or Markdown", extensions: DOC_EXTENSIONS }],
     });
     if (typeof path === "string") props.onOpen(path);
   };
@@ -123,7 +124,7 @@ export function Home(props: {
         </div>
         <button className="btn primary" onClick={pick} disabled={!!props.opening}>
           <Plus width={13} height={13} />
-          {props.opening ? "Opening…" : "Open PDF"}
+          {props.opening ? "Opening…" : "Open"}
         </button>
       </nav>
 
@@ -146,12 +147,12 @@ export function Home(props: {
                 Every book, with a <em>tutor</em> inside.
               </h1>
               <p>
-                Read any PDF. Get page-cited summaries, quizzes, answers about the
+                Read any PDF or Markdown file. Get page-cited summaries, quizzes, answers about the
                 page you're on — even a coding project built from its chapters.
               </p>
               <button className="drop-zone" onClick={pick}>
                 <span className="drop-title">
-                  {props.opening ? "Opening…" : "Open your first PDF"}
+                  {props.opening ? "Opening…" : "Open your first book"}
                 </span>
                 <span className="drop-sub">click to browse, or drop a file anywhere</span>
               </button>

@@ -5,6 +5,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { Chapter } from "./types";
 import { repairLigatures } from "./ligatures";
+import { fileUrlDocPath } from "./docFiles";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -126,13 +127,15 @@ export function wholeDocChapter(pages: number): Chapter {
 }
 
 /** A link annotation's hit area in page-fraction coordinates, plus where it
- *  goes: an external URL or an internal destination (resolve via destToPage). */
+ *  goes: an external URL, another document on disk (opened in a tab), or an
+ *  internal destination (resolve via destToPage). */
 export interface PageLink {
   x: number;
   y: number;
   w: number;
   h: number;
   url?: string;
+  file?: string;
   dest?: unknown;
 }
 
@@ -144,13 +147,16 @@ export async function pageLinks(doc: PdfDoc, num: number): Promise<PageLink[]> {
     subtype: string;
     rect: number[];
     url?: string;
+    /** Set instead of `url` for protocols pdf.js won't vouch for, like file:. */
+    unsafeUrl?: string;
     dest?: unknown;
   }[];
   const vp = page.getViewport({ scale: 1 });
   const links: PageLink[] = [];
   for (const a of annots) {
     if (a.subtype !== "Link") continue;
-    if (a.url ? !/^(https?:|mailto:)/i.test(a.url) : a.dest == null) continue;
+    const file = a.unsafeUrl ? fileUrlDocPath(a.unsafeUrl) : null;
+    if (a.url ? !/^(https?:|mailto:)/i.test(a.url) : !file && a.dest == null) continue;
     const [x1, y1, x2, y2] = pdfjs.Util.normalizeRect(
       vp.convertToViewportRectangle(a.rect) as [number, number, number, number],
     );
@@ -160,6 +166,7 @@ export async function pageLinks(doc: PdfDoc, num: number): Promise<PageLink[]> {
       w: (x2 - x1) / vp.width,
       h: (y2 - y1) / vp.height,
       url: a.url,
+      file: file ?? undefined,
       dest: a.dest,
     });
   }

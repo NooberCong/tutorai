@@ -24,8 +24,9 @@ export const writeTrivia = (content: string) =>
   invoke<void>("write_trivia", { content });
 export const triviaDir = () => invoke<string>("trivia_dir");
 
-export const registerPdf =(path: string) =>
-  invoke<RegisteredDoc>("register_pdf", { path });
+/** Identify a document (typesetting a Markdown file to PDF on first open). */
+export const registerDoc = (path: string) =>
+  invoke<RegisteredDoc>("register_doc", { path });
 
 /** asset:// URL pdf.js can stream with range requests. */
 export const pdfUrl = (path: string) => convertFileSrc(path);

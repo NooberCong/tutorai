@@ -37,6 +37,12 @@ tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macr
 log = "0.4"
 env_logger = "0.11"
 
+# Markdown → PDF printing drives WebView2 directly (markdown.rs). Same
+# versions Tauri itself builds against.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows = "0.61"
+
 [profile.release]
 lto = true
 codegen-units = 1

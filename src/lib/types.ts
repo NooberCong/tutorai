@@ -14,7 +14,10 @@ export interface LibraryEntry {
 
 export interface RegisteredDoc {
   docId: string;
+  /** The file the user opened. */
   path: string;
+  /** The PDF the reader loads: `path` itself, or a Markdown file's typeset copy. */
+  pdfPath: string;
   docDir: string;
 }
 

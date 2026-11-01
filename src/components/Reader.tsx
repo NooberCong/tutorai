@@ -16,6 +16,7 @@ import type { TextContent } from "pdfjs-dist/types/src/display/api";
 import { cachedPageGlyphs, fetchPageGlyphs, fitTextLayer, type Glyph } from "../lib/textFit";
 import { repairLigatures } from "../lib/ligatures";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { emit } from "@tauri-apps/api/event";
 import {
   destToPage,
   pageLinks,
@@ -590,6 +591,8 @@ const PageContent = memo(function PageContent(props: {
   const followLink = async (link: PageLink) => {
     if (link.url) {
       await openUrl(link.url);
+    } else if (link.file) {
+      await emit("open-file", link.file); // App opens it in a tab
     } else {
       const page = await destToPage(pdf, link.dest);
       if (page != null) jumpToPage(page);

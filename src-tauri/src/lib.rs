@@ -1,6 +1,7 @@
 mod claude;
 mod dict;
 mod jobs;
+mod markdown;
 mod store;
 
 use claude::{JobEvent, JobSpec};
@@ -10,23 +11,24 @@ use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_window_state::StateFlags;
 
-/// First existing `.pdf` among CLI args — how "Open with TutorAI" (file
-/// association / drag onto the exe) hands us a document.
-fn pdf_arg<S: AsRef<str>>(args: &[S]) -> Option<String> {
+/// First existing PDF or Markdown file among CLI args — how "Open with
+/// TutorAI" (file association / drag onto the exe) hands us a document.
+fn doc_arg<S: AsRef<str>>(args: &[S]) -> Option<String> {
     args.iter()
         .skip(1)
         .map(|a| a.as_ref())
         .find(|a| {
-            a.to_ascii_lowercase().ends_with(".pdf") && std::path::Path::new(a).exists()
+            (a.to_ascii_lowercase().ends_with(".pdf") || markdown::is_markdown(a))
+                && std::path::Path::new(a).exists()
         })
         .map(String::from)
 }
 
-/// The PDF this process was launched with, if any (queried by the UI on boot).
+/// The document this process was launched with, if any (queried by the UI on boot).
 #[tauri::command]
 fn initial_file() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
-    pdf_arg(&args)
+    doc_arg(&args)
 }
 
 /// Start a Claude job; events stream through `channel`, the returned id
@@ -58,7 +60,7 @@ pub fn run() {
                 let _ = window.unminimize();
                 let _ = window.set_focus();
             }
-            if let Some(path) = pdf_arg(&argv) {
+            if let Some(path) = doc_arg(&argv) {
                 let _ = app.emit("open-file", path);
             }
         }))
@@ -69,10 +71,11 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                .with_denylist(&[markdown::WINDOW_LABEL])
                 .build(),
         )
         .on_page_load(|webview, payload| {
-            if payload.event() == PageLoadEvent::Finished {
+            if payload.event() == PageLoadEvent::Finished && webview.label() == "main" {
                 let _ = webview.window().show();
             }
         })
@@ -104,7 +107,7 @@ pub fn run() {
             store::read_trivia,
             store::write_trivia,
             store::trivia_dir,
-            store::register_pdf,
+            store::register_doc,
             store::get_library,
             store::upsert_library_entry,
             store::remove_library_entry,

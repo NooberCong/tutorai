@@ -48,6 +48,12 @@ tutor something.
 - **Fast on big books.** Pages render through a virtualized pdf.js viewer —
   only what's near the viewport is rasterized — so thousand-page PDFs scroll
   smoothly.
+- **Markdown too.** A `.md` file opens like a book: on first open it's typeset
+  into a 7 × 10 in PDF — images, math, code, tables, task lists — with its
+  headings as the chapter outline and links to other notes opening them in a
+  tab. Everything else (search, marking up, the tutor) works on it unchanged.
+  Edit the file elsewhere and the open tab refreshes when you come back to
+  it, keeping your place; the library swaps in the new version.
 - **A real library.** Every book gets a rendered cover, a reading-progress bar,
   and a remembered position. Close the app mid-chapter; reopen on the same page.
 - **Tabs.** Open several documents at once and drag their tabs to reorder;
@@ -323,7 +329,7 @@ npm run tauri dev      # develop, with hot reload
 npm run tauri build    # produce a signed installer / bundle
 ```
 
-Open a PDF via the button or just drop one anywhere onto the window.
+Open a PDF or Markdown file via the button or just drop one anywhere onto the window.
 
 ---
 
@@ -353,6 +359,9 @@ src-tauri/src/
   jobs.rs                 in-flight job registry
   store.rs                library index, per-document cache, and the
                           hatchery and trivia saves on disk
+  markdown.rs             typesets a Markdown file to PDF: print.html
+                          (src/print/) in a hidden webview, printed
+                          through WebView2's DevTools protocol
 scripts/
   render-icon.mjs         rasterizes the SVG app-icon design source
                           (regenerate everything with `npm run icon`)

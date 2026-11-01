@@ -33,10 +33,11 @@ import {
   initialFile,
   pdfUrl,
   readDocText,
-  registerPdf,
+  registerDoc,
   writeDocText,
 } from "./lib/tauri";
 import type { RegisteredDoc } from "./lib/types";
+import { docStem, fileName, isMarkdownPath } from "./lib/docFiles";
 import { getSetting, saveSetting, SETTINGS_DEFAULTS, useSetting } from "./lib/settings";
 import { useDailyTrivia } from "./lib/trivia/daily";
 
@@ -91,13 +92,13 @@ export default function App() {
     const activate = opts?.activate ?? true;
     setOpening(path);
     try {
-      const reg = await registerPdf(path);
+      const reg = await registerDoc(path);
       if (openIds.current.has(reg.docId)) {
         if (activate) setActiveId(reg.docId);
         return reg.docId;
       }
-      const pdf = await loadPdf(pdfUrl(path));
-      const fileName = path.split(/[\\/]/).pop() ?? "document.pdf";
+      const pdf = await loadPdf(pdfUrl(reg.pdfPath));
+      const name = fileName(path);
       // Resume where the reader left off last time (from the library index).
       const entry = await getLibrary()
         .then((lib) => lib.find((e) => e.docId === reg.docId))
@@ -105,8 +106,8 @@ export default function App() {
       const tab: DocTab = {
         reg,
         pdf,
-        fileName,
-        title: entry?.title ?? fileName.replace(/\.pdf$/i, ""),
+        fileName: name,
+        title: entry?.title ?? docStem(name),
         page: Math.min(Math.max(entry?.lastPage ?? 1, 1), pdf.numPages),
         scroll: entry?.lastScroll ?? 0,
       };
@@ -116,8 +117,8 @@ export default function App() {
       ensureCover(reg.docId, pdf);
       return reg.docId;
     } catch (e) {
-      console.error("failed to open PDF", e);
-      if (!opts?.quiet) alert(`Could not open this PDF.\n${e}`);
+      console.error("failed to open document", e);
+      if (!opts?.quiet) alert(`Could not open this file.\n${e}`);
       return null;
     } finally {
       setOpening(null);
@@ -155,19 +156,19 @@ export default function App() {
       if (!savedTabs.paths.length) return;
       const [library, regs] = await Promise.all([
         getLibrary().catch(() => []),
-        Promise.allSettled(savedTabs.paths.map((path) => registerPdf(path))),
+        Promise.allSettled(savedTabs.paths.map((path) => registerDoc(path))),
       ]);
       const stubs: DocTab[] = [];
       for (const r of regs) {
         if (r.status !== "fulfilled" || openIds.current.has(r.value.docId)) continue;
         openIds.current.add(r.value.docId);
         const entry = library.find((e) => e.docId === r.value.docId);
-        const fileName = r.value.path.split(/[\\/]/).pop() ?? "document.pdf";
+        const name = fileName(r.value.path);
         stubs.push({
           reg: r.value,
           pdf: null,
-          fileName,
-          title: entry?.title ?? fileName.replace(/\.pdf$/i, ""),
+          fileName: name,
+          title: entry?.title ?? docStem(name),
           page: entry?.lastPage ?? 1,
           scroll: entry?.lastScroll ?? 0,
         });
@@ -237,10 +238,16 @@ export default function App() {
     });
   }, []);
 
+  // A tab whose file changed carries on as the new version (see the refresh
+  // below); the old version's session reports its resting place under the
+  // old docId, which this redirects.
+  const replacedBy = useRef(new Map<string, string>());
   const rememberPosition = useCallback(
     (docId: string, page: number, scroll: number) => {
+      const id = replacedBy.current.get(docId) ?? docId;
+      replacedBy.current.delete(docId);
       setTabs((prev) =>
-        prev.map((t) => (t.reg.docId === docId ? { ...t, page, scroll } : t)),
+        prev.map((t) => (t.reg.docId === id ? { ...t, page, scroll } : t)),
       );
     },
     [],
@@ -255,9 +262,9 @@ export default function App() {
   const loadingIds = useRef(new Set<string>());
   useEffect(() => {
     if (!active || active.pdf || loadingIds.current.has(active.reg.docId)) return;
-    const { docId, path } = active.reg;
+    const { docId, pdfPath } = active.reg;
     loadingIds.current.add(docId);
-    loadPdf(pdfUrl(path))
+    loadPdf(pdfUrl(pdfPath))
       .then((pdf) => {
         if (!openIds.current.has(docId)) {
           pdf.destroy().catch(() => {});
@@ -273,12 +280,56 @@ export default function App() {
         ensureCover(docId, pdf);
       })
       .catch((e) => {
-        console.error("failed to load PDF", e);
+        console.error("failed to load document", e);
         closeTab(docId);
-        alert(`Could not open this PDF.\n${e}`);
+        alert(`Could not open this file.\n${e}`);
       })
       .finally(() => loadingIds.current.delete(docId));
   }, [active, closeTab]);
+
+  // A Markdown note edited elsewhere refreshes when the reader comes back to
+  // it — the window regains focus or its tab is switched to. Registering
+  // re-hashes the file (and typesets it if it changed); a new docId means a
+  // new version, which takes over the tab as a stub so the lazy load above
+  // brings it in at the old version's reading position. If that version is
+  // already open in another tab, that tab is focused instead. A file that is
+  // gone or unreadable mid-save leaves the tab as it is.
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const refreshing = useRef(false);
+  const refreshActive = useCallback(async () => {
+    const tab = tabsRef.current.find((t) => t.reg.docId === activeIdRef.current);
+    if (!tab?.pdf || !isMarkdownPath(tab.reg.path) || refreshing.current) return;
+    refreshing.current = true;
+    try {
+      const old = tab.reg.docId;
+      const reg = await registerDoc(tab.reg.path);
+      if (reg.docId === old || !openIds.current.has(old)) return;
+      if (openIds.current.has(reg.docId)) {
+        closeTab(old);
+        setActiveId(reg.docId);
+        return;
+      }
+      openIds.current.delete(old);
+      openIds.current.add(reg.docId);
+      replacedBy.current.set(old, reg.docId);
+      tab.pdf.destroy().catch(() => {});
+      setTabs((prev) => prev.map((t) => (t.reg.docId === old ? { ...t, reg, pdf: null } : t)));
+      setActiveId((prev) => (prev === old ? reg.docId : prev));
+    } catch {
+      // keep showing what we have
+    } finally {
+      refreshing.current = false;
+    }
+  }, [closeTab]);
+  useEffect(() => {
+    void refreshActive();
+  }, [activeId, refreshActive]);
+  useEffect(() => {
+    const onFocus = () => void refreshActive();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshActive]);
 
   // The splash holds until the boot outcome is actually on screen: the
   // library (no active tab) or the active tab's parsed document. Background

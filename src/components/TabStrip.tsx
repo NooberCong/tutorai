@@ -2,7 +2,7 @@
  *  (including on the library screen, so open documents stay reachable).
  *
  *  Reordering is pointer-based rather than HTML5 drag-and-drop: Tauri's
- *  native drag-drop handler — needed for dropping PDF files onto the window —
+ *  native drag-drop handler — needed for dropping documents onto the window —
  *  consumes WebView2's drag events, so `draggable` would never fire here.
  *  Tabs swap slots live during the drag; every tab shares one width, so the
  *  slot size measured off the grabbed tab holds for the whole strip.

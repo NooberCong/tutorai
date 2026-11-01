@@ -39,6 +39,7 @@ import {
   writeDocText,
 } from "./tauri";
 import { getSetting, saveSetting } from "./settings";
+import { docStem } from "./docFiles";
 
 export type PanelTab = "summary" | "quiz" | "chat" | "project";
 
@@ -136,7 +137,7 @@ export function SessionProvider(props: {
         const info = (await pdf.getMetadata().catch(() => null)) as
           | { info?: { Title?: string } }
           | null;
-        const title = info?.info?.Title?.trim() || fileName.replace(/\.pdf$/i, "");
+        const title = info?.info?.Title?.trim() || docStem(fileName);
         let chapters: Chapter[];
         [chapters, pages] = await Promise.all([outlineChapters(pdf), extractPages(pdf, progress)]);
         newMeta = {
