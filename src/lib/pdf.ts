@@ -1,7 +1,7 @@
 /** pdf.js loading, outline→chapter mapping, and page-marked text extraction. */
 
 import * as pdfjs from "pdfjs-dist";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { Chapter } from "./types";
 import { repairLigatures } from "./ligatures";
@@ -217,6 +217,29 @@ export async function renderPageJpegBase64(
   return url.slice(url.indexOf(",") + 1);
 }
 
+/** Draw one region of a page (fractions of the page) onto a canvas of its own,
+ *  scaled so it comes out near `targetWidth` px wide — never below the page's
+ *  own size, never past `maxScale`. Only the region is rasterized. */
+export async function renderRegion(
+  page: PDFPageProxy,
+  region: { x: number; y: number; w: number; h: number },
+  targetWidth: number,
+  maxScale = 4,
+): Promise<HTMLCanvasElement> {
+  const vp1 = page.getViewport({ scale: 1 });
+  const scale = Math.min(Math.max(targetWidth / (vp1.width * region.w), 1), maxScale);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(region.w * viewport.width));
+  canvas.height = Math.max(1, Math.round(region.h * viewport.height));
+  await page.render({
+    canvas,
+    viewport,
+    transform: [1, 0, 0, 1, -Math.round(region.x * viewport.width), -Math.round(region.y * viewport.height)],
+  }).promise;
+  return canvas;
+}
+
 /** Render a rectangular region of a page — given as fractions of the page
  *  size — to a JPEG (base64, no data: prefix) for the AI to Read. */
 export async function renderRegionJpegBase64(
@@ -226,30 +249,8 @@ export async function renderRegionJpegBase64(
   targetWidth = 1200,
 ): Promise<string> {
   const page = await doc.getPage(num);
-  const vp1 = page.getViewport({ scale: 1 });
-  // Scale so the crop comes out near targetWidth, without going absurd for
-  // tiny selections or huge pages.
-  const scale = Math.min(Math.max(targetWidth / (vp1.width * region.w), 1), 4);
-  const viewport = page.getViewport({ scale });
-  const full = document.createElement("canvas");
-  full.width = Math.round(viewport.width);
-  full.height = Math.round(viewport.height);
-  await page.render({ canvas: full, viewport }).promise;
+  const crop = await renderRegion(page, region, targetWidth);
   page.cleanup();
-  const crop = document.createElement("canvas");
-  crop.width = Math.max(1, Math.round(region.w * full.width));
-  crop.height = Math.max(1, Math.round(region.h * full.height));
-  crop.getContext("2d")!.drawImage(
-    full,
-    Math.round(region.x * full.width),
-    Math.round(region.y * full.height),
-    crop.width,
-    crop.height,
-    0,
-    0,
-    crop.width,
-    crop.height,
-  );
   const url = crop.toDataURL("image/jpeg", 0.85);
   return url.slice(url.indexOf(",") + 1);
 }

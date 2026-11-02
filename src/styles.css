@@ -3589,3 +3589,118 @@ textarea::placeholder {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Image viewer: a picture full screen, to zoom and pan ── */
+
+img.zoomable {
+  cursor: zoom-in;
+}
+/* Where an open picture was lifted from. */
+.imgv-source {
+  visibility: hidden;
+}
+.imgv {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(5, 8, 7, 0.88);
+  backdrop-filter: blur(6px);
+  outline: none;
+  /* Backdrop and picture fade together as the picture flies in from its
+     thumbnail, and out as it flies back (see ImageViewer). */
+  opacity: 0;
+  transition: opacity 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.imgv.on {
+  opacity: 1;
+}
+/* Floats over the picture, which may be panned or zoomed beneath it: only its
+   buttons take the pointer, so a drag that starts on the bar still pans. */
+.imgv-head {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 10px 20px;
+  background: linear-gradient(rgba(5, 8, 7, 0.7), transparent);
+  pointer-events: none;
+}
+.imgv-head button {
+  pointer-events: auto;
+}
+.imgv-caption {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--text);
+}
+.imgv-credit {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.imgv-credit:hover {
+  color: var(--text);
+}
+.imgv-frame {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  /* Every gesture here is the viewer's: left to the webview, a pinch would
+     zoom the whole app and a drag would cancel mid-pan. */
+  touch-action: none;
+}
+.imgv-frame.dragging {
+  cursor: grabbing;
+}
+.imgv-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  /* Fitted clear of the header; zoomed or dragged, it may pass beneath. */
+  padding: 56px 24px 24px;
+  transform-origin: 0 0;
+}
+.imgv-layer img {
+  /* Sized to the frame by ImageViewer's fitPicture, scaling small ones up. */
+  flex: none;
+  margin: auto;
+  user-select: none;
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow);
+}
+.image-layer {
+  position: absolute;
+  inset: 0;
+  /* Like the link layer: only the pictures' own rects may catch the pointer. */
+  pointer-events: none;
+}
+.pdf-image {
+  position: absolute;
+  pointer-events: auto;
+  cursor: zoom-in;
+}
+/* The figure is drawn in the page canvas, under this rect: the page shows
+   through where it was lifted from. */
+.pdf-image.imgv-source {
+  visibility: visible;
+  background: white;
+}
+/* Pictures yield while snipping, while a markup tool is armed, and to a text
+   selection dragged across them. */
+.reader.snip-mode .pdf-image,
+.reader.tool-highlight .pdf-image,
+.reader.tool-pen .pdf-image,
+.reader.tool-eraser .pdf-image,
+.reader.tool-note .pdf-image,
+.reader.tool-freetext .pdf-image,
+.textLayer.selecting ~ .image-layer .pdf-image {
+  pointer-events: none;
+}

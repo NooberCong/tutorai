@@ -16,6 +16,7 @@ import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Close } from "../Icons"
 import { GrowthMeter } from "../hatchery/Meter";
 import { ELEMENT_LABEL } from "../hatchery/labels";
 import { Habitat, PetSprite, PixelImg, crackOf, eggUrl } from "../hatchery/sprites";
+import { ImageViewer } from "../ImageViewer";
 import { Prose } from "./Prose";
 import { TriviaComposer, TriviaSelection, TriviaThread, useTriviaChat } from "./TriviaChat";
 
@@ -188,19 +189,42 @@ function Question(props: {
   );
 }
 
+/** How wide a copy the viewer fetches to zoom into (Commons serves the
+ *  original when it is smaller). */
+const FULL_WIDTH = 2560;
+
 /** The question's scene-setter. Nothing that names it is on show — no
  *  caption, no file name (both can hint at the answer) — just the credit,
  *  on hover. */
 function Scene(props: { image: TriviaImage }) {
   const { file } = props.image;
   const [failed, setFailed] = useState(false);
+  // The picture opened in the viewer, which flies out of it and back.
+  const [opened, setOpened] = useState<HTMLImageElement | null>(null);
   if (failed) return null;
   return (
     <figure className="trivia-scene">
-      <img src={commonsImage(file)} alt="" onError={() => setFailed(true)} />
+      <img
+        src={commonsImage(file)}
+        alt=""
+        className="zoomable"
+        onClick={(e) => setOpened(e.currentTarget)}
+        onError={() => setFailed(true)}
+      />
       <button className="scene-credit" onClick={() => void openUrl(commonsPage(file))}>
         Wikimedia Commons
       </button>
+      {/* Still nothing that names it: no caption, no file name. */}
+      {opened && (
+        <ImageViewer
+          src={commonsImage(file)}
+          sharp={commonsImage(file, FULL_WIDTH)}
+          from={opened}
+          alt=""
+          credit={{ label: "Wikimedia Commons", onClick: () => void openUrl(commonsPage(file)) }}
+          onClose={() => setOpened(null)}
+        />
+      )}
     </figure>
   );
 }
@@ -210,16 +234,35 @@ function Scene(props: { image: TriviaImage }) {
 function Figure(props: { image: TriviaImage }) {
   const { file, caption } = props.image;
   const [failed, setFailed] = useState(false);
+  // The picture opened in the viewer, which flies out of it and back.
+  const [opened, setOpened] = useState<HTMLImageElement | null>(null);
   if (failed) return null;
   return (
     <figure className="trivia-figure">
-      <img src={commonsImage(file)} alt={caption} onError={() => setFailed(true)} />
+      <img
+        src={commonsImage(file)}
+        alt={caption}
+        className="zoomable"
+        onClick={(e) => setOpened(e.currentTarget)}
+        onError={() => setFailed(true)}
+      />
       <figcaption>
         <span>{caption}</span>
         <button className="link-btn" title={file} onClick={() => void openUrl(commonsPage(file))}>
           Wikimedia Commons
         </button>
       </figcaption>
+      {opened && (
+        <ImageViewer
+          src={commonsImage(file)}
+          sharp={commonsImage(file, FULL_WIDTH)}
+          from={opened}
+          alt={caption}
+          caption={caption}
+          credit={{ label: "Wikimedia Commons", title: file, onClick: () => void openUrl(commonsPage(file)) }}
+          onClose={() => setOpened(null)}
+        />
+      )}
     </figure>
   );
 }

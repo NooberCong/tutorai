@@ -21,8 +21,7 @@
 import { OPS, type PDFPageProxy, type PageViewport } from "pdfjs-dist";
 import type { TextContent, TextItem } from "pdfjs-dist/types/src/display/api";
 import { UNMAPPED } from "./ligatures";
-
-type Matrix = number[];
+import { IDENTITY, asMatrix, cachedOperatorList, intentStates, mul, type Matrix, type OpList } from "./pdfOps";
 
 /** One drawn glyph, in PDF user space: baseline y and its horizontal extent
  *  (advance, including char/word spacing — the selectable slot). */
@@ -62,52 +61,12 @@ interface TextState {
   fontDir: number;
 }
 
-interface OpList {
-  fnArray: number[];
-  argsArray: unknown[][];
-}
-
-const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
 const FONT_IDENTITY: Matrix = [0.001, 0, 0, 0.001, 0, 0];
 /** Max drift of any character boundary from its glyph, in CSS px. */
 const TOLERANCE_PX = 0.25;
 /** Widest word gap, in em, still bridged as a space (see fitTextLayer):
  *  loose justification, but not a table's or a column's gutter. */
 const MAX_SPACE_EM = 2;
-
-/** Operator args carry matrices as plain arrays or Float32Arrays. */
-const asMatrix = (v: unknown): Matrix | null =>
-  v != null && (Array.isArray(v) || ArrayBuffer.isView(v)) && (v as ArrayLike<number>).length === 6
-    ? Array.from(v as ArrayLike<number>)
-    : null;
-
-const mul = (m: Matrix, n: Matrix): Matrix => [
-  m[0] * n[0] + m[2] * n[1],
-  m[1] * n[0] + m[3] * n[1],
-  m[0] * n[2] + m[2] * n[3],
-  m[1] * n[2] + m[3] * n[3],
-  m[0] * n[4] + m[2] * n[5] + m[4],
-  m[1] * n[4] + m[3] * n[5] + m[5],
-];
-
-type IntentStates = Map<unknown, { operatorList?: OpList & { lastChunk?: boolean }; renderTasks?: Set<unknown> }>;
-
-/** pdf.js keeps operator lists per rendering intent on the page proxy.
- *  `_intentStates` is internal, so anything unexpected yields null and the
- *  layer simply stays as pdf.js laid it out. */
-function intentStates(page: PDFPageProxy): IntentStates | null {
-  const states = (page as unknown as { _intentStates?: unknown })._intentStates;
-  return states instanceof Map ? (states as IntentStates) : null;
-}
-
-/** The completed display operator list the canvas render already fetched. */
-function cachedOperatorList(page: PDFPageProxy): OpList | null {
-  for (const state of intentStates(page)?.values() ?? []) {
-    const list = state.operatorList;
-    if (list?.lastChunk && Array.isArray(list.fnArray) && Array.isArray(list.argsArray)) return list;
-  }
-  return null;
-}
 
 /** Glyph positions of a page, from the operator list its canvas render
  *  already holds; null when pdf.js has freed it (see fetchPageGlyphs). */

@@ -20,6 +20,7 @@ import { emit } from "@tauri-apps/api/event";
 import {
   destToPage,
   pageLinks,
+  renderRegion,
   renderRegionJpegBase64,
   type PageLink,
   type PdfDoc,
@@ -29,7 +30,9 @@ import { clientToFrac, hitTest, selectionToMarkups } from "../lib/annotGeometry"
 import { useAnnotations } from "../lib/annotations";
 import { writeDocBytes } from "../lib/tauri";
 import { useSession } from "../lib/session";
+import { pageImages, type PageRect } from "../lib/pageImages";
 import { ChatGlyph, Spark } from "./Icons";
+import { ImageViewer } from "./ImageViewer";
 import { PageAnnotations } from "./PageAnnotations";
 import { PageInsights } from "./PageInsights";
 import { SearchHighlights } from "./SearchHighlights";
@@ -573,6 +576,10 @@ const PageContent = memo(function PageContent(props: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const [links, setLinks] = useState<PageLink[]>([]);
+  // The page's pictures, found once its first render lands (their rects are
+  // page fractions, so a re-render at another scale leaves them as they are).
+  const [images, setImages] = useState<PageRect[] | null>(null);
+  const [viewing, setViewing] = useState<{ src: string; sharp: Promise<Blob>; from: HTMLElement } | null>(null);
 
   // Link annotations don't depend on render scale (rects are page fractions),
   // so fetch them once per page mount.
@@ -640,6 +647,8 @@ const PageContent = memo(function PageContent(props: {
         return; // cancelled mid-render
       }
       if (cancelled) return;
+      // The render's operator list is still cached now: reading it costs no parse.
+      setImages((found) => found ?? pageImages(page));
 
       const content = repairLigatures(await page.getTextContent());
       if (cancelled) return;
@@ -724,10 +733,60 @@ const PageContent = memo(function PageContent(props: {
     };
   }, [pdf, num, scale, onDims]);
 
+  /** Open a picture: at once from the canvas on screen, then sharp, rendered
+   *  for the viewer alone at up to 6× (well past a raster figure's own pixels
+   *  on most pages; a vector one stays crisp all the way). */
+  const openImage = (rect: PageRect, from: HTMLElement) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const crop = document.createElement("canvas");
+    crop.width = Math.max(1, Math.round(rect.w * canvas.width));
+    crop.height = Math.max(1, Math.round(rect.h * canvas.height));
+    crop
+      .getContext("2d")!
+      .drawImage(canvas, rect.x * canvas.width, rect.y * canvas.height, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    const sharp = pdf
+      .getPage(num)
+      .then((page) => renderRegion(page, rect, 2800, 6))
+      .then((c) => new Promise<Blob>((ok, fail) => c.toBlob((b) => (b ? ok(b) : fail()), "image/png")));
+    setViewing({ src: crop.toDataURL(), sharp, from });
+  };
+
   return (
     <>
       <canvas ref={canvasRef} />
       <div className="textLayer" ref={textRef} />
+      {images && images.length > 0 && (
+        <div className="image-layer">
+          {images.map((rect, i) => (
+            <button
+              key={i}
+              className="pdf-image"
+              aria-label="Open picture"
+              style={{
+                left: `${rect.x * 100}%`,
+                top: `${rect.y * 100}%`,
+                width: `${rect.w * 100}%`,
+                height: `${rect.h * 100}%`,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                openImage(rect, e.currentTarget);
+              }}
+            />
+          ))}
+        </div>
+      )}
+      {viewing && (
+        <ImageViewer
+          src={viewing.src}
+          sharp={viewing.sharp}
+          from={viewing.from}
+          alt={`Picture on page ${num}`}
+          caption={`Page ${num}`}
+          onClose={() => setViewing(null)}
+        />
+      )}
       {links.length > 0 && (
         <div className="link-layer">
           {links.map((link, i) => (
