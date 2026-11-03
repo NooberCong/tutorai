@@ -189,7 +189,9 @@ export function SessionProvider(props: {
         await writeDocBytes(reg.docId, figureFileName(p), jpeg);
         figurePages.push(p);
         // Breathe between renders; this competes with the visible reader.
-        await new Promise((r) => setTimeout(r, 25));
+        // A hidden window (occlusion.rs) has no reader to compete with, and
+        // its timers are throttled to as little as one a minute.
+        if (document.visibilityState !== "hidden") await new Promise((r) => setTimeout(r, 25));
       }
       if (!stale) {
         await writeDocText(

@@ -2,6 +2,8 @@ mod claude;
 mod dict;
 mod jobs;
 mod markdown;
+#[cfg(windows)]
+mod occlusion;
 mod store;
 
 use claude::{JobEvent, JobSpec};
@@ -84,6 +86,9 @@ pub fn run() {
             // corrupted install), still surface the window instead of leaving
             // the app running invisibly. show() on a visible window is a no-op.
             if let Some(window) = app.get_webview_window("main") {
+                // Stop drawing while the window can't be seen (occlusion.rs).
+                #[cfg(windows)]
+                occlusion::track(&window);
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(10));
                     let _ = window.show();

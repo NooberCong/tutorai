@@ -211,7 +211,15 @@ export async function renderPageJpegBase64(
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
-  await page.render({ canvas, viewport }).promise;
+  const task = page.render({ canvas, viewport });
+  // pdf.js paces screen renders on requestAnimationFrame, which never fires
+  // in a hidden window (occlusion.rs): unpaced there, as it does for print,
+  // so this background pass keeps going while the app is out of sight.
+  if (document.visibilityState === "hidden") {
+    const internal = (task as unknown as { _internalRenderTask?: { _useRequestAnimationFrame?: boolean } })._internalRenderTask;
+    if (internal) internal._useRequestAnimationFrame = false;
+  }
+  await task.promise;
   const url = canvas.toDataURL("image/jpeg", 0.8);
   page.cleanup();
   return url.slice(url.indexOf(",") + 1);
