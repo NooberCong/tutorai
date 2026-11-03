@@ -220,11 +220,13 @@ export function ImageViewer(props: {
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   });
 
-  // Focus moves into the viewer and goes back where it was on close.
+  // Focus moves into the viewer and goes back where it was on close — without
+  // scrolling: that is usually the figure clicked on the page, and focusing it
+  // plainly would scroll the page to bring all of it into view.
   useLayoutEffect(() => {
     const before = document.activeElement as HTMLElement | null;
-    root.current?.focus();
-    return () => before?.focus();
+    root.current?.focus({ preventScroll: true });
+    return () => before?.focus({ preventScroll: true });
   }, []);
 
   // The wheel zooms about the pointer: a trackpad pinch arrives as ctrl+wheel in
