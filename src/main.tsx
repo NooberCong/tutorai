@@ -4,6 +4,7 @@ import App from "./App";
 import { loadSettings } from "./lib/settings";
 import { loadHatchery } from "./lib/hatchery/store";
 import { loadTrivia } from "./lib/trivia/store";
+import "./lib/windowCovered";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";

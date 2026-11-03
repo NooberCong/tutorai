@@ -125,6 +125,8 @@ pub fn run() {
             dict::list_dictionaries,
             dict::remove_dictionary,
             dict::lookup_word,
+            #[cfg(windows)]
+            occlusion::window_covered,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

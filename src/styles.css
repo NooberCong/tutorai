@@ -3590,6 +3590,14 @@ textarea::placeholder {
   }
 }
 
+/* Window entirely behind other windows (lib/windowCovered.ts): nothing
+   moves for nobody. Paused, not stopped, so everything holds its frame. */
+:root[data-covered] *,
+:root[data-covered] *::before,
+:root[data-covered] *::after {
+  animation-play-state: paused !important;
+}
+
 /* ── Image viewer: a picture full screen, to zoom and pan ── */
 
 img.zoomable {

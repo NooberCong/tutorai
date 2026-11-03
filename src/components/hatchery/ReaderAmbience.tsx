@@ -12,13 +12,15 @@
  *  - The painting draws no finer than it was painted and only beside the
  *    pages, at about 30 frames a second (its motion is far slower than a
  *    pixel a frame); the motes at one pixel per CSS pixel, at about 60.
- *  - It runs only while the reader is on screen and the window is visible,
- *    and not at all under "reduce motion". */
+ *  - It runs only while the reader is on screen and the window is visible
+ *    (not minimized, nor entirely behind other windows: windowCovered.ts), and
+ *    not at all under "reduce motion". */
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { Element } from "../../lib/hatchery/kit";
 import type { AmbienceMessage, AmbienceReply } from "./ambience.worker";
 import { paintLiveBackdrop } from "./backdrop";
+import { isCovered, onCoveredChange } from "../../lib/windowCovered";
 
 const REDUCE = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 const subscribeReduce = (l: () => void) => {
@@ -88,7 +90,8 @@ function Layer({ element }: { element: Element }) {
     post({ attach: { motes: offMotes, living: offLiving }, el: element, ...size() }, [offMotes, offLiving]);
 
     let onScreen = false;
-    const run = () => post({ run: onScreen && document.visibilityState === "visible" });
+    const run = () => post({ run: onScreen && !isCovered() && document.visibilityState === "visible" });
+    const unsubscribe = onCoveredChange(run);
     const io = new IntersectionObserver(([e]) => {
       onScreen = e.isIntersecting;
       run();
@@ -147,6 +150,7 @@ function Layer({ element }: { element: Element }) {
       mo.disconnect();
       cancelAnimationFrame(pending);
       document.removeEventListener("visibilitychange", run);
+      unsubscribe();
       release(w);
       worker.current = null;
       living.remove();
