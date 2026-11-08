@@ -2699,6 +2699,18 @@ textarea::placeholder {
   white-space: pre-wrap;
   box-shadow: var(--lift);
 }
+.chat-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.chat-images img {
+  max-width: 140px;
+  max-height: 105px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+}
 .chat-page-tag {
   font-family: var(--mono);
   font-size: 9.5px;
@@ -2729,6 +2741,56 @@ textarea::placeholder {
 .composer-box:focus-within {
   border-color: rgba(69, 210, 131, 0.45);
   box-shadow: 0 0 0 3px rgba(69, 210, 131, 0.08);
+}
+.composer-box.dropping {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+}
+.composer-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.composer-image {
+  position: relative;
+  width: 52px;
+  height: 52px;
+}
+.composer-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+}
+.composer-image button {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--ink3);
+  border: 1px solid var(--line-strong);
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity 130ms, color 130ms;
+}
+.composer-image:hover button,
+.composer-image button:focus-visible {
+  opacity: 1;
+}
+.composer-image button:hover {
+  color: var(--text);
+}
+.composer-attach {
+  margin-left: auto;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
 }
 .composer-box textarea {
   resize: none;

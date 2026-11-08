@@ -43,6 +43,13 @@ export const writeDocText = (docId: string, rel: string, content: string) =>
   invoke<void>("write_doc_text", { docId, rel, content });
 export const writeDocBytes = (docId: string, rel: string, base64Data: string) =>
   invoke<void>("write_doc_bytes", { docId, rel, base64Data });
+export const copyIntoDoc = (docId: string, src: string, rel: string) =>
+  invoke<void>("copy_into_doc", { docId, src, rel });
+/** asset:// URL of a file in the doc cache the webview may show (snips/). */
+export const docFileUrl = (docDir: string, rel: string) => {
+  const sep = docDir.includes("\\") ? "\\" : "/";
+  return convertFileSrc(`${docDir}${sep}${rel.replaceAll("/", sep)}`);
+};
 export const removeDocPath = (docId: string, rel: string) =>
   invoke<void>("remove_doc_path", { docId, rel });
 export const ensureProjectDir = (docId: string, slug: string) =>

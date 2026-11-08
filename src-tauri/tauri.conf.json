@@ -12,6 +12,8 @@
   "app": {
     "windows": [
       {
+        "label": "main",
+        "create": false,
         "title": "TutorAI",
         "backgroundColor": "#090d0b",
         "visible": false,

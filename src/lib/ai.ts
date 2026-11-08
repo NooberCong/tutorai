@@ -173,6 +173,17 @@ export function questionWithReadingContext(
   ].join("\n");
 }
 
+/** A chat question with images the reader attached (doc-relative paths). */
+export function questionWithImages(question: string, images: string[]): string {
+  if (images.length === 0) return question;
+  const lead =
+    images.length === 1
+      ? `I've attached an image: ${images[0]} — Read it first.`
+      : `I've attached ${images.length} images: ${images.join(", ")} — Read them first.`;
+  const ask = question || "What is this? Explain it, connecting it to what I'm reading where it relates.";
+  return `${lead}\n\n${ask}`;
+}
+
 export function explainSelectionMessage(text: string, page: number): string {
   return `Explain this passage from page ${page}:\n\n"${text.trim()}"\n\nExplain what it means in plain language, add the context I need to understand it, and note anything subtle or easily misread.`;
 }

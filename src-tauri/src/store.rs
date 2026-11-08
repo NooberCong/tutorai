@@ -240,8 +240,11 @@ pub async fn register_doc(app: AppHandle, path: String) -> Result<RegisteredDoc,
     } else {
         path.clone()
     };
-    app.asset_protocol_scope()
-        .allow_file(&pdf_path)
+    let scope = app.asset_protocol_scope();
+    scope.allow_file(&pdf_path).map_err(|e| e.to_string())?;
+    // The chat shows the images attached to its questions.
+    scope
+        .allow_directory(dir.join("snips"), false)
         .map_err(|e| e.to_string())?;
     Ok(RegisteredDoc {
         doc_id,
@@ -340,6 +343,17 @@ pub fn write_doc_bytes(
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::write(path, bytes).map_err(|e| e.to_string())
+}
+
+/// Copy a file from anywhere into the doc cache — an image the reader picked
+/// or dropped into the chat, which the headless CLI then Reads.
+#[tauri::command]
+pub fn copy_into_doc(app: AppHandle, doc_id: String, src: String, rel: String) -> Result<(), String> {
+    let path = doc_file(&app, &doc_id, &rel)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::copy(&src, path).map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// Delete a file or directory inside a doc's cache dir — spent snips, a

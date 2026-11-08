@@ -82,18 +82,24 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // The main window is built here from its tauri.conf.json entry
+            // ("create": false) because only the builder can let the page
+            // read the clipboard without WebView2 asking first: Alt+V attaches
+            // a copied image to a chat question.
+            let config = &app.config().app.windows[0];
+            let window = tauri::WebviewWindowBuilder::from_config(app.handle(), config)?
+                .enable_clipboard_access()
+                .build()?;
+            // Stop drawing while the window can't be seen (occlusion.rs).
+            #[cfg(windows)]
+            occlusion::track(&window);
             // Safety net: if the page somehow never loads (dev server died,
             // corrupted install), still surface the window instead of leaving
             // the app running invisibly. show() on a visible window is a no-op.
-            if let Some(window) = app.get_webview_window("main") {
-                // Stop drawing while the window can't be seen (occlusion.rs).
-                #[cfg(windows)]
-                occlusion::track(&window);
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(10));
-                    let _ = window.show();
-                });
-            }
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(10));
+                let _ = window.show();
+            });
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -119,6 +125,7 @@ pub fn run() {
             store::read_doc_text,
             store::write_doc_text,
             store::write_doc_bytes,
+            store::copy_into_doc,
             store::remove_doc_path,
             store::ensure_project_dir,
             dict::import_dictionary,

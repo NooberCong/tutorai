@@ -68,6 +68,9 @@ tutor something.
 - **Snip a figure.** Drag a box around a diagram, chart, or equation right on
   the page and it lands in Chat as an image — the tutor sees exactly what you
   circled, not just the surrounding text.
+- **Ask about any image.** Press **Alt+V** to attach the image on your
+  clipboard, drop image files on the chat, or pick them with the image button
+  beside Send.
 - Resizable, smoothly sliding panels; an editable page indicator; fit-width and
   manual zoom.
 
@@ -108,7 +111,7 @@ single chapter:
 | --- | --- |
 | **Summary** | Page-cited study summaries — key concepts, definitions, takeaways. |
 | **Quiz** | Interactive multiple-choice quizzes (length and difficulty are yours to pick), graded as you go, with explanations and a citation for every question. Progress is saved; skip around freely and resume any time. |
-| **Chat** | Ask anything about the document, or snip a figure straight into the conversation. With *reading context* on, the tutor sees the page you're currently on and its neighbors — "why does this equation hold?" just works. The tutor can see figures and diagrams too, not just extracted text. Conversations are multi-turn. |
+| **Chat** | Ask anything about the document, snip a figure straight into the conversation, or attach images of your own (Alt+V pastes one). With *reading context* on, the tutor sees the page you're currently on and its neighbors — "why does this equation hold?" just works. The tutor can see figures and diagrams too, not just extracted text. Conversations are multi-turn. |
 | **Project** | An agentic Claude builds a runnable coding project from the material into an isolated workspace folder, verifies it runs, and maps the code back to the pages it teaches. |
 
 Citations are everywhere by design: every claim the tutor makes about the

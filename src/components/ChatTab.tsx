@@ -1,12 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   chatSystemPreamble,
+  questionWithImages,
   questionWithReadingContext,
 } from "../lib/ai";
+import {
+  IMAGE_EXTENSIONS,
+  isImagePath,
+  saveClipboardImage,
+  saveImageFile,
+} from "../lib/chatImages";
 import { useClaudeJob, useSession } from "../lib/session";
-import { removeDocPath } from "../lib/tauri";
+import { docFileUrl, removeDocPath } from "../lib/tauri";
 import { ActivityFeed, Md, Spinner } from "./AiPanel";
-import { ChatGlyph, PageMark, Send, Stop } from "./Icons";
+import { ImageViewer } from "./ImageViewer";
+import { ChatGlyph, Close, ImageGlyph, PageMark, Send, Stop } from "./Icons";
 import { recordHabit } from "../lib/hatchery/tracker";
 
 export function ChatTab() {
@@ -17,6 +27,13 @@ export function ChatTab() {
   const { state, start, cancel } = useClaudeJob();
   const [input, setInput] = useState("");
   const [withContext, setWithContext] = useState(true);
+  /** Attached to the next question: doc-relative paths, already on disk. */
+  const [images, setImages] = useState<string[]>([]);
+  /** Image files are being dragged over the chat. */
+  const [dropping, setDropping] = useState(false);
+  /** The attached image opened full screen, which flies out of it and back. */
+  const [opened, setOpened] = useState<HTMLImageElement | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const handledRequest = useRef(0);
@@ -40,7 +57,7 @@ export function ChatTab() {
     ta.style.height = `${ta.scrollHeight}px`;
   }, [input]);
 
-  const send = async (displayText: string, sendText: string) => {
+  const send = async (displayText: string, sendText: string, attached: string[] = []) => {
     if (!meta || state.running) return;
     pinnedRef.current = true;
     recordHabit("ask");
@@ -48,7 +65,15 @@ export function ChatTab() {
       ...a,
       chat: {
         ...a.chat,
-        messages: [...a.chat.messages, { role: "user", text: displayText, page: currentPage }],
+        messages: [
+          ...a.chat.messages,
+          {
+            role: "user",
+            text: displayText,
+            page: currentPage,
+            ...(attached.length ? { images: attached } : {}),
+          },
+        ],
       },
     }));
     const prompt = sessionId
@@ -75,15 +100,87 @@ export function ChatTab() {
 
   const sendTyped = async () => {
     const question = input.trim();
-    if (!question) return;
+    const attached = images;
+    if (!question && attached.length === 0) return;
     setInput("");
+    setImages([]);
+    const asked = questionWithImages(question, attached);
     if (withContext) {
       const pages = await getPageTexts([currentPage - 1, currentPage, currentPage + 1]);
-      await send(question, questionWithReadingContext(question, currentPage, pages));
+      await send(question, questionWithReadingContext(asked, currentPage, pages), attached);
     } else {
-      await send(question, question);
+      await send(question, asked, attached);
     }
   };
+
+  const attachFiles = async (paths: string[]) => {
+    try {
+      const rels = await Promise.all(
+        paths.filter(isImagePath).map((p) => saveImageFile(reg.docId, p)),
+      );
+      setImages((prev) => [...prev, ...rels]);
+    } catch (e) {
+      console.error("attach image failed", e);
+    }
+  };
+
+  const pickImages = async () => {
+    const picked = await openDialog({
+      multiple: true,
+      filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
+    });
+    if (picked) await attachFiles(picked);
+  };
+
+  const removeImage = (rel: string) => {
+    setImages((prev) => prev.filter((r) => r !== rel));
+    removeDocPath(reg.docId, rel).catch(() => {});
+  };
+
+  // Alt+V attaches the image on the clipboard (Ctrl+V stays text paste).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyV" || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      saveClipboardImage(reg.docId)
+        .then((rel) => {
+          if (!rel) return;
+          setImages((prev) => [...prev, rel]);
+          inputRef.current?.focus();
+        })
+        .catch((err) => console.error("clipboard image failed", err));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [reg.docId]);
+
+  // Image files dropped anywhere on the chat are attached. The webview owns
+  // file drops (HTML drop events never fire), so hit-test its positions.
+  useEffect(() => {
+    let carryingImages = false;
+    const overPane = ({ x, y }: { x: number; y: number }) => {
+      const r = paneRef.current?.getBoundingClientRect();
+      const dpr = window.devicePixelRatio;
+      return !!r && x / dpr >= r.left && x / dpr <= r.right && y / dpr >= r.top && y / dpr <= r.bottom;
+    };
+    const unlisten = getCurrentWebview().onDragDropEvent(({ payload }) => {
+      if (payload.type === "enter") carryingImages = payload.paths.some(isImagePath);
+      if (!carryingImages) return;
+      if (payload.type === "leave") {
+        setDropping(false);
+      } else if (payload.type === "drop") {
+        setDropping(false);
+        if (overPane(payload.position)) void attachFiles(payload.paths);
+      } else {
+        setDropping(overPane(payload.position));
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reg.docId]);
 
   // Selection popover requests ("Explain" auto-sends, "Ask" prefills).
   useEffect(() => {
@@ -107,7 +204,7 @@ export function ChatTab() {
   }, [panelRequest]);
 
   return (
-    <div className="tab-pane chat-pane">
+    <div className="tab-pane chat-pane" ref={paneRef}>
       <div
         className="chat-log"
         ref={logRef}
@@ -133,7 +230,24 @@ export function ChatTab() {
         {messages.map((m, i) =>
           m.role === "user" ? (
             <div key={i} className="chat-msg user">
-              <div className="chat-user-text">{m.text}</div>
+              {m.images && (
+                <div className="chat-images">
+                  {m.images.map((rel) => (
+                    <img
+                      key={rel}
+                      src={docFileUrl(reg.docDir, rel)}
+                      alt=""
+                      className="zoomable"
+                      onClick={(e) => setOpened(e.currentTarget)}
+                      // Swept with the stale snips once the chat is old.
+                      onError={(e) => {
+                        e.currentTarget.hidden = true;
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              {m.text && <div className="chat-user-text">{m.text}</div>}
               {m.page ? <span className="chat-page-tag">at p.{m.page}</span> : null}
             </div>
           ) : (
@@ -152,7 +266,28 @@ export function ChatTab() {
       </div>
 
       <div className="chat-composer">
-        <div className="composer-box">
+        <div className={`composer-box ${dropping ? "dropping" : ""}`}>
+          {images.length > 0 && (
+            <div className="composer-images">
+              {images.map((rel) => (
+                <div key={rel} className="composer-image">
+                  <img
+                    src={docFileUrl(reg.docDir, rel)}
+                    alt=""
+                    className="zoomable"
+                    onClick={(e) => setOpened(e.currentTarget)}
+                  />
+                  <button
+                    onClick={() => removeImage(rel)}
+                    title="Remove"
+                    aria-label="Remove image"
+                  >
+                    <Close width={9} height={9} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <textarea
             ref={inputRef}
             value={input}
@@ -185,7 +320,9 @@ export function ChatTab() {
                       ...a,
                       chat: { sessionId: null, messages: [] },
                     }));
-                    // Snips only exist as attachments of this conversation.
+                    // Snips and images only exist as attachments of this
+                    // conversation.
+                    setImages([]);
                     removeDocPath(reg.docId, "snips").catch(() => {});
                   }}
                 >
@@ -193,6 +330,14 @@ export function ChatTab() {
                 </button>
               )}
             </div>
+            <button
+              className="icon-btn composer-attach"
+              onClick={() => void pickImages()}
+              title="Attach images (Alt+V pastes one)"
+              aria-label="Attach images"
+            >
+              <ImageGlyph />
+            </button>
             {state.running ? (
               <button className="send-btn stop" onClick={cancel} title="Stop">
                 <Stop width={13} height={13} />
@@ -200,7 +345,7 @@ export function ChatTab() {
             ) : (
               <button
                 className="send-btn"
-                disabled={!input.trim()}
+                disabled={!input.trim() && images.length === 0}
                 onClick={() => void sendTyped()}
                 title="Send (Enter)"
               >
@@ -210,6 +355,7 @@ export function ChatTab() {
           </div>
         </div>
       </div>
+      {opened && <ImageViewer src={opened.src} from={opened} alt="" onClose={() => setOpened(null)} />}
     </div>
   );
 }

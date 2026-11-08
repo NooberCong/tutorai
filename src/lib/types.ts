@@ -76,6 +76,8 @@ export interface ChatMessage {
   text: string;
   /** For user messages: the page being read when the question was asked. */
   page?: number;
+  /** For user messages: attached images, as doc-relative paths (snips/…). */
+  images?: string[];
 }
 
 /** What a margin note adds that the document doesn't have. */
