@@ -2838,12 +2838,6 @@ textarea::placeholder {
 .composer-image button:hover {
   color: var(--text);
 }
-.composer-attach {
-  margin-left: auto;
-  min-width: 30px;
-  height: 30px;
-  padding: 0;
-}
 .composer-box textarea {
   resize: none;
   background: transparent;
@@ -2867,8 +2861,8 @@ textarea::placeholder {
 .composer-chips {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
   min-width: 0;
+  white-space: nowrap;
 }
 .send-btn {
   flex: none;

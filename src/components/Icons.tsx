@@ -99,14 +99,6 @@ export const Send = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M8 12.5v-9M4.25 7.25 8 3.5l3.75 3.75" /></svg>
 );
 
-export const ImageGlyph = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...base(p)}>
-    <rect x="2.25" y="3" width="11.5" height="10" rx="2" />
-    <circle cx="5.9" cy="6.4" r="1.1" />
-    <path d="m2.75 11.5 3.4-3.1 2.35 2.1 2-1.75 2.75 2.5" />
-  </svg>
-);
-
 export const Stop = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base({ ...p, fill: "currentColor", stroke: "none" })}>
     <rect x="4" y="4" width="8" height="8" rx="1.5" />

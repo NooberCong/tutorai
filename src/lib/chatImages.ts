@@ -13,7 +13,7 @@ const IMAGE_TYPES: Record<string, string> = {
   webp: "image/webp",
 };
 
-export const IMAGE_EXTENSIONS = Object.keys(IMAGE_TYPES);
+const IMAGE_EXTENSIONS = Object.keys(IMAGE_TYPES);
 
 const extensionOf = (path: string) => path.split(".").pop()?.toLowerCase() ?? "";
 

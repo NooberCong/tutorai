@@ -1,13 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   chatSystemPreamble,
   questionWithImages,
   questionWithReadingContext,
 } from "../lib/ai";
 import {
-  IMAGE_EXTENSIONS,
   isImagePath,
   saveClipboardImage,
   saveImageFile,
@@ -17,7 +15,7 @@ import { docFileUrl, removeDocPath } from "../lib/tauri";
 import { ActivityFeed, Md, Spinner } from "./AiPanel";
 import { approvalKey, PermissionPrompt } from "./PermissionPrompt";
 import { ImageViewer } from "./ImageViewer";
-import { ChatGlyph, Close, ImageGlyph, PageMark, Send, Stop } from "./Icons";
+import { ChatGlyph, Close, PageMark, Send, Stop } from "./Icons";
 import { recordHabit } from "../lib/hatchery/tracker";
 import type { PermissionEvent } from "../lib/types";
 
@@ -141,14 +139,6 @@ export function ChatTab() {
     } catch (e) {
       console.error("attach image failed", e);
     }
-  };
-
-  const pickImages = async () => {
-    const picked = await openDialog({
-      multiple: true,
-      filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
-    });
-    if (picked) await attachFiles(picked);
   };
 
   const removeImage = (rel: string) => {
@@ -360,14 +350,6 @@ export function ChatTab() {
                 </button>
               )}
             </div>
-            <button
-              className="icon-btn composer-attach"
-              onClick={() => void pickImages()}
-              title="Attach images (Alt+V pastes one)"
-              aria-label="Attach images"
-            >
-              <ImageGlyph />
-            </button>
             {state.running ? (
               <button className="send-btn stop" onClick={cancel} title="Stop">
                 <Stop width={13} height={13} />
