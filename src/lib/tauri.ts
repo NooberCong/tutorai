@@ -73,6 +73,8 @@ export interface JobHandle {
   /** Resolves with the terminal done event; rejects on failure/cancel. */
   result: Promise<DoneEvent>;
   cancel: () => void;
+  /** Answer a permission event. */
+  answer: (requestId: string, allow: boolean) => void;
 }
 
 /** Start a headless Claude job; every stream event also hits `onEvent`. */
@@ -103,6 +105,11 @@ export function runJob(
     result,
     cancel: () => {
       idPromise.then((id) => invoke("cancel_job", { id })).catch(() => {});
+    },
+    answer: (requestId, allow) => {
+      idPromise
+        .then((id) => invoke("answer_permission", { id, requestId, allow }))
+        .catch(() => {});
     },
   };
 }

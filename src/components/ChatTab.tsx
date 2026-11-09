@@ -15,16 +15,18 @@ import {
 import { useClaudeJob, useSession } from "../lib/session";
 import { docFileUrl, removeDocPath } from "../lib/tauri";
 import { ActivityFeed, Md, Spinner } from "./AiPanel";
+import { approvalKey, PermissionPrompt } from "./PermissionPrompt";
 import { ImageViewer } from "./ImageViewer";
 import { ChatGlyph, Close, ImageGlyph, PageMark, Send, Stop } from "./Icons";
 import { recordHabit } from "../lib/hatchery/tracker";
+import type { PermissionEvent } from "../lib/types";
 
 export function ChatTab() {
   const {
     meta, reg, model, artifacts, updateArtifacts,
     currentPage, getPageTexts, panelRequest,
   } = useSession();
-  const { state, start, cancel } = useClaudeJob();
+  const { state, start, cancel, answer } = useClaudeJob();
   const [input, setInput] = useState("");
   const [withContext, setWithContext] = useState(true);
   /** Attached to the next question: doc-relative paths, already on disk. */
@@ -41,13 +43,16 @@ export function ChatTab() {
   const pinnedRef = useRef(true);
 
   const { messages, sessionId } = artifacts.chat;
+  // Read when a request arrives mid-run, after the closure that started it.
+  const approvedRef = useRef(artifacts.chat.approved);
+  approvedRef.current = artifacts.chat.approved;
 
   // Keep the transcript pinned to the bottom as text streams in and
   // activity entries (tool calls) are appended.
   useEffect(() => {
     const el = logRef.current;
     if (el && pinnedRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages, state.text, state.activity]);
+  }, [messages, state.text, state.activity, state.permissions]);
 
   // Grow the input with its content; the CSS max-height caps it.
   useLayoutEffect(() => {
@@ -83,12 +88,14 @@ export function ChatTab() {
       const done = await start({
         prompt,
         cwd: reg.docDir,
+        askPermission: true,
         model: model || null,
         resumeSession: sessionId,
-      });
+      }, (request) => !!approvedRef.current?.includes(approvalKey(request)));
       updateArtifacts((a) => ({
         ...a,
         chat: {
+          ...a.chat,
           sessionId: done.sessionId ?? a.chat.sessionId,
           messages: [...a.chat.messages, { role: "assistant", text: done.text }],
         },
@@ -97,6 +104,18 @@ export function ChatTab() {
       // error banner rendered from state.error; the question stays in the log
     }
   };
+
+  const answerPermission = (request: PermissionEvent, allow: boolean, remember = false) => {
+    answer(request, allow);
+    if (!remember) return;
+    const key = approvalKey(request);
+    approvedRef.current = [...(approvedRef.current ?? []), key];
+    updateArtifacts((a) => ({
+      ...a,
+      chat: { ...a.chat, approved: [...(a.chat.approved ?? []), key] },
+    }));
+  };
+  const asking = state.permissions[0];
 
   const sendTyped = async () => {
     const question = input.trim();
@@ -258,8 +277,19 @@ export function ChatTab() {
         )}
         {state.running && (
           <div className="chat-msg assistant">
-            {state.text ? <Md text={state.text} streaming /> : <Spinner label="Reading…" />}
+            {state.text ? (
+              <Md text={state.text} streaming />
+            ) : (
+              !asking && <Spinner label="Reading…" />
+            )}
             <ActivityFeed items={state.activity} compact />
+            {asking && (
+              <PermissionPrompt
+                key={asking.requestId}
+                request={asking}
+                onAnswer={(allow, remember) => answerPermission(asking, allow, remember)}
+              />
+            )}
           </div>
         )}
         {state.error && <div className="banner warn">{state.error}</div>}

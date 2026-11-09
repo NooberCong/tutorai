@@ -2348,6 +2348,58 @@ textarea::placeholder {
   }
 }
 
+/* The tutor asking to step outside the book: the exact call, then the answer. */
+.permit {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--ink2);
+  box-shadow: var(--lift);
+  animation: permit-in 220ms ease-out;
+}
+.permit-ask {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text);
+}
+.permit-target {
+  margin-top: 8px;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow: auto;
+  border-radius: var(--r-sm);
+  background: var(--well);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.permit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.permit-actions .link-btn {
+  margin-right: auto;
+  font-size: 12.5px;
+}
+.permit-actions .btn {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+@keyframes permit-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
 .spinner-row {
   display: flex;
   align-items: center;

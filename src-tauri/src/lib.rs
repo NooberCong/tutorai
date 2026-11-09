@@ -45,6 +45,12 @@ fn cancel_job(jobs: State<'_, Jobs>, id: u64) {
     jobs.cancel(id);
 }
 
+/// The reader's answer to a job's permission event.
+#[tauri::command]
+fn answer_permission(jobs: State<'_, Jobs>, id: u64, request_id: String, allow: bool) {
+    jobs.answer(id, request_id, allow);
+}
+
 /// Version string of the installed `claude` CLI, or null when missing.
 #[tauri::command]
 async fn claude_version() -> Option<String> {
@@ -109,6 +115,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             run_job,
             cancel_job,
+            answer_permission,
             claude_version,
             initial_file,
             store::read_settings,

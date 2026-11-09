@@ -1,23 +1,30 @@
 //! Headless invocation of the `claude` CLI.
 //!
-//! One spawn per job: `claude -p --output-format=stream-json` with the prompt
-//! written to stdin, NDJSON frames translated into typed [`JobEvent`]s and
-//! streamed back to the webview over a Tauri channel. Multi-turn chat rides on
-//! the CLI's own session persistence via `--resume <session_id>`.
+//! One spawn per job: `claude -p` speaking stream-json both ways. The prompt
+//! goes in as one user message on stdin, NDJSON frames come back translated
+//! into typed [`JobEvent`]s and streamed to the webview over a Tauri channel.
+//! Stdin stays open until the result frame, because the CLI also asks its
+//! host for permission over it. Multi-turn chat rides on the CLI's own session
+//! persistence via `--resume <session_id>`.
 //!
-//! Two permission postures:
-//! - read-only (default): Read/Glob/Grep work out of the box in `-p` mode,
-//!   and WebSearch/WebFetch are explicitly allowed (they need approval, which
-//!   headless mode can never prompt for, but they don't touch the machine).
-//!   Everything else that needs approval (Bash/Write/Edit) stays denied.
+//! Permission postures:
+//! - read-only (default): Read/Glob/Grep work inside the working directory,
+//!   WebSearch/WebFetch are allowed outright (they don't touch the machine).
+//!   Anything else is denied, unless `ask_permission` is set: then the CLI
+//!   hands each such tool call to us as a `can_use_tool` control request,
+//!   surfaced as [`JobEvent::Permission`] and answered by the reader through
+//!   [`Control::Answer`].
 //! - agentic (coding projects): `--permission-mode=bypassPermissions`, cwd
 //!   pinned to the project workspace.
 
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::oneshot;
+use tokio::process::ChildStdin;
+use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +36,10 @@ pub struct JobSpec {
     /// Grants write/execute tools and bypasses permission prompts.
     #[serde(default)]
     pub agentic: bool,
+    /// Ask the reader (via [`JobEvent::Permission`]) instead of denying tool
+    /// calls the read-only posture doesn't cover. Only for jobs someone watches.
+    #[serde(default)]
+    pub ask_permission: bool,
     #[serde(default)]
     pub model: Option<String>,
     /// Resume an existing CLI session (multi-turn chat).
@@ -45,6 +56,8 @@ pub enum JobEvent {
     /// A tool invocation (agentic jobs surface these as an activity feed).
     Tool { name: String, detail: String },
     ToolDone { is_error: bool },
+    /// The run is paused until the reader answers this tool call.
+    Permission { request_id: String, tool: String, input: Value },
     /// Terminal: the run produced a result frame.
     Done {
         ok: bool,
@@ -58,13 +71,24 @@ pub enum JobEvent {
     Failed { message: String },
 }
 
+/// What the host can tell a running job.
+pub enum Control {
+    Cancel,
+    /// The reader's answer to a [`JobEvent::Permission`].
+    Answer { request_id: String, allow: bool },
+}
+
 /// Spawn `claude` for one job and pump events into `emit` until a terminal
-/// event has been sent. Dropping the `cancel` sender lets the job run to
-/// completion; sending on it kills the subprocess.
-pub async fn run(spec: JobSpec, cancel: oneshot::Receiver<()>, emit: impl Fn(JobEvent)) {
+/// event has been sent.
+pub async fn run(
+    spec: JobSpec,
+    mut control: mpsc::UnboundedReceiver<Control>,
+    emit: impl Fn(JobEvent),
+) {
     let mut cmd = tokio::process::Command::new("claude");
     cmd.args([
         "-p",
+        "--input-format=stream-json",
         "--output-format=stream-json",
         "--verbose",
         "--include-partial-messages",
@@ -75,9 +99,12 @@ pub async fn run(spec: JobSpec, cancel: oneshot::Receiver<()>, emit: impl Fn(Job
             "--allowedTools=Write,Edit,Read,Bash,Glob,Grep,WebSearch,WebFetch",
         ]);
     } else {
-        // Headless mode can't prompt for approval, so unlisted gated tools are
-        // simply denied. Grant the web: it can't modify anything locally.
-        cmd.args(["--allowedTools=WebSearch,WebFetch"]);
+        // The web is granted outright: it can't modify anything locally.
+        cmd.arg("--allowedTools=WebSearch,WebFetch");
+        // Without a prompt tool nobody answers, so gated calls are denied.
+        if spec.ask_permission {
+            cmd.args(["--permission-prompt-tool", "stdio"]);
+        }
     }
     if let Some(model) = &spec.model {
         cmd.args(["--model", model]);
@@ -108,14 +135,14 @@ pub async fn run(spec: JobSpec, cancel: oneshot::Receiver<()>, emit: impl Fn(Job
         }
     };
 
-    // Prompt goes through stdin — no shell-quoting concerns, no length limits.
-    if let Some(mut stdin) = child.stdin.take() {
-        let prompt = spec.prompt.clone();
-        tokio::spawn(async move {
-            let _ = stdin.write_all(prompt.as_bytes()).await;
-            let _ = stdin.shutdown().await;
-        });
-    }
+    // The prompt is one user message: serde does the quoting and stdin has
+    // no length limit. The CLI drains stdin as it goes, so this can't stall.
+    let mut stdin = child.stdin.take();
+    send(
+        &mut stdin,
+        json!({ "type": "user", "message": { "role": "user", "content": spec.prompt } }),
+    )
+    .await;
 
     // Collect a stderr tail for diagnostics if the run dies without a result.
     let stderr_tail: Arc<Mutex<String>> = Arc::default();
@@ -138,26 +165,56 @@ pub async fn run(spec: JobSpec, cancel: oneshot::Receiver<()>, emit: impl Fn(Job
     let stdout = child.stdout.take().expect("stdout was piped");
     let mut lines = BufReader::new(stdout).lines();
     let mut session_id: Option<String> = None;
+    // Tool inputs awaiting the reader's answer, by request id.
+    let mut pending: HashMap<String, Value> = HashMap::new();
+    let mut control_open = true;
 
-    tokio::pin!(cancel);
     loop {
-        let line = tokio::select! {
-            _ = &mut cancel => {
-                let _ = child.kill().await;
-                emit(JobEvent::Failed { message: "cancelled".into() });
-                return;
-            }
-            line = lines.next_line() => line,
-        };
-        match line {
-            Ok(Some(line)) => {
-                if let Some(done) = translate_line(&line, &mut session_id, &emit) {
-                    emit(done);
-                    let _ = child.wait().await;
+        tokio::select! {
+            ctl = control.recv(), if control_open => match ctl {
+                Some(Control::Cancel) => {
+                    let _ = child.kill().await;
+                    emit(JobEvent::Failed { message: "cancelled".into() });
                     return;
                 }
-            }
-            Ok(None) | Err(_) => break,
+                Some(Control::Answer { request_id, allow }) => {
+                    if let Some(input) = pending.remove(&request_id) {
+                        send(&mut stdin, permission_response(&request_id, input, allow)).await;
+                    }
+                }
+                None => control_open = false,
+            },
+            line = lines.next_line() => match line {
+                Ok(Some(line)) => {
+                    let Ok(v) = serde_json::from_str::<Value>(line.trim()) else { continue };
+                    if v["type"] == "control_request" {
+                        let id = v["request_id"].as_str().unwrap_or_default().to_string();
+                        let request = &v["request"];
+                        if request["subtype"] == "can_use_tool" {
+                            emit(JobEvent::Permission {
+                                request_id: id.clone(),
+                                tool: request["tool_name"].as_str().unwrap_or("?").to_string(),
+                                input: request["input"].clone(),
+                            });
+                            pending.insert(id, request["input"].clone());
+                        } else {
+                            // Nothing else is asked of us with these flags;
+                            // refuse rather than leave the CLI waiting.
+                            let refusal = json!({ "type": "control_response", "response": {
+                                "subtype": "error", "request_id": id, "error": "unsupported request",
+                            }});
+                            send(&mut stdin, refusal).await;
+                        }
+                    } else if let Some(done) = translate_line(&v, &mut session_id, &emit) {
+                        emit(done);
+                        // The CLI keeps reading input until stdin closes.
+                        drop(stdin);
+                        let _ = child.wait().await;
+                        return;
+                    }
+                }
+                Ok(None) | Err(_) => break,
+            },
         }
     }
 
@@ -173,14 +230,37 @@ pub async fn run(spec: JobSpec, cancel: oneshot::Receiver<()>, emit: impl Fn(Job
     });
 }
 
-/// Translate one NDJSON line. Non-terminal events are emitted inline; a
+/// Write one NDJSON message to the CLI. A broken pipe means the CLI is gone,
+/// which the stdout side reports, so write errors are dropped here.
+async fn send(stdin: &mut Option<ChildStdin>, message: Value) {
+    if let Some(pipe) = stdin {
+        let mut line = message.to_string();
+        line.push('\n');
+        let _ = pipe.write_all(line.as_bytes()).await;
+    }
+}
+
+/// Allowing echoes the input back unchanged. Nothing is remembered on the
+/// CLI's side: its "don't ask again" rules don't reliably match compound
+/// commands, so the host remembers approvals itself.
+fn permission_response(request_id: &str, input: Value, allow: bool) -> Value {
+    let decision = if allow {
+        json!({ "behavior": "allow", "updatedInput": input })
+    } else {
+        json!({ "behavior": "deny", "message": "The reader declined this." })
+    };
+    json!({ "type": "control_response", "response": {
+        "subtype": "success", "request_id": request_id, "response": decision,
+    }})
+}
+
+/// Translate one output frame. Non-terminal events are emitted inline; a
 /// terminal `Done` is returned to the caller.
 fn translate_line(
-    line: &str,
+    v: &Value,
     session_id: &mut Option<String>,
     emit: &impl Fn(JobEvent),
 ) -> Option<JobEvent> {
-    let v: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
     match v.get("type").and_then(|t| t.as_str())? {
         "system" => {
             if v.get("subtype").and_then(|s| s.as_str()) == Some("init") {

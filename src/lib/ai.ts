@@ -144,6 +144,7 @@ export function chatSystemPreamble(meta: DocMeta): string {
     ``,
     `You are in an ongoing chat with the reader of this document. Ground every answer in the document text — Read or Grep the chapter files before answering anything substantive, and cite pages as [p.N]. If the document does not cover something, say so plainly before answering from general knowledge.`,
     `Answer in Markdown, concise by default.`,
+    `Outside this folder you can also read the reader's own files and run programs on their machine (Bash), e.g. to open a file they point you to in the software they're learning. Each such step asks the reader first, so just make the tool call; if they decline, don't try another way — say what you needed instead.`,
     MATH_DELIMITERS,
   ].join("\n");
 }

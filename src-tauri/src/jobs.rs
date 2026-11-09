@@ -1,11 +1,12 @@
-//! Registry of in-flight Claude jobs, keyed by id for cancellation.
+//! Registry of in-flight Claude jobs, keyed by id for cancellation and
+//! permission answers.
 
-use crate::claude::{self, JobEvent, JobSpec};
+use crate::claude::{self, Control, JobEvent, JobSpec};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 
 #[derive(Default)]
 pub struct Jobs {
@@ -15,7 +16,7 @@ pub struct Jobs {
 #[derive(Default)]
 struct Inner {
     next_id: AtomicU64,
-    cancels: Mutex<HashMap<u64, oneshot::Sender<()>>>,
+    controls: Mutex<HashMap<u64, mpsc::UnboundedSender<Control>>>,
 }
 
 impl Jobs {
@@ -24,22 +25,31 @@ impl Jobs {
     pub fn spawn(&self, spec: JobSpec, channel: Channel<JobEvent>) -> u64 {
         let inner = self.inner.clone();
         let id = inner.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-        inner.cancels.lock().unwrap().insert(id, cancel_tx);
+        let (control_tx, control_rx) = mpsc::unbounded_channel();
+        inner.controls.lock().unwrap().insert(id, control_tx);
 
         tauri::async_runtime::spawn(async move {
-            claude::run(spec, cancel_rx, move |event| {
+            claude::run(spec, control_rx, move |event| {
                 let _ = channel.send(event);
             })
             .await;
-            inner.cancels.lock().unwrap().remove(&id);
+            inner.controls.lock().unwrap().remove(&id);
         });
         id
     }
 
     pub fn cancel(&self, id: u64) {
-        if let Some(tx) = self.inner.cancels.lock().unwrap().remove(&id) {
-            let _ = tx.send(());
+        self.send(id, Control::Cancel);
+    }
+
+    pub fn answer(&self, id: u64, request_id: String, allow: bool) {
+        self.send(id, Control::Answer { request_id, allow });
+    }
+
+    /// A job that already finished has nothing left to tell.
+    fn send(&self, id: u64, control: Control) {
+        if let Some(tx) = self.inner.controls.lock().unwrap().get(&id) {
+            let _ = tx.send(control);
         }
     }
 }

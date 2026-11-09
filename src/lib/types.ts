@@ -71,6 +71,14 @@ export interface Quiz {
   answers?: (number | null)[];
 }
 
+export interface ChatState {
+  sessionId: string | null;
+  messages: ChatMessage[];
+  /** Tool calls the reader allowed for the rest of this conversation, as
+   *  approval keys (see PermissionPrompt's approvalKey). */
+  approved?: string[];
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   text: string;
@@ -143,7 +151,7 @@ export interface ProjectInfo {
 export interface Artifacts {
   summaries: Record<string, string>;
   quizzes: Quiz[];
-  chat: { sessionId: string | null; messages: ChatMessage[] };
+  chat: ChatState;
   projects: ProjectInfo[];
   insights: InsightsState;
 }
@@ -258,6 +266,8 @@ export interface JobSpec {
   prompt: string;
   cwd: string;
   agentic?: boolean;
+  /** Ask the reader instead of denying tool calls outside the read-only posture. */
+  askPermission?: boolean;
   model?: string | null;
   resumeSession?: string | null;
 }
@@ -267,6 +277,7 @@ export type JobEvent =
   | { type: "delta"; text: string }
   | { type: "tool"; name: string; detail: string }
   | { type: "toolDone"; isError: boolean }
+  | PermissionEvent
   | {
       type: "done";
       ok: boolean;
@@ -279,3 +290,11 @@ export type JobEvent =
   | { type: "failed"; message: string };
 
 export type DoneEvent = Extract<JobEvent, { type: "done" }>;
+
+/** A paused run asking the reader whether a tool call may go ahead. */
+export interface PermissionEvent {
+  type: "permission";
+  requestId: string;
+  tool: string;
+  input: Record<string, unknown>;
+}

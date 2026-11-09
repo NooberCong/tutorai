@@ -18,6 +18,7 @@ import type {
   DoneEvent,
   JobEvent,
   JobSpec,
+  PermissionEvent,
   RegisteredDoc,
 } from "./types";
 import { emptyArtifacts } from "./types";
@@ -34,6 +35,7 @@ import {
 import {
   readDocText,
   runJob,
+  type JobHandle,
   upsertLibraryEntry,
   writeDocBytes,
   writeDocText,
@@ -402,14 +404,18 @@ export interface JobState {
   running: boolean;
   text: string;
   activity: ActivityItem[];
+  /** Tool calls waiting on the reader, oldest first. */
+  permissions: PermissionEvent[];
   error: string | null;
 }
 
-const idleJob: JobState = { running: false, text: "", activity: [], error: null };
+const idleJob: JobState = { running: false, text: "", activity: [], permissions: [], error: null };
 
 export function useClaudeJob() {
   const [state, setState] = useState<JobState>(idleJob);
-  const cancelRef = useRef<(() => void) | null>(null);
+  const handleRef = useRef<JobHandle | null>(null);
+  // Mirrors state.permissions for the unmount cleanup, which can't read state.
+  const pendingRef = useRef<PermissionEvent[]>([]);
   // Streamed text is buffered here and revealed by a rAF ticker a few
   // characters per frame — network chunks arrive in bursts, and rendering
   // them raw makes the text jump. The reveal rate scales with the backlog
@@ -438,8 +444,27 @@ export function useClaudeJob() {
 
   useEffect(() => flush, [flush]);
 
+  // Once nobody can see the question, the answer is no: the run goes on
+  // without that tool instead of waiting forever.
+  useEffect(
+    () => () => {
+      for (const p of pendingRef.current) handleRef.current?.answer(p.requestId, false);
+    },
+    [],
+  );
+
+  const setPending = useCallback((permissions: PermissionEvent[]) => {
+    pendingRef.current = permissions;
+    setState((prev) => ({ ...prev, permissions }));
+  }, []);
+
   const start = useCallback(
-    (spec: JobSpec): Promise<DoneEvent> => {
+    (
+      spec: JobSpec,
+      /** Allows a permission request without asking, e.g. one the reader
+       *  already allowed for the conversation. */
+      autoAllow?: (request: PermissionEvent) => boolean,
+    ): Promise<DoneEvent> => {
       streamRef.current = { target: "", shown: 0, raf: 0 };
       setState({ ...idleJob, running: true });
       const handle = runJob(spec, (event: JobEvent) => {
@@ -447,6 +472,11 @@ export function useClaudeJob() {
           const s = streamRef.current;
           s.target += event.text;
           if (!s.raf) s.raf = requestAnimationFrame(tick);
+          return;
+        }
+        if (event.type === "permission") {
+          if (autoAllow?.(event)) handleRef.current?.answer(event.requestId, true);
+          else setPending([...pendingRef.current, event]);
           return;
         }
         setState((prev) => {
@@ -470,7 +500,7 @@ export function useClaudeJob() {
           }
         });
       });
-      cancelRef.current = handle.cancel;
+      handleRef.current = handle;
       return handle.result
         .then((done) => {
           flush();
@@ -488,14 +518,23 @@ export function useClaudeJob() {
           throw e;
         })
         .finally(() => {
-          cancelRef.current = null;
+          handleRef.current = null;
+          setPending([]);
         });
     },
-    [tick, flush],
+    [tick, flush, setPending],
   );
 
-  const cancel = useCallback(() => cancelRef.current?.(), []);
+  const cancel = useCallback(() => handleRef.current?.cancel(), []);
+
+  const answer = useCallback(
+    (request: PermissionEvent, allow: boolean) => {
+      handleRef.current?.answer(request.requestId, allow);
+      setPending(pendingRef.current.filter((p) => p !== request));
+    },
+    [setPending],
+  );
   const reset = useCallback(() => setState(idleJob), []);
 
-  return { state, start, cancel, reset };
+  return { state, start, cancel, answer, reset };
 }
