@@ -45,6 +45,9 @@ function mathExtension(
 
 const DIGIT = /[0-9]/;
 const SPACE = /\s/;
+/** Something no price sentence contains: a TeX command, a sub/superscript or a
+ *  brace group. */
+const TEX_MARK = /\\[a-zA-Z]|[\^_{]/;
 
 /**
  * `$…$` inline math. The models write it whatever the prompt asks, and these
@@ -52,10 +55,13 @@ const SPACE = /\s/;
  * $666.67"), so the delimiter has to be told apart from a currency sign by
  * shape:
  *
- *   - An opening `$` is never followed by a digit or a space. That alone rules
- *     out every price, which is exactly `$` + digits.
+ *   - An opening `$` is never followed by a space.
  *   - A closing `$` is never preceded by a space or a backslash (`\$` is an
  *     escaped dollar *inside* the math), nor followed by a digit.
+ *   - An opening `$` followed by a digit looks like a price, yet math starts
+ *     with a number too ("$6.107 \times \frac{180}{\pi}$"). Such a run is math
+ *     only if the very next `$` closes it and the span holds TeX (a command,
+ *     `^`, `_` or `{`), which no "$5 … $10" sentence does.
  *
  * When no closer qualifies the run stays literal text, so a stray `$` costs
  * nothing.
@@ -70,16 +76,22 @@ const dollarMath: TokenizerAndRendererExtension = {
   start: (src) => src.indexOf("$"),
   tokenizer(src) {
     const opener = src[1];
-    if (src[0] !== "$" || !opener || DIGIT.test(opener) || SPACE.test(opener)) {
-      return undefined;
-    }
+    if (src[0] !== "$" || !opener || SPACE.test(opener)) return undefined;
     if (opener === "$") return undefined;
+    const numeric = DIGIT.test(opener);
     for (let i = 2; i < src.length; i++) {
       if (src[i] !== "$") continue;
       const before = src[i - 1];
       const after = src[i + 1];
-      if (SPACE.test(before) || before === "\\") continue;
-      if (after && DIGIT.test(after)) continue;
+      if (before === "\\") continue;
+      const closes = !SPACE.test(before) && !(after && DIGIT.test(after));
+      if (numeric) {
+        const text = src.slice(1, i);
+        return closes && TEX_MARK.test(text)
+          ? { type: "mathDollar", raw: src.slice(0, i + 1), text }
+          : undefined;
+      }
+      if (!closes) continue;
       return { type: "mathDollar", raw: src.slice(0, i + 1), text: src.slice(1, i) };
     }
     return undefined;
